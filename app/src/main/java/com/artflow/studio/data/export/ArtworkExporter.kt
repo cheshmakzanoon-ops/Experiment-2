@@ -30,7 +30,9 @@ import com.artflow.studio.core.export.ProcreateWriter
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
+import com.artflow.studio.core.export.readAtMost
 import com.artflow.studio.core.pixels.BlendModes
+import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
@@ -79,6 +81,35 @@ class ArtworkExporter
         @ApplicationContext private val context: Context,
         private val storage: ProjectStorage,
     ) {
+        private var memoryLimitBytes = Long.MAX_VALUE
+
+        /** Deterministic tests may narrow admission; the production heap allowance still applies. */
+        internal constructor(
+            context: Context,
+            storage: ProjectStorage,
+            memoryLimitBytes: Long,
+        ) : this(context, storage) {
+            require(memoryLimitBytes >= 0) { "Invalid export memory limit" }
+            this.memoryLimitBytes = memoryLimitBytes
+        }
+
+        /** The editor checks the same output plan before it copies a selected or trimmed region. */
+        internal fun checkStillMemory(
+            composite: PixelBuffer,
+            layers: List<LayerRaster>,
+            options: ExportOptions,
+            hasAdjustmentLayers: Boolean,
+            groups: List<Layer>,
+            layerMasks: Map<Long, PixelBuffer>,
+            materialMaps: Map<MaterialChannel, PixelBuffer>,
+            crop: IntBounds? = null,
+        ) {
+            StillExportMemory.requireFits(
+                StillExportInput(composite, layers, options, hasAdjustmentLayers, groups, layerMasks, materialMaps, crop),
+                memoryLimitBytes,
+            )
+        }
+
         /**
          * Exports a still image.
          *
@@ -112,6 +143,10 @@ class ArtworkExporter
                         )
                     }
 
+                    val memoryInput = StillExportInput(composite, layers, options, hasAdjustmentLayers, groups, layerMasks, materialMaps)
+                    StillExportMemory.requireFits(memoryInput, memoryLimitBytes)
+                    // Pin and admit model input before any texture/profile/scale allocation too.
+                    val model = if (options.format == ExportFormat.MODEL_OBJ) loadExportModel(projectId, memoryInput) else null
                     val prepared = prepare(composite, targetWidth, targetHeight, options)
                     val fileName = ExportNaming.fileName(projectName, options)
                     var resizedPsdMasks = false
@@ -169,7 +204,7 @@ class ArtworkExporter
                             }
 
                             ExportFormat.MODEL_OBJ -> {
-                                buildModelZip(projectId, flatten(prepared, options), options, materialMaps)
+                                buildModelZip(requireNotNull(model), flatten(prepared, options), options, materialMaps)
                             }
 
                             else -> {
@@ -358,9 +393,27 @@ class ArtworkExporter
                 }
             }
 
-        /** The painted model: its OBJ with one material, the material, and the artwork as its texture. */
-        private suspend fun buildModelZip(
+        private suspend fun loadExportModel(
             projectId: Long,
+            memoryInput: StillExportInput,
+        ): String =
+            withContext(Dispatchers.IO) {
+                val file = storage.resolve(projectId, ProjectStorage.MODEL_NAME)
+                require(file.isFile) { "This artwork has no 3D model" }
+                file.inputStream().use { input ->
+                    // The open descriptor identifies the same immutable version that is then read.
+                    val size = input.channel.size()
+                    require(size in 1..StillExportMemory.MAX_MODEL_BYTES) { "The 3D model is empty or too large" }
+                    StillExportMemory.requireFits(memoryInput, memoryLimitBytes, modelBytes = size)
+                    val owner = currentCoroutineContext()
+                    val bytes = requireNotNull(input.readAtMost(size) { owner.ensureActive() }) { "The 3D model changed while exporting" }
+                    bytes.toString(Charsets.UTF_8)
+                }
+            }
+
+        /** The painted model: its OBJ with one material, the material, and the artwork as its texture. */
+        private fun buildModelZip(
+            model: String,
             texture: PixelBuffer,
             options: ExportOptions,
             materialMaps: Map<MaterialChannel, PixelBuffer>,
@@ -369,7 +422,6 @@ class ArtworkExporter
                 "Export the full canvas to keep model texture coordinates aligned"
             }
             require(options.fitMode == FitMode.STRETCH) { "Use Stretch for model textures to preserve UV alignment" }
-            val model = requireNotNull(storage.loadModel(projectId)) { "This artwork has no 3D model" }
             val out = ByteArrayOutputStream()
             ZipOutputStream(out).use { zip ->
                 zip.putNextEntry(ZipEntry(ObjExport.OBJ))
@@ -404,6 +456,7 @@ class ArtworkExporter
             frames: List<PixelBuffer>,
             options: ExportOptions,
         ): ByteArray {
+            StillExportMemory.requirePdfFits(frames, options, memoryLimitBytes)
             val document = PdfDocument()
             try {
                 frames.forEachIndexed { index, frame ->

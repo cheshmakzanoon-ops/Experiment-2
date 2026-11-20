@@ -5,10 +5,11 @@
 **Public production rollout: NO-GO until the required engineering, publisher, physical-device and
 store evidence is complete.**
 Engineering changes may be published to main after their implementation and required verification;
-source publication is not a Play release. The current candidate is tracked in the
-[November 19 hardening record](PRODUCTION_HARDENING_2026-11-19.md) and
-[PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). Its acceptance requires its own
-exact-revision evidence; historical results remain in [TEST_EVIDENCE.md](TEST_EVIDENCE.md).
+source publication is not a Play release. Current work on main is tracked in the
+[production follow-through record](PRODUCTION_FOLLOWTHROUGH_2026-11-19.md), which incorporates the
+earlier [November 19 hardening](PRODUCTION_HARDENING_2026-11-19.md) from
+[PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). Each published revision requires
+its own evidence; historical results remain in [TEST_EVIDENCE.md](TEST_EVIDENCE.md).
 
 ## Engineering acceptance
 

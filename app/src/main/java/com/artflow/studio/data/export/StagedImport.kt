@@ -1,5 +1,6 @@
 package com.artflow.studio.data.export
 
+import com.artflow.studio.core.lifecycle.retainCleanupFailure
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
@@ -42,7 +43,7 @@ object StagedImport {
         if (cleanupFailure != null) {
             val primary = result.exceptionOrNull()
             if (primary == null) throw cleanupFailure
-            primary.addSuppressed(cleanupFailure)
+            retainCleanupFailure(primary, cleanupFailure)
         }
         return result.getOrThrow()
     }

@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.R
 import com.artflow.studio.core.export.PsdCodec
+import com.artflow.studio.core.pixels.ImportMemoryBudget
 import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.export.PendingImports
@@ -35,7 +36,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
@@ -43,14 +46,22 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.`when`
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.io.InputStream
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.zip.CRC32
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GalleryIncomingImportTest {
+    @get:Rule val temporary = TemporaryFolder()
+
     @Test
     fun incomingCollectionAwaitsTheCurrentProviderInsteadOfLaunchingDetachedImports() =
         runTest {
@@ -236,6 +247,243 @@ class GalleryIncomingImportTest {
             }
         }
 
+    @Test
+    fun genericPaletteInputIsRefusedAtTheAdmittedByteBoundaryBeforePublication() =
+        runTest {
+            val fixture = Fixture(this)
+            val uri = fixture.uri("large.gpl", ByteArray(64))
+            var opens = 0
+            var produced = 0
+            var closed = false
+            `when`(fixture.resolver.openInputStream(uri)).thenAnswer {
+                if (opens++ == 0) {
+                    ByteArrayInputStream(ByteArray(64))
+                } else {
+                    object : InputStream() {
+                        override fun read(): Int {
+                            produced++
+                            return 0
+                        }
+
+                        override fun read(
+                            bytes: ByteArray,
+                            offset: Int,
+                            length: Int,
+                        ): Int {
+                            bytes.fill(0, offset, offset + length)
+                            produced += length
+                            return length
+                        }
+
+                        override fun close() {
+                            closed = true
+                        }
+                    }
+                }
+            }
+            assertFalse(fixture.imports(inputBudget = { 1024 }).open(uri))
+            assertEquals(2, opens)
+            assertEquals(257, produced)
+            assertTrue(closed)
+            assertEquals(listOf(GalleryInputSource.MEMORY_MESSAGE), fixture.messages)
+            verifyNoInteractions(fixture.viewModel)
+        }
+
+    @Test
+    fun ambiguousArchiveUsesGenericAdmissionAndRemovesItsStagedFileOnRefusal() =
+        runTest {
+            val fixture = Fixture(this)
+            val cache = temporary.newFolder("archive-cache")
+            `when`(fixture.context.cacheDir).thenReturn(cache)
+            val uri = fixture.uri("ambiguous.bin", modelAndBrushNamesArchive())
+            assertFalse(fixture.imports(inputBudget = { 1024 }).open(uri))
+            assertEquals(listOf(GalleryInputSource.MEMORY_MESSAGE), fixture.messages)
+            assertTrue(cache.listFiles().orEmpty().isEmpty())
+            verify(fixture.resolver, times(2)).openInputStream(uri)
+            verifyNoInteractions(fixture.viewModel)
+        }
+
+    @Test
+    fun admittedPaletteStillPublishesItsNameAndColors() =
+        runTest {
+            val fixture = Fixture(this)
+            val uri = fixture.uri("colors.gpl", "GIMP Palette\nName: Tiny palette\n#\n255 0 0 Red\n".toByteArray())
+            `when`(fixture.context.getString(R.string.incoming_palette_added, "Tiny palette")).thenReturn("Palette added")
+            assertFalse(fixture.imports(inputBudget = { 1024 }).open(uri))
+            verify(fixture.viewModel).addPalette("Tiny palette", listOf(0xFFFF0000.toInt()))
+            assertEquals(listOf("Palette added"), fixture.messages)
+        }
+
+    @Test
+    fun admittedSwatchesPaletteStillPublishesItsNameAndColors() =
+        runTest {
+            val fixture = Fixture(this)
+            val json = """[{"name":"Swatch palette","swatches":[{"hue":0,"saturation":1,"brightness":1}]}]"""
+            val uri = fixture.uri("colors.swatches", swatchesArchive(json))
+            `when`(fixture.context.getString(R.string.incoming_palette_added, "Swatch palette")).thenReturn("Palette added")
+            assertFalse(fixture.imports().open(uri))
+            verify(fixture.viewModel).addPalette("Swatch palette", listOf(0xFFFF0000.toInt()))
+            assertEquals(listOf("Palette added"), fixture.messages)
+        }
+
+    @Test
+    fun overBudgetSwatchesReportsAUsefulPaletteErrorWithoutPublishingAnyColors() =
+        runTest {
+            val fixture = Fixture(this)
+            val nested = "[".repeat(17) + "0" + "]".repeat(17)
+            val uri = fixture.uri("colors.swatches", swatchesArchive(nested))
+            assertFalse(fixture.imports().open(uri))
+            assertEquals(1, fixture.messages.size)
+            assertTrue(fixture.messages.single().contains("smaller palette"))
+            verifyNoInteractions(fixture.viewModel)
+        }
+
+    @Test
+    fun providerHeaderCancellationAndFatalFailuresEscapeAfterClosingTheStream() =
+        runTest {
+            for (failure in listOf(CancellationException("Header cancelled"), AssertionError("Header failed"))) {
+                val fixture = Fixture(this)
+                val uri = fixture.uri("first.bin", ByteArray(64))
+                var closed = false
+                `when`(fixture.resolver.openInputStream(uri)).thenAnswer {
+                    failingStream(failure) { closed = true }
+                }
+                val observed = runCatching { fixture.imports().open(uri) }.exceptionOrNull()
+                assertEquals(failure.javaClass, observed?.javaClass)
+                assertEquals(failure.message, observed?.message)
+                assertTrue(closed)
+                assertTrue(fixture.messages.isEmpty())
+                verifyNoInteractions(fixture.viewModel)
+            }
+        }
+
+    @Test
+    fun providerPayloadCancellationAndFatalFailuresEscapeWithoutAddingAPalette() =
+        runTest {
+            for (failure in listOf(CancellationException("Payload cancelled"), AssertionError("Payload failed"))) {
+                val fixture = Fixture(this)
+                val uri = fixture.uri("palette.gpl", ByteArray(64))
+                var opens = 0
+                var closed = false
+                `when`(fixture.resolver.openInputStream(uri)).thenAnswer {
+                    if (opens++ == 0) ByteArrayInputStream(ByteArray(64)) else failingStream(failure) { closed = true }
+                }
+                val observed = runCatching { fixture.imports().open(uri) }.exceptionOrNull()
+                assertEquals(failure.javaClass, observed?.javaClass)
+                assertEquals(failure.message, observed?.message)
+                assertEquals(2, opens)
+                assertTrue(closed)
+                assertTrue(fixture.messages.isEmpty())
+                verifyNoInteractions(fixture.viewModel)
+            }
+        }
+
+    @Test
+    fun zeroBulkHeaderReadsMakeProgressAndDoNotMisclassifyTheFileAsUnreadable() =
+        runTest {
+            val fixture = Fixture(this)
+            val uri = fixture.uri("unknown.bin", ByteArray(64))
+            var bulkReads = 0
+            var singleReads = 0
+            var closed = false
+            `when`(fixture.resolver.openInputStream(uri)).thenAnswer {
+                object : InputStream() {
+                    override fun read(): Int {
+                        singleReads++
+                        return 0
+                    }
+
+                    override fun read(
+                        bytes: ByteArray,
+                        offset: Int,
+                        length: Int,
+                    ): Int {
+                        check(++bulkReads <= 64) { "The header retried without making progress" }
+                        return 0
+                    }
+
+                    override fun close() {
+                        closed = true
+                    }
+                }
+            }
+            assertFalse(fixture.imports().open(uri))
+            assertEquals(64, singleReads)
+            assertEquals(64, bulkReads)
+            assertTrue(closed)
+            assertEquals(listOf("Unsupported file"), fixture.messages)
+            verifyNoInteractions(fixture.viewModel)
+        }
+
+    @Test
+    fun ordinaryProviderReadFailuresStillUseTheUnreadableFallback() =
+        runTest {
+            for (payload in listOf(false, true)) {
+                val fixture = Fixture(this)
+                val uri = fixture.uri(if (payload) "palette.gpl" else "first.bin", ByteArray(64))
+                var opens = 0
+                var closed = false
+                `when`(fixture.resolver.openInputStream(uri)).thenAnswer {
+                    if (payload && opens++ == 0) {
+                        ByteArrayInputStream(ByteArray(64))
+                    } else {
+                        failingStream(IOException("Provider unavailable")) { closed = true }
+                    }
+                }
+                assertFalse(fixture.imports().open(uri))
+                assertTrue(closed)
+                assertEquals(listOf("Unreadable file"), fixture.messages)
+                verifyNoInteractions(fixture.viewModel)
+            }
+        }
+
+    private fun failingStream(
+        failure: Throwable,
+        onClose: () -> Unit,
+    ): InputStream =
+        object : InputStream() {
+            override fun read(): Int = throw failure
+
+            override fun read(
+                bytes: ByteArray,
+                offset: Int,
+                length: Int,
+            ): Int = throw failure
+
+            override fun close() = onClose()
+        }
+
+    private fun modelAndBrushNamesArchive(): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            mapOf("model.obj" to ByteArray(1024), "Shape.png" to byteArrayOf(1)).forEach { (name, bytes) ->
+                val checksum = CRC32()
+                checksum.update(bytes)
+                val entry =
+                    ZipEntry(name).apply {
+                        method = ZipEntry.STORED
+                        size = bytes.size.toLong()
+                        compressedSize = size
+                        crc = checksum.value
+                    }
+                zip.putNextEntry(entry)
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private fun swatchesArchive(json: String): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(ZipEntry("Swatches.json"))
+            zip.write(json.toByteArray())
+            zip.closeEntry()
+        }
+        return output.toByteArray()
+    }
+
     private fun metadataCancellation(query: Boolean) =
         runTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -313,6 +561,7 @@ class GalleryIncomingImportTest {
         init {
             `when`(context.contentResolver).thenReturn(resolver)
             `when`(context.getString(R.string.incoming_file_unknown)).thenReturn("Unsupported file")
+            `when`(context.getString(R.string.incoming_file_unreadable)).thenReturn("Unreadable file")
             `when`(context.getString(R.string.galleryscreen_file_could_not_be_read)).thenReturn("File could not be read")
         }
 
@@ -325,8 +574,10 @@ class GalleryIncomingImportTest {
                 `when`(resolver.openInputStream(uri)).thenAnswer { ByteArrayInputStream(bytes) }
             }
 
-        fun imports(open: (Long) -> Unit = { error("Unsupported files must not navigate") }) =
-            GalleryImports(context, scope, viewModel, { messages += it }, { _, _ -> error("No brush expected") }, open)
+        fun imports(
+            inputBudget: () -> Long = ImportMemoryBudget::currentBytes,
+            open: (Long) -> Unit = { error("Unsupported files must not navigate") },
+        ) = GalleryImports(context, scope, viewModel, { messages += it }, { _, _ -> error("No brush expected") }, open, inputBudget)
     }
 
     private companion object {

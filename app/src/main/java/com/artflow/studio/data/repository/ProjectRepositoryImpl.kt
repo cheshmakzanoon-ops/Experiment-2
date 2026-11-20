@@ -79,52 +79,54 @@ class ProjectRepositoryImpl
         override suspend fun duplicateProject(projectId: Long): Long {
             var copiedId: Long? = null
             var completed = false
-            try {
-                val id =
-                    database.withTransaction {
-                        val source = requireNotNull(projectDao.getProjectById(projectId)) { "This artwork no longer exists" }
-                        val now = System.currentTimeMillis()
-                        val copy =
-                            source.copy(
-                                id = 0,
-                                name = "${source.name} copy",
-                                filePath = "",
-                                thumbnailPath = null,
-                                createdAt = now,
-                                modifiedAt = now,
+            return completeWithCleanup(
+                action = {
+                    val id =
+                        database.withTransaction {
+                            val source = requireNotNull(projectDao.getProjectById(projectId)) { "This artwork no longer exists" }
+                            val now = System.currentTimeMillis()
+                            val copy =
+                                source.copy(
+                                    id = 0,
+                                    name = "${source.name} copy",
+                                    filePath = "",
+                                    thumbnailPath = null,
+                                    createdAt = now,
+                                    modifiedAt = now,
+                                )
+                            val destinationId = insertNewProject(copy)
+                            // Never remove a pre-existing directory if copying refuses to overwrite it.
+                            check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(destinationId) }) {
+                                "The destination already contains project data"
+                            }
+                            val document = storage.copyProject(projectId, destinationId) { copiedId = destinationId }
+                            projectDao.updateProject(
+                                copy.copy(
+                                    id = destinationId,
+                                    filePath = if (document != null) storage.documentFile(destinationId).absolutePath else "",
+                                    thumbnailPath = storage.thumbnailPathIfExists(destinationId),
+                                    width = document?.width ?: source.width,
+                                    height = document?.height ?: source.height,
+                                    dpi = document?.dpi ?: source.dpi,
+                                ),
                             )
-                        val destinationId = insertNewProject(copy)
-                        // Never remove a pre-existing directory if copying refuses to overwrite it.
-                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(destinationId) }) {
-                            "The destination already contains project data"
+                            destinationId
                         }
-                        copiedId = destinationId
-                        val document = storage.copyProject(projectId, destinationId)
-                        projectDao.updateProject(
-                            copy.copy(
-                                id = destinationId,
-                                filePath = if (document != null) storage.documentFile(destinationId).absolutePath else "",
-                                thumbnailPath = storage.thumbnailPathIfExists(destinationId),
-                                width = document?.width ?: source.width,
-                                height = document?.height ?: source.height,
-                                dpi = document?.dpi ?: source.dpi,
-                            ),
-                        )
-                        destinationId
-                    }
-                completed = true
-                return id
-            } finally {
-                if (!completed) {
-                    copiedId?.let { id ->
-                        withContext(NonCancellable + Dispatchers.IO) {
-                            // Cancellation can arrive after Room commits but before withTransaction
-                            // resumes. Never delete the files of a row that did commit successfully.
-                            if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
+                    completed = true
+                    id
+                },
+                cleanup = {
+                    if (!completed) {
+                        copiedId?.let { id ->
+                            withContext(NonCancellable + Dispatchers.IO) {
+                                // Cancellation can arrive after Room commits but before withTransaction
+                                // resumes. Never delete the files of a row that did commit successfully.
+                                if (projectDao.getProjectById(id) == null) storage.deleteProjectFiles(id)
+                            }
                         }
                     }
-                }
-            }
+                },
+            )
         }
 
         override suspend fun importPackageFile(file: java.io.File): ProjectRepository.ImportedPackage =
@@ -154,47 +156,47 @@ class ProjectRepositoryImpl
             var importedId: Long? = null
             var completed = false
             val grains = GrainStorage.ImportTransaction()
-            try {
-                val outcome =
-                    database.withTransaction {
-                        val now = System.currentTimeMillis()
-                        val project =
-                            Project(
-                                name = name,
-                                filePath = "",
-                                thumbnailPath = null,
-                                width = width,
-                                height = height,
-                                dpi = dpi,
-                                createdAt = now,
-                                modifiedAt = now,
-                                layerCount = layerCount,
+            return completeWithCleanup(
+                action = {
+                    val outcome =
+                        database.withTransaction {
+                            val now = System.currentTimeMillis()
+                            val project =
+                                Project(
+                                    name = name,
+                                    filePath = "",
+                                    thumbnailPath = null,
+                                    width = width,
+                                    height = height,
+                                    dpi = dpi,
+                                    createdAt = now,
+                                    modifiedAt = now,
+                                    layerCount = layerCount,
+                                )
+                            val newId = insertNewProject(project.toEntity())
+                            check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
+                                "The destination already contains project data"
+                            }
+                            val result = storage.importProjectStream(newId, stream, grains) { importedId = newId }
+                            projectDao.updateProject(
+                                project
+                                    .copy(
+                                        id = newId,
+                                        filePath = storage.documentFile(newId).absolutePath,
+                                        thumbnailPath = storage.thumbnailPathIfExists(newId),
+                                    ).toEntity(),
                             )
-                        val newId = insertNewProject(project.toEntity())
-                        check(!withContext(Dispatchers.IO) { storage.projectDirectoryExists(newId) }) {
-                            "The destination already contains project data"
+                            ProjectRepository.ImportedPackage(
+                                projectId = newId,
+                                missingFonts = result.missingFonts,
+                                missingGrains = result.missingGrains,
+                            )
                         }
-                        importedId = newId
-                        val result = storage.importProjectStream(newId, stream, grains)
-                        projectDao.updateProject(
-                            project
-                                .copy(
-                                    id = newId,
-                                    filePath = storage.documentFile(newId).absolutePath,
-                                    thumbnailPath = storage.thumbnailPathIfExists(newId),
-                                ).toEntity(),
-                        )
-                        ProjectRepository.ImportedPackage(
-                            projectId = newId,
-                            missingFonts = result.missingFonts,
-                            missingGrains = result.missingGrains,
-                        )
-                    }
-                completed = true
-                return outcome
-            } finally {
-                finishImportedPackage(importedId, completed, grains)
-            }
+                    completed = true
+                    outcome
+                },
+                cleanup = { finishImportedPackage(importedId, completed, grains) },
+            )
         }
 
         override suspend fun importPackage(bytes: ByteArray): Long =
@@ -208,12 +210,13 @@ class ProjectRepositoryImpl
             // Cancellation can arrive after Room commits. Retain assets for a committed row; if
             // the query itself fails, leave them intact rather than guessing and breaking artwork.
             var retain = true
-            try {
-                retain = completed || (projectId != null && projectDao.getProjectById(projectId) != null)
-                if (!retain && projectId != null) storage.deleteProjectFiles(projectId)
-            } finally {
-                if (retain) grains.commit() else grains.close()
-            }
+            completeWithCleanup(
+                action = {
+                    retain = completed || (projectId != null && projectDao.getProjectById(projectId) != null)
+                    if (!retain && projectId != null) storage.deleteProjectFiles(projectId)
+                },
+                cleanup = { if (retain) grains.commit() else grains.close() },
+            )
         }
 
         override suspend fun updateProject(project: Project) {

@@ -618,11 +618,14 @@ class ProjectStorage
          * Streaming import from a verified [ArtflowPackage.StreamContents]: copies layers/previews via
          * bounded stream without buffering all rasters in heap, writes `canvas.artflow` last, and
          * restores bundled custom grains into `filesDir/grains`.
+         * [onDestinationCreated] runs synchronously after this operation creates the directory,
+         * inside its rollback scope. A prior absence check does not establish cleanup ownership.
          */
         suspend fun importProjectStream(
             projectId: Long,
             contents: ArtflowPackage.StreamContents,
             grainImport: GrainStorage.ImportTransaction? = null,
+            onDestinationCreated: () -> Unit = {},
         ): ImportedPackageOutcome =
             withContext(ioDispatcher) {
                 withGrainImport(grainImport) { admittedImport ->
@@ -635,6 +638,8 @@ class ProjectStorage
                     check(destination.mkdirs()) { "Cannot create the imported project directory" }
                     var completed = false
                     try {
+                        // Record creation before any IO result can be cancelled on delivery.
+                        onDestinationCreated()
                         val grainEntries = linkedMapOf<String, ByteArray>()
                         var dependenciesBytes: ByteArray? = null
                         val grainTileBytes = (CustomGrains.TILE * CustomGrains.TILE).toLong()
@@ -763,10 +768,13 @@ class ProjectStorage
          * Copies immutable saved/recovery generations into a new project, never sharing files with
          * the original. Call inside the gallery transaction so an incomplete copy is not visible.
          * Exports and unreferenced temporary generations are intentionally not duplicated.
+         * [onDestinationCreated] records ownership before an IO result can be cancelled on delivery;
+         * callback failure still rolls back the newly created directory.
          */
         suspend fun copyProject(
             sourceId: Long,
             destinationId: Long,
+            onDestinationCreated: () -> Unit = {},
         ): CanvasDocument? =
             withContext(ioDispatcher) {
                 require(sourceId > 0 && destinationId > 0 && sourceId != destinationId) { "Invalid project copy" }
@@ -778,6 +786,8 @@ class ProjectStorage
                 check(destination.mkdirs()) { "Cannot create the copied project directory" }
                 var completed = false
                 try {
+                    // The callback is inside cleanup ownership, including when it throws.
+                    onDestinationCreated()
                     val paths =
                         listOfNotNull(document, recovery)
                             .flatMap { it.resolvedFrames() }

@@ -37,6 +37,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.io.File
+import java.io.IOException
+import kotlin.coroutines.coroutineContext
 
 /**
  * Brings files into the gallery: pictures, Photoshop, Procreate and ArtFlow documents and 3D models become new
@@ -53,6 +55,8 @@ internal class GalleryImports(
     private val addBrushes: suspend (List<SavedBrush>, () -> Unit) -> Unit,
     /** Opens an artwork that has just been created. */
     private val openArtwork: (Long) -> Unit,
+    /** Test allowances may only narrow the production input admission. */
+    private val inputMemoryBudget: () -> Long = ImportMemoryBudget::currentBytes,
 ) {
     /** Awaits one complete incoming import; true means the collector must stop for artwork navigation. */
     suspend fun open(uri: Uri): Boolean =
@@ -63,7 +67,7 @@ internal class GalleryImports(
                     // block the gallery dispatcher. Check cancellation between blocking calls.
                     val name = displayName(uri)
                     coroutineContext.ensureActive()
-                    val type = optionalMetadata { context.contentResolver.getType(uri) }
+                    val type = optionalRead { context.contentResolver.getType(uri) }
                     coroutineContext.ensureActive()
                     Triple(name, type, readHead(uri))
                 }
@@ -226,22 +230,44 @@ internal class GalleryImports(
                 importArtwork(file)
                 navigated = true
             } else {
-                val bytes =
+                val brushOnly =
                     withContext(Dispatchers.IO) {
-                        requireNotNull(file.inputStream().use { it.readAtMost(BrushImports.MAX_BYTES.toLong()) }) {
-                            "This brush, palette or model archive is too large to import"
-                        }
+                        ArtflowPackage.inspectArchiveEntries(file, BrushArchives::isBrushOnlyArchive)
                     }
-                when (withContext(Dispatchers.IO) { zipKind(bytes) }) {
-                    FileKind.BRUSH_FILE -> brushes(bytes)
-                    FileKind.PALETTE_FILE -> palette(bytes, name?.substringBeforeLast('.'))
-                    FileKind.MODEL -> navigated = importModel(uri)
-                    else -> say(context.getString(R.string.incoming_file_unknown))
+                val bytes = readSmallArchive(file, brushOnly)
+                if (brushOnly) {
+                    // The format-specific importer validates once and preserves its useful refusal.
+                    brushes(bytes)
+                } else {
+                    when (withContext(Dispatchers.IO) { zipKind(bytes) }) {
+                        FileKind.BRUSH_FILE -> brushes(bytes)
+                        FileKind.PALETTE_FILE -> palette(bytes, name?.substringBeforeLast('.'))
+                        FileKind.MODEL -> navigated = importModel(uri)
+                        else -> say(context.getString(R.string.incoming_file_unknown))
+                    }
                 }
             }
         }
         return navigated
     }
+
+    private suspend fun readSmallArchive(
+        file: File,
+        brushOnly: Boolean,
+    ): ByteArray =
+        withContext(Dispatchers.IO) {
+            val owner = coroutineContext
+            requireNotNull(
+                if (brushOnly) {
+                    file.inputStream().use { input ->
+                        owner.ensureActive()
+                        BrushArchives.readInput(GalleryInputSource.cancellable(input, owner::ensureActive))
+                    }
+                } else {
+                    GalleryInputSource.read(file::inputStream, inputMemoryBudget(), owner::ensureActive)
+                },
+            ) { "This brush, palette or model archive is too large to import" }
+        }
 
     private suspend fun stagedArchive(
         uri: Uri,
@@ -275,7 +301,7 @@ internal class GalleryImports(
     private suspend fun importModel(uri: Uri): Boolean {
         val failure =
             runCatching {
-                val prepared = withContext(Dispatchers.IO) { readModel(uri) }
+                val prepared = withContext(Dispatchers.IO) { readModel(uri, coroutineContext::ensureActive) }
                 PendingImports.reserveModelBundle(prepared, viewModel.viewModelScope).use { pending ->
                     val id = viewModel.createImportedProject("3D model", prepared.width, prepared.height, MODEL_DPI)
                     pending.publish(id)
@@ -294,14 +320,18 @@ internal class GalleryImports(
         return false
     }
 
-    private fun readModel(uri: Uri): PreparedModelImport =
+    private fun readModel(
+        uri: Uri,
+        checkActive: () -> Unit,
+    ): PreparedModelImport =
         ImportPreparation.withAdmission {
+            checkActive()
             val budget = ImportMemoryBudget.currentBytes()
             // Stream growth and its returned copy happen before model/texture metadata exists.
             val limit = minOf(MAX_MODEL_BYTES, budget / 4)
             require(limit > 0) { "Not enough memory to import this model. Save your artwork and try a smaller model." }
             val bytes =
-                requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(limit) }) {
+                requireNotNull(context.contentResolver.openInputStream(uri)?.use { it.readAtMost(limit, checkActive) }) {
                     "This model file could not be read within the available memory. Save your artwork and try a smaller model."
                 }
             PreparedModelImport
@@ -312,7 +342,10 @@ internal class GalleryImports(
                     MAX_MODEL_TEXTURE,
                     MODEL_TEXTURE,
                     budget,
-                ).also(ModelImports::requireSupportedSize)
+                ).also {
+                    checkActive()
+                    ModelImports.requireSupportedSize(it)
+                }
         }
 
     /** Brush and palette payloads have their own small-file limits. Artwork ZIPs never enter this path. */
@@ -323,11 +356,17 @@ internal class GalleryImports(
     ) {
         val bytes =
             withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { stream ->
-                        stream.readAtMost(BrushImports.MAX_BYTES.toLong())
+                val owner = coroutineContext
+                providerPayload {
+                    if (kind == FileKind.BRUSH_FILE) {
+                        owner.ensureActive()
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            BrushArchives.readInput(GalleryInputSource.cancellable(stream, owner::ensureActive))
+                        }
+                    } else {
+                        GalleryInputSource.read({ context.contentResolver.openInputStream(uri) }, inputMemoryBudget(), owner::ensureActive)
                     }
-                }.getOrNull()
+                }
             }
         if (bytes == null) {
             say(context.getString(R.string.incoming_file_unreadable))
@@ -341,12 +380,13 @@ internal class GalleryImports(
     }
 
     /** What an unlabelled zip holds, judged by its contents, cheapest and most specific test first. */
-    private fun zipKind(bytes: ByteArray): FileKind =
+    private suspend fun zipKind(bytes: ByteArray): FileKind =
         when {
-            ProcreateSwatches.read(bytes).isNotEmpty() -> FileKind.PALETTE_FILE
-            runCatching { BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).isNotEmpty() }.getOrDefault(false) ->
-                FileKind.BRUSH_FILE
-            runCatching { ObjParser.parse(ModelPackage.read(bytes).objText) }.isSuccess -> FileKind.MODEL
+            ProcreateSwatches.probeForImport(bytes, coroutineContext::ensureActive) -> FileKind.PALETTE_FILE
+            optionalRead(coroutineContext::ensureActive) {
+                BrushArchives.readForImport(bytes, BitmapPixelBridge::decodeBrushImage).isNotEmpty()
+            } == true -> FileKind.BRUSH_FILE
+            optionalRead(coroutineContext::ensureActive) { ObjParser.parse(ModelPackage.read(bytes).objText) } != null -> FileKind.MODEL
             else -> FileKind.UNKNOWN
         }
 
@@ -365,7 +405,13 @@ internal class GalleryImports(
     ) {
         val palette =
             withContext(Dispatchers.IO) {
-                runCatching { PaletteCodec.decode(bytes, name?.take(MAX_NAME) ?: "Imported palette") }.getOrNull()
+                val owner = coroutineContext
+                val fallbackName = name?.take(MAX_NAME) ?: "Imported palette"
+                if (ProcreateSwatches.isArchive(bytes)) {
+                    ProcreateSwatches.readForImport(bytes, fallbackName, owner::ensureActive).firstOrNull()
+                } else {
+                    optionalRead(owner::ensureActive) { PaletteCodec.decode(bytes, fallbackName) }
+                }
             }
         if (palette == null || palette.colors.isEmpty()) {
             say(context.getString(R.string.paletteimports_no_readable_colours))
@@ -376,35 +422,47 @@ internal class GalleryImports(
     }
 
     private fun displayName(uri: Uri): String? =
-        optionalMetadata {
+        optionalRead {
             context.contentResolver
                 .query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
                 ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
         } ?: uri.lastPathSegment
 
-    /** Missing metadata may fall back to the URI/header; cancellation must stop the import. */
-    private fun <T> optionalMetadata(read: () -> T): T? =
-        runCatching(read)
-            .onFailure { failure ->
+    /** Optional metadata/format probes may fail normally; cancellation and fatal failures must escape. */
+    private fun <T> optionalRead(
+        checkActive: () -> Unit = {},
+        read: () -> T,
+    ): T? {
+        checkActive()
+        val result =
+            runCatching(read).onFailure { failure ->
                 if (failure is CancellationException || failure !is Exception) throw failure
-            }.getOrNull()
-
-    private fun readHead(uri: Uri): ByteArray? =
-        runCatching {
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                val buffer = ByteArray(HEAD_BYTES)
-                var filled = 0
-                while (filled < buffer.size) {
-                    val read = stream.read(buffer, filled, buffer.size - filled)
-                    if (read < 0) break
-                    filled += read
-                }
-                buffer.copyOf(filled)
             }
-        }.getOrNull()
+        checkActive()
+        return result.getOrNull()
+    }
+
+    /** Unreadable provider payloads retain the existing UI fallback, without hiding admission errors. */
+    private fun <T> providerPayload(read: () -> T): T? =
+        try {
+            read()
+        } catch (_: IOException) {
+            null
+        } catch (_: SecurityException) {
+            null
+        }
+
+    private suspend fun readHead(uri: Uri): ByteArray? {
+        val owner = coroutineContext
+        return optionalRead {
+            owner.ensureActive()
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                GalleryInputSource.head(stream, owner::ensureActive)
+            }
+        }
+    }
 
     private companion object {
-        const val HEAD_BYTES = 64
         const val MAX_NAME = 40
         const val MAX_MODEL_BYTES = 64L * 1024 * 1024
         const val MODEL_TEXTURE = 2048

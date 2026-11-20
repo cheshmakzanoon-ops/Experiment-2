@@ -51,11 +51,14 @@ object BinaryPlist {
 
     private fun decodedByteLimit(): Long = minOf(MAX_DECODED_BYTES, Runtime.getRuntime().maxMemory() / 8)
 
+    /** Optional metadata callers must not turn memory rejection into silently missing settings. */
+    class AllocationLimitException : IllegalArgumentException("The property list needs too much decoded memory")
+
     private class DecodedBudget(
         private var remaining: Long,
     ) {
         fun claim(bytes: Long) {
-            require(bytes >= 0 && bytes <= remaining) { "The property list needs too much decoded memory" }
+            if (bytes < 0 || bytes > remaining) throw AllocationLimitException()
             remaining -= bytes
         }
     }

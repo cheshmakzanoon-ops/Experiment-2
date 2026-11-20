@@ -36,6 +36,18 @@ internal suspend fun renderedExport(
     require(order.isNotEmpty()) { "No visible animated frames in the playback range" }
     val sourceFrames = order.distinct().associateWith { snapshot.frames[it] }
     val region = ExportRegion.resolve(sourceFrames.values.toList(), snapshot.selection, resolved.area)
+    if (region != null && !allFrames && !resolved.format.requiresAnimation) {
+        exporter.checkStillMemory(
+            sourceFrames.getValue(order.first()),
+            snapshot.layers.map { (layer, pixels) -> LayerRaster(layer.name, pixels, layer) },
+            resolved,
+            snapshot.hasAdjustmentLayers,
+            snapshot.groups,
+            snapshot.layerMasks,
+            snapshot.materialMaps,
+            region,
+        )
+    }
     val cropped = sourceFrames.mapValues { (_, pixels) -> ExportRegion.apply(pixels, snapshot.selection, resolved.area, region) }
     val frames = order.map { cropped.getValue(it) }
     val delays =

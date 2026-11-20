@@ -18,13 +18,16 @@ import com.artflow.studio.TestEvidence
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
+import com.artflow.studio.core.export.FitMode
 import com.artflow.studio.core.export.PdfPageSize
 import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.export.ArtworkExporter
+import com.artflow.studio.data.export.LayerRaster
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
+import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -77,6 +80,111 @@ class ExportDeviceTest {
             val opaque = BitmapPixelBridge.fromEncodedBytes(File(flattened.filePath).readBytes())!!
             assertTrue(opaque.pixels.all { it ushr 24 == 255 })
             evidence(png, "alpha.png")
+        }
+
+    @Test
+    fun stillMemoryRefusalPreservesSourceAndEveryExistingExport() =
+        runBlocking {
+            val source = PixelBuffer.filled(16, 16, Color.RED)
+            val before = source.pixels.copyOf()
+            val previous = still(source, ExportFormat.PNG)
+            val previousBytes = File(previous.filePath).readBytes()
+            val previousPaths = storage.listExports(projectId).map { it.absolutePath }
+            val limited = ArtworkExporter(context, storage, 8L * 1024 * 1024)
+            val formats =
+                listOf(
+                    ExportFormat.PNG,
+                    ExportFormat.JPEG,
+                    ExportFormat.WEBP,
+                    ExportFormat.TIFF,
+                    ExportFormat.PDF,
+                    ExportFormat.PSD,
+                    ExportFormat.PROCREATE,
+                    ExportFormat.LAYER_PNGS,
+                    ExportFormat.MODEL_OBJ,
+                )
+            for (format in formats) {
+                val result =
+                    limited.exportStill(
+                        projectId,
+                        "PNG",
+                        source,
+                        emptyList(),
+                        ExportOptions(format, targetWidth = 6000),
+                    )
+                assertTrue("$format must refuse oversized preparation", result.isFailure)
+                assertTrue(
+                    result
+                        .exceptionOrNull()
+                        ?.message
+                        .orEmpty()
+                        .contains("Reduce the output scale"),
+                )
+                assertArrayEquals(before, source.pixels)
+                assertArrayEquals(previousBytes, File(previous.filePath).readBytes())
+                assertEquals(previousPaths, storage.listExports(projectId).map { it.absolutePath })
+            }
+        }
+
+    @Test
+    fun deferredGroupMaskRefusesThenSmallerMaskExportsWithItsPixelsAndCoverage() =
+        runBlocking {
+            val source = PixelBuffer.filled(32, 1, Color.RED)
+            val before = source.pixels.copyOf()
+            val previous = still(source, ExportFormat.PNG)
+            val previousBytes = File(previous.filePath).readBytes()
+            val group = Layer(100, "Group", 16, isGroup = true, hasInMemoryMask = true)
+            val layers =
+                List(16) { index ->
+                    LayerRaster("Layer $index", source, Layer(index + 1L, "Layer $index", index, parentGroupId = group.id))
+                }
+            val options = ExportOptions(ExportFormat.PSD, targetWidth = 512, fitMode = FitMode.FILL, psdUseRle = false)
+            val limited = ArtworkExporter(context, storage, 16_940_000L)
+            val oversized = PixelBuffer.filled(1, 16, Color.WHITE)
+            val refusal =
+                limited.exportStill(
+                    projectId,
+                    "Layers",
+                    source,
+                    layers,
+                    options,
+                    groups = listOf(group),
+                    layerMasks = mapOf(group.id to oversized),
+                )
+            assertTrue(
+                refusal
+                    .exceptionOrNull()
+                    ?.message
+                    .orEmpty()
+                    .contains("Reduce the output scale"),
+            )
+            assertEquals(listOf(previous.filePath), storage.listExports(projectId).map { it.absolutePath })
+            assertArrayEquals(IntArray(16) { Color.WHITE }, oversized.pixels)
+
+            val smaller = PixelBuffer.filled(16, 16, Color.WHITE)
+            val result =
+                limited
+                    .exportStill(
+                        projectId,
+                        "Layers",
+                        source,
+                        layers,
+                        options,
+                        groups = listOf(group),
+                        layerMasks = mapOf(group.id to smaller),
+                    ).getOrThrow()
+            val decoded = requireNotNull(PsdCodec.read(File(result.filePath).readBytes()))
+            assertEquals(512, decoded.width)
+            assertEquals(16, decoded.height)
+            assertArrayEquals(IntArray(512 * 16) { Color.RED }, requireNotNull(decoded.composite).pixels)
+            val mask = requireNotNull(decoded.layers.single { it.name == "Group" }.mask)
+            assertEquals(512, mask.width)
+            assertEquals(16, mask.height)
+            assertArrayEquals(ByteArray(512 * 16) { 0xFF.toByte() }, mask.coverage)
+            assertArrayEquals(IntArray(16 * 16) { Color.WHITE }, smaller.pixels)
+            assertArrayEquals(before, source.pixels)
+            assertArrayEquals(previousBytes, File(previous.filePath).readBytes())
+            evidence(result, "group-mask-budget.psd")
         }
 
     @Test

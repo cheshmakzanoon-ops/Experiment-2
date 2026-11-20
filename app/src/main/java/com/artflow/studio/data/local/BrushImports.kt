@@ -106,7 +106,7 @@ object BrushImports {
         bytes: ByteArray,
         store: (CustomGrains.Tile) -> String,
     ): List<SavedBrush> =
-        BrushArchives.read(bytes, BitmapPixelBridge::fromEncodedBytes).mapIndexed { index, brush ->
+        BrushArchives.readForImport(bytes, BitmapPixelBridge::decodeBrushImage).mapIndexed { index, brush ->
             val parameters = brush.parameters(store)
             SavedBrush("imported-$index", brush.name ?: "Imported brush ${index + 1}", parameters)
         }

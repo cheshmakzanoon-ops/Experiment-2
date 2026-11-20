@@ -1,5 +1,8 @@
 package com.artflow.studio.domain.model.brush
 
+import com.artflow.studio.core.serialization.JsonReadBudget
+import com.artflow.studio.core.serialization.JsonReadLimits
+import com.artflow.studio.core.serialization.encodeBounded
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.util.Base64
@@ -11,7 +14,7 @@ object BrushLibraryCodec {
 
     // 128 source-preserving brushes can include ~200 metadata scalars each.
     // Still bounded: per-field and per-library validation prevents unbounded allocations.
-    private const val MAX_CHARACTERS = 3_145_728
+    internal const val MAX_CHARACTERS = 3_145_728
 
     private val GRAIN_IDS = setOf(null, "paper", "charcoal", "canvas", "fine", "blotch", "bristle", "halftone", "hatch", "speckle")
 
@@ -20,8 +23,39 @@ object BrushLibraryCodec {
     private val AUXILIARY_CURVE_KEY = Regex("dynamicsPressure[A-Za-z0-9]{1,60}")
 
     // Native archives have 39 channels; four use ImportedPressure's dedicated fields.
-    private const val MAX_AUXILIARY_CURVES = 35
+    internal const val MAX_AUXILIARY_CURVES = 35
     private val json = Json { encodeDefaults = true }
+    private val jsonLimits =
+        object : JsonReadLimits {
+            override val message = "This saved brush data exceeds the supported limits. Use fewer brushes or settings."
+
+            // Every value/key token starts at a distinct code unit. The existing character cap
+            // therefore bounds scan work without rejecting dense libraries from earlier writers.
+            // Each token still reserves its full memory cost before deserialization.
+            override val maximumTokens = MAX_CHARACTERS
+
+            override fun objectEntries(property: String?): Int =
+                when (property) {
+                    "importedSourceScalars" -> SourceBrushScalar.MAX_FIELDS
+                    "importedSourceStructures" -> SourceBrushStructuredField.MAX_OBJECTS
+                    "importedAuxiliaryCurves" -> MAX_AUXILIARY_CURVES
+                    "fields" -> SourceBrushStructuredField.MAX_FIELDS
+                    else -> SourceBrushScalar.MAX_FIELDS
+                }
+
+            override fun arrayEntries(property: String?): Int =
+                when (property) {
+                    "brushes" -> MAX_BRUSHES
+                    "points" -> PressureMapping.MAX_POINTS
+                    "items" -> SourceBrushStructuredField.MAX_ITEMS
+                    else -> MAX_BRUSHES
+                }
+
+            override fun stringCharacters(
+                property: String?,
+                owner: String?,
+            ): Int = SourceBrushScalar.MAX_VALUE_LENGTH
+        }
 
     @Serializable
     private data class Archive(
@@ -32,12 +66,27 @@ object BrushLibraryCodec {
     fun validName(name: String): Boolean = name.isNotBlank() && name.length <= MAX_NAME && name.none { it.isISOControl() }
 
     fun encode(brushes: List<SavedBrush>): String {
-        validate(brushes)
-        return json.encodeToString(Archive.serializer(), Archive(1, brushes)).also { require(it.length <= MAX_CHARACTERS) }
+        val budget = JsonReadBudget()
+        val owned = BrushEncodingSnapshot(budget).copy(brushes)
+        validate(owned)
+        return json.encodeBounded(Archive.serializer(), Archive(1, owned), MAX_CHARACTERS, budget).also { admit(it, budget) }
     }
 
-    fun decode(encoded: String): List<SavedBrush> {
+    fun decode(encoded: String): List<SavedBrush> = decode(encoded, JsonReadBudget())
+
+    internal fun admit(
+        encoded: String,
+        budget: JsonReadBudget,
+    ) {
         require(encoded.length <= MAX_CHARACTERS) { "Saved brush data exceeds the supported size" }
+        budget.check(encoded, jsonLimits)
+    }
+
+    internal fun decode(
+        encoded: String,
+        budget: JsonReadBudget,
+    ): List<SavedBrush> {
+        admit(encoded, budget)
         val archive = json.decodeFromString(Archive.serializer(), encoded)
         require(archive.version == 1) { "This saved brush library requires a different app version" }
         validate(archive.brushes)

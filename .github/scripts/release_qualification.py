@@ -30,6 +30,8 @@ CLASSES = {
     "com.artflow.studio.data.PersistenceRegressionTest": "Saved rasters, frames, recovery and storage failures",
     "com.artflow.studio.data.DocumentBoundaryDeviceTest": "Metadata rejection, saved-selection admission and bounded undo/redo with real storage",
     "com.artflow.studio.data.ProjectGrainImportRollbackDeviceTest": "Native file and byte-array imports preserve database and shared assets on rollback and cancellation",
+    "com.artflow.studio.data.ImportOpeningDeviceTest": "Android Procreate and brush decoding, early directory/image admission and staged ownership",
+    "com.artflow.studio.data.GalleryPackageImportDeviceTest": "Gallery native-package routing, referenced-asset notices, navigation lifetime and rollback",
     "com.artflow.studio.data.DatabaseMigrationDeviceTest": "Production Room upgrades, preserved artwork and recovery, rejected unsafe schemas",
     "com.artflow.studio.data.ExportDeviceTest": "Independent decoding and export/share isolation",
     "com.artflow.studio.NativeLibraryCompatibilityTest": "Real packaged native graphics library load",

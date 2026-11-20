@@ -147,6 +147,26 @@ object BitmapPixelBridge {
         }
     }
 
+    /** Brush geometry is sampled only by the authored tile importer, never by the platform decoder. */
+    internal fun decodeBrushImage(
+        bytes: ByteArray,
+        memoryBudgetBytes: Long,
+    ): PixelBuffer? =
+        withImportMemory {
+            val (width, height) = encodedDimensions(bytes) ?: return@withImportMemory null
+            val allowance = minOf(memoryBudgetBytes, ImageDecodeBudget.currentBytes())
+            val plan = ImageDecodeBudget.plan(width, height, CanvasOperations.MAX_DIMENSION, allowance)
+            require(plan.sampleSize == 1) { "These brush images need too much memory. Import fewer or smaller images." }
+            val options =
+                BitmapFactory.Options().apply {
+                    inPremultiplied = false
+                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inScaled = false
+                }
+            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options) ?: return@withImportMemory null
+            importedPixels(bitmap, plan)
+        }
+
     /** A document thumbnail keeps its encoded geometry, with admission before bitmap allocation. */
     internal fun decodeProcreateThumbnail(
         bytes: ByteArray,

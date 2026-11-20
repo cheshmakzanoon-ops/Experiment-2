@@ -4,8 +4,8 @@
 
 This is the follow-through requested after the audit of main `54fa5e0` found an
 autosave-only recovery failure, a native-package snapshot race, and uncounted
-selection memory. The existing PR #41 candidate `772d2f1` has been incorporated
-locally for independent review; its prior twenty-wave record remains separate.
+selection memory. The existing PR #41 candidate `772d2f1` was independently
+reviewed and incorporated into main; its prior twenty-wave record remains separate.
 This follow-through uses twenty new waves of three distinct agent assignments.
 
 The engineering target is reliable supported offline workflows, bounded memory,
@@ -28,8 +28,15 @@ remain evidence requirements; they must not be claimed from emulator results.
 | 09 | `w09_procreate_open_budget`; `w09_font_identity_review`; `w09_startup_review` | Opening-budget implementation applied and handed to wave ten for final integration; reviews accepted identity/readiness boundaries and reproduced dependency-work and grain-retention gaps |
 | 10 | `w10_grain_capacity`; `w10_dependency_work`; `w10_opening_integration` | Retained/buffered grain admission implemented (37 focused cases passed); bounded declarations and one font hash per file per operation implemented (39 cases passed); early Procreate allocation and ZIP directory preflight integrated (92 cases passed); focused static checks passed without baseline changes |
 | 11 | `w11_brush_transaction`; `w11_grain_review`; `w11_native_stream_route` | Atomic brush-batch publication through the durable library commit implemented (35 focused cases passed); independent grain ownership review passed 45 cases and identified early ABR allocation; byte-array native imports now use the staged streaming path (26 cases passed), with two additional Room device regressions |
-| 12 | `w12_brush_decode_budget`; `w12_procreate_device`; `w12_native_zip` | In progress: pre-allocation brush decoding limits, real Android Procreate opening regressions, and native-package ZIP directory admission |
-| 13–20 | Assigned sequentially from confirmed defects and verification needs | Pending |
+| 12 | `w12_brush_decode_budget`; `w12_procreate_device`; `w12_native_zip` | Early brush input/source/tile/metadata admission and aspect-preserving sampling implemented (102 focused cases passed); five Android opening/decoder cases type-checked; native ZIP constructors now have directory preflight (113 focused cases passed); optimized inventory expanded to 58, with all 39 verifier cases passing |
+| 13 | `w13_brush_json`; `w13_provider_input`; `w13_runtime_docs` | Shared JSON structural/allocation preflight and bounded library/file output implemented (94 focused cases passed); generic provider admission/cancellation/progress fixed (28 cases passed, two old-source failures reproduced); README/help and source-linked verification record updated with 92 resolved links and unchanged release gates |
+| 14 | `w14_palette_bounds`; `w14_export_ownership_review`; `w14_json_review` | Palette expansion/JSON/output admission implemented (95 focused cases, 30 new, and scoped static checks passed); export review accepted descriptor ownership but reproduced unadmitted still-image scaling; JSON/ZIP review accepted ZIP compatibility and reproduced isolated UTF-16 code-unit loss plus two smaller preflight ordering/syntax gaps |
+| 15 | `w15_still_export_memory`; `w15_json_text_preservation`; `w15_cleanup_primary_failure` | Early still-export admission implemented (48 focused cases at 128 MiB, 12 new); lossless bounded JSON and stable input snapshots implemented (149 cases, 16 new); original publication failures preserved across cleanup faults (33 cases, seven new; four reproduce on old source), with two additional real-Room device cases; scoped static checks passed |
+| 16 | `w16_cleanup_review`; `w16_json_wire_review`; `w16_still_export_review` | Independent reviews reproduced three gaps: unowned destination deletion (two failures in 41 cases), brush metadata/tile mismatch under changing caller input (one failure in five exhaustive wire probes; no live UI race established), and deferred PSD group-mask workspace undercount (one failure in 51 cases); other reviewed boundaries accepted |
+| 17 | `w17_destination_ownership`; `w17_brush_file_snapshot`; `w17_psd_mask_workspace` | Storage-created cleanup ownership implemented (43 focused cases; ten new also pass with coroutine debug recovery); consistent bounded brush-file input implemented (152 cases; three new, original mismatch reproduced); deferred PSD mask workspace fixed (53 focused checks with debug recovery at 256 MiB, including two host checks of new Android cases); scoped static checks passed |
+| 18 | `w18_ci_inventory_review`; `w18_publication_closure_review`; `w18_runtime_release_docs` | CI/provenance review passed 208 verifier cases and confirmed 341 debug/68 optimized identities with no removals or baseline changes; publication closure passed 45 debug-enabled cases and reproduced a remaining staged-cleanup diagnostic gap; runtime/release docs reconciled with 115 resolved relative links and unchanged release gates |
+| 19 | `w19_staging_diagnostics`; `w19_export_ui_failure_review`; `w19_format_compatibility_review` | Shared staged/publication diagnostic retention implemented (45 focused debug-enabled cases, two new original-source failures retained); three actual ViewModel failure/retry/cancellation probes passed; format review accepted native/version/selection boundaries and reproduced rejection of valid old-writer dense brush libraries by the generic token ceiling |
+| 20 | `w20_release_build_contract`; `w20_legacy_library_tokens`; `w20_final_compatibility_closure` | Build/variant/publisher contract review passed 70 verifier cases and confirmed 16 unchanged build inputs; saved-library-specific token repair passed 157 cases (five new); independent actual-old-writer review passed all five probes, where the identical pre-fix probes had two failures; generic/palette and shared-memory boundaries preserved |
 
 ## Verification record
 
@@ -111,6 +118,120 @@ remain evidence requirements; they must not be claimed from emulator results.
   failure is retained. The complete detekt and formatting tasks then passed
   without expanding any baseline. This checkpoint is ready for source publication;
   hosted release/device evidence is required for the published revision.
+- Wave-eleven publication: `1e438bbf3db3d29cc178819bab4a0f3cbc6311b7`, tree
+  `05f05402081fb1cb8c20715371a912ae851f8a90`, accepted as a non-forced update
+  from `33048d7`. Android CI `44643825768`, optimized qualification `44643825765`,
+  installed upgrade `44643825756` and normal release UI `44643825660` started
+  for this revision. The prior main's build job passed; its still-running emulator
+  matrix was superseded by this new source and is not a complete green workflow.
+- On `1e438bb`, optimized qualification `44643825765` (53 selected cases),
+  installed upgrade `44643825756`, and normal release UI `44643825660` passed.
+  Android CI `44643825768` passed its build/static/unit job, including fetched
+  reference samples and brush corpus. All seven device lanes completed with the
+  same two `GalleryPackageImportDeviceTest` failures at the missing-grain notice
+  assertion: 328 passed and two failed on each API 35/36 configuration; API 26
+  had 326 passed, two failed and two documented API-limited skips. These are
+  retained failures, not successful device qualification.
+- The gallery fixture declared a missing grain without referencing it in the
+  artwork. The used-reference dependency audit intentionally ignores unrelated
+  manifest declarations. The fixture now contains actual strokes using the
+  present and missing grains, retaining every existing notice, byte, cleanup,
+  navigation and database assertion. Its revised device executions remain due.
+- The narrow gallery correction type-checked against the Android API and existing
+  application classes and passed formatting. It was published separately as
+  `8e463964abee76875b28f6dfea45005f80c79ff4`, tree
+  `122cd2099f2ff9f0dd73a487c74585403af5bc7d`, without production-source changes.
+  Android CI `44650019383`, optimized qualification `44650019517`, installed
+  upgrade `44650019421`, and normal release UI `44650019407` started for it.
+- The working optimized selection now also covers all four gallery package
+  routing/notice/rollback cases. Its inventory contains 62 identities and the 39
+  qualification-verifier tests pass. This working selection is separate from the
+  53-case inventory in the narrow gallery-only publication above.
+- Wave-fifteen source is frozen for combined local verification. The optimized
+  inventory now has 64 cases after the two real-Room cleanup double-fault
+  regressions. Their current-source Android type-check passed; hosted execution
+  is still required. Scoped checks did not expand any static-analysis baseline.
+- The palette Unicode reproduction separately retained two original failures;
+  the revised shared escape writer passes strict UTF-8 roundtrips for isolated
+  high/low code units, complete emoji pairs and truncated UI names. The initial
+  JSON focused-runner dependency omission and export runner's nonexistent test
+  name were corrected in scratch setup only; no production assertion was removed.
+- Combined wave-fifteen verification compiled production and JVM test code and
+  executed 2,282 cases in 357 suites. Two import cleanup cases failed because a
+  subsequent coroutine debug-recovery boundary discarded a transient exception
+  copy's suppressed lookup error. The primary error/cancellation survived. The
+  two absent local reference-input skips remain separate. Android-test compilation
+  and static tasks were not reached after this unit-test failure.
+- The same 33-case focused cleanup suite reproduced both failures with assertions
+  and coroutine debug recovery enabled. The helper now retains the cleanup
+  diagnostic on the primary throwable and its matching type/message cause copies,
+  with identity-cycle protection. All 33 cases pass under those settings with the
+  original assertions unchanged; independent review and combined revalidation
+  follow. The original failed batch and diagnostic reproduction are retained.
+- Wave-seventeen combined verification completed 2,298 JVM cases in 360 suites
+  with zero failures/errors and the same two local reference-input skips. Updated
+  Android test compilation passed; formatting and detekt were still running at
+  this checkpoint. The final staged-diagnostic change needs its own subsequent
+  integrated validation.
+- The deferred-mask focused suite initially refused a later small Procreate
+  success case at a 128 MiB heap with coroutine debugging enabled because live
+  headroom was exhausted. It did not trigger an out-of-memory failure. The full
+  53-check run passed at 256 MiB with debugging and all assertions retained;
+  production and injected admission limits were not widened. This remains
+  separate from the earlier 48-case 128 MiB run without coroutine debugging.
+- All three release workflows passed on the gallery-fixture checkpoint
+  `8e46396`: optimized `44650019517`, installed upgrade `44650019421`, and normal
+  release UI `44650019407`. Its Android build/device workflow was still running
+  at this checkpoint. These results do not qualify the later working-source changes.
+- The combined wave-seventeen run also passed formatting. Detekt then found one
+  two-break loop in the new cleanup diagnostic helper. Wave nineteen moved the
+  shared helper into core lifecycle code and combined its termination checks,
+  preserving behavior and the unchanged baseline. The resulting 45-case focused
+  suite and default-enabled scoped static checks pass; final combined validation
+  remains due.
+- The old-writer compatibility probe round-tripped five dense version-one brush
+  libraries below the unchanged 3,145,728-character ceiling. Four were refused
+  by the new generic token limit despite sufficient memory: 524,933, 531,333,
+  542,085 and 546,437 tokens; the 520,581-token control passed. The durable library
+  row was preserved, but access failed. Wave twenty addresses the library-specific
+  work ceiling while retaining per-token pre-allocation memory accounting and the
+  existing generic/palette limits.
+- Release/build-contract verification passed 70 cases with real JDK signing and
+  synthetic Android tool fixtures. Its first fixture attempt failed because an
+  injected local JVM banner contaminated parsed manifest XML; clearing that
+  test-only environment resolved it without source or assertion changes. This is
+  verifier evidence, not publisher artifact approval or a new release build.
+- All sixty distinct assignments across twenty waves are complete. The final
+  library policy retains the existing character ceiling as a finite token upper
+  bound; every token still reserves 128 bytes before deserialization. Independent
+  actual-old-writer ordinary and dual libraries preserve exact models and text,
+  including Unicode names, while exact-budget-minus-one and generic/palette
+  boundary controls still refuse. No format input can select its own policy.
+- The three independent real ViewModel export failure/retry/cancellation cases
+  were retained as `ExportMemoryUiFlowTest`, preserving all saved-file, live-pixel,
+  selection, dirty-state, previous-export and terminal-state assertions. They pass
+  with assertions and coroutine debugging enabled, and scoped default-enabled
+  static checks pass. The final source contains 341 full-debug device identities
+  and 68 selected optimized identities; no prior identity was removed.
+- Final combined source verification passed: 2,308 declared JVM cases in 363
+  suites, zero failures/errors, and two local absent-reference-input skips;
+  Android test compilation, whole-project ktlint and detekt also passed. The
+  static baseline is unchanged. Debug and release Android lint then both passed
+  in a fresh local Gradle process (56 actionable tasks, 8m 36s). Final hosted
+  reference-input and emulator evidence is required for the published revision.
+
+## Qualification after the agent waves
+
+The implementation and review assignments above are complete. Final combined
+verification and hosted qualification must bind to the published revision. Earlier
+green commits, scoped probes and verifier fixtures do not qualify a later source
+tree. The final report must identify the published commit and its Actions runs,
+including both complete Android CI executions, the additional primary API 35 /
+16 KiB execution, the three release workflows and any internal framework recovery.
+
+Public rollout still requires the publisher, physical-device and store evidence
+in [RELEASE_SIGNOFF.md](RELEASE_SIGNOFF.md). These external results are not implied
+by completion of the sixty assignments or by a green emulator workflow.
 
 ## Continuation
 

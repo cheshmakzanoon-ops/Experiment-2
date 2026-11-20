@@ -78,8 +78,14 @@ object ProcreateBrush {
         val dualBlendMode: Int? = null,
     )
 
-    fun read(archive: ByteArray): Settings {
-        val keyed = KeyedArchive(BinaryPlist.read(archive))
+    fun read(archive: ByteArray): Settings = readKeyed(KeyedArchive(BinaryPlist.read(archive)))
+
+    internal fun read(
+        archive: ByteArray,
+        maxDecodedBytes: Long,
+    ): Settings = readKeyed(KeyedArchive(BinaryPlist.read(archive, maxDecodedBytes)))
+
+    private fun readKeyed(keyed: KeyedArchive): Settings {
         val brush = requireNotNull(keyed.root) { "This is not a Procreate brush" }
 
         fun number(key: String): Float? = (brush[key] as? Number)?.toFloat()?.takeIf { it.isFinite() }

@@ -9,20 +9,27 @@ CPU painting/compositing engine supplies artwork to
 an OpenGL ES 2.0 display surface. It includes pressure-sensitive brushes, layers and masks,
 selections and transforms, animation, reference images, and 3D texture painting.
 
-**Release status:** engineering candidate. Build and emulator results are recorded by commit in
-[Test evidence](docs/release/TEST_EVIDENCE.md). Publisher signing, physical-device/stylus acceptance,
-upgrade testing, and store submission remain separate gates in
+**Release status:** engineering candidate. Current implementation and verification outcomes are
+recorded by revision in the [follow-through log](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md),
+with earlier results in [Test evidence](docs/release/TEST_EVIDENCE.md). Publisher signing,
+physical-device/stylus acceptance, upgrade testing, and store submission remain separate gates in
 [Release sign-off](docs/release/RELEASE_SIGNOFF.md). A helper's unit test or green emulator run does
 not establish physical performance, complete format compatibility, or Procreate parity.
 
 ## Current development
 
-The [November 19 hardening record](docs/release/PRODUCTION_HARDENING_2026-11-19.md) tracks the
-current candidate in [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). The work
-covers bounded image/PSD decoding, document-bound atomic imports, import lifetime cleanup,
-consistent native-package export snapshots, preview failure handling, resolved dependency
-evidence, and executable optimized/normal-release/upgrade/publisher/physical qualification gates. Implementation
-and local checks are recorded separately from completed exact-revision device acceptance.
+The [production follow-through record](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md) tracks
+the twenty-wave maintenance effort and its publication checkpoints. It covers selection/history
+admission, provider work off the UI thread, early import/export allocation checks, saved-brush
+startup readiness, font content identity, lossless brush/palette text, and brush/native-package
+transaction ownership. Each source revision requires its own qualification; the record keeps
+implementation, local checks, hosted device results and external release acceptance separate.
+
+This incorporates the earlier [November 19 hardening](docs/release/PRODUCTION_HARDENING_2026-11-19.md)
+from [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41): bounded image/PSD decoding,
+document-bound atomic imports, import lifetime cleanup, consistent native-package export snapshots,
+preview failure handling, dependency evidence, and the optimized/normal-release/upgrade qualification
+workflows. Publisher and physical-device qualification remain separate gates.
 
 The preceding November 18 integration milestone addressed these connected editor paths:
 
@@ -43,7 +50,7 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
 | Painting | Pressure/tilt response, smoothing, textured and dual brushes, wet pickup, eraser, smudge, clone/heal, fill, gradients, symmetry, and perspective assistance. Imported brush settings have varying rendering coverage. |
 | Layers | Raster layers, blending, nested groups, clipping, independent masks, adjustment/filter layers, selections, transforms, multi-selection, persistent links, and undo/redo. Link selected layers in the Layers panel; use Whole-layer transform in Tool options for linked masks. |
 | Storage | Version-7 documents, checksum-first legacy migration, atomic manifests, immutable raster generations, autosave/recovery, independent duplication, and gallery management. |
-| Portable artworks | Native packages contain layers, frames, masks, document settings, custom grains, and font dependency metadata. Third-party font binaries are not automatically redistributed. |
+| Portable artworks | Native packages contain layers, frames, masks, document settings, custom grains, and font dependency metadata. Optional font content fingerprints identify same-name substitutions; imported saved pixels remain intact when a font is missing, different or unverified. Third-party font binaries are not automatically redistributed. |
 | Text | Editable text, platform/imported fonts, wrapping, alignment, letter spacing, and styling. Pixel transforms, crop, and canvas resize can rasterize text; full affine vector typography remains unfinished. |
 | Color | sRGB and Display P3 documents, conversion/tagging, palettes, harmonies, and an approximate fixed-ink CMYK preview. This is not printer-profile-managed CMYK editing. |
 | Animation | Frames, duration/role controls, onion skins, playback, GIF/APNG/MP4 and frame-sequence export, and timelapse recording. Device encoder and memory limits apply. |
@@ -61,7 +68,9 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   `TileCache` retains a full-sized buffer and tracks computed regions.
 - **Storage:** [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)
   publishes a manifest after its raster generations are durable. Recovery protection is independent
-  of whether its dialog is visible. Packages have separate bounded archive handling.
+  of whether its dialog is visible. Packages have separate bounded archive handling. Import and
+  duplication cleanup acquire destination ownership only when storage creates the directory;
+  a reserved database ID does not permit deleting an independently created destination.
 - **Unintegrated modules:** `data/renderer/gpu/RenderBackendFactory`, `VirtualTileCanvas`, and the
   GLES/software/Vulkan abstractions are not the editor's active rendering pipeline. `IccColorEngine`,
   `CmykBuffer`, and simultaneous `PbrMaterialAtlas` stamping are not connected to the editor.
@@ -91,6 +100,25 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   and the device's available memory. A bounded copy supplies both metadata and decoding; oversized
   or unreadable input is rejected with an import error. This sampling applies to inserted photos,
   not to silently reducing the pixels of an existing editable native document.
+- **Brush assets and imports:** startup waits for saved brush shapes and textures before opening
+  the editor. A load failure offers Retry or an explicit choice to open with available brushes;
+  missing textures can change subsequent strokes. Imported batches must fit decoding, retained
+  asset and library limits. Rejected batches preserve existing brushes and shared textures, and
+  assets are retained at the durable library commit. The registry does not evict textures to admit
+  a new import. Use fewer brushes or smaller source images when an import exceeds its allowance.
+- **Import allocation:** native and Procreate archives have directory checks before platform ZIP
+  parsing, as well as separate metadata, entry and raster limits. ABR tips are sampled into fixed
+  tiles without allocating a padded full-size square. These limits depend on device heap and current
+  headroom, so a file within its format ceiling can still be refused. The
+  [import and saved-asset memory record](docs/verification/import-asset-memory.md) describes exact
+  allowances, transaction/cancellation boundaries, font identity, and regression coverage. The
+  estimates do not certify total-process memory use or physical-device performance.
+- **Still-image export:** admission covers output scaling, fit/fill intermediates, selected/content
+  crops, editable layers and masks, PDF oversampling, and format-specific encoding workspace.
+  A request within the dimension ceiling can still need too much memory. Refusal preserves the
+  source and existing exports and asks the artist to reduce output scale or export fewer layers.
+  See the [still-export memory record](docs/verification/still-export-memory.md) for the supported
+  paths and conservative estimates; native codec peak memory still needs device measurements.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance
@@ -219,6 +247,9 @@ minified launch APK as a publisher-signed production artifact.
 ## Development and release records
 
 - [Development plan](agent.md) and [contributing](CONTRIBUTING.md).
+- [Current production follow-through](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md) and
+  [import/asset memory boundaries](docs/verification/import-asset-memory.md), plus
+  [still-export memory admission](docs/verification/still-export-memory.md).
 - [Current audit](docs/PRODUCTION_READINESS_AUDIT.md) and [historical release evidence](docs/RELEASE_READINESS.md).
 - [Readiness matrix](docs/release/READINESS_MATRIX.md), [test evidence](docs/release/TEST_EVIDENCE.md),
   [risk register](docs/release/RISK_REGISTER.md), and [release sign-off](docs/release/RELEASE_SIGNOFF.md).

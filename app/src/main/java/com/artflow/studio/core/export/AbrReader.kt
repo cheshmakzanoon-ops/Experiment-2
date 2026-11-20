@@ -25,9 +25,16 @@ object AbrReader {
         }
     }
 
-    fun read(bytes: ByteArray): List<Tip> {
+    fun read(bytes: ByteArray): List<Tip> = read(bytes, BrushDecodeBudget(), includeTiles = false)
+
+    internal fun read(
+        bytes: ByteArray,
+        budget: BrushDecodeBudget,
+        includeTiles: Boolean,
+    ): List<Tip> {
+        budget.retainInput(bytes.size)
         require(isAbr(bytes)) { "This is not a Photoshop brush file" }
-        val reader = Reader(bytes)
+        val reader = Reader(bytes, budget, includeTiles)
         val tips = if (reader.short(0) <= 2) classic(reader) else sectioned(reader)
         require(tips.isNotEmpty()) { "This brush file has no sampled brush tips" }
         return tips
@@ -60,7 +67,7 @@ object AbrReader {
                 val left = reader.int(p + 4)
                 val bottom = reader.int(p + 8)
                 val right = reader.int(p + 12)
-                tips += pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, name)
+                tips += pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, name, next)
             }
             at = next
         }
@@ -96,7 +103,8 @@ object AbrReader {
     ): List<Pair<String, Tip>> {
         val found = mutableListOf<Pair<String, Tip>>()
         var at = start
-        while (at + 4 <= end && found.size < MAX_TIPS) {
+        while (at + 4 <= end) {
+            require(found.size < MAX_TIPS) { "This brush file has too many sampled tips" }
             val size = reader.int(at)
             require(size in 0..end - at - 4) { DAMAGED }
             val padded = size.toLong() + (4 - size % 4) % 4
@@ -112,7 +120,7 @@ object AbrReader {
             val left = reader.int(p + 4)
             val bottom = reader.int(p + 8)
             val right = reader.int(p + 12)
-            found += normalised(key) to pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, null)
+            found += normalised(key) to pixels(reader, p + 16, right.toLong() - left, bottom.toLong() - top, null, at + 4 + size)
             at = next
         }
         return found
@@ -125,19 +133,23 @@ object AbrReader {
         widthLong: Long,
         heightLong: Long,
         name: String?,
+        end: Int,
     ): Tip {
         require(widthLong in 1L..MAX_SIDE.toLong() && heightLong in 1L..MAX_SIDE.toLong()) { "A brush tip has an unexpected size" }
         val width = widthLong.toInt()
         val height = heightLong.toInt()
-        reader.spend(width, height)
-        require(start >= 0 && start.toLong() + 3L <= reader.size) { DAMAGED }
+        require(start >= 0 && end <= reader.size && start.toLong() + 3L <= end) { DAMAGED }
         val depth = reader.short(start)
         require(depth == 8 || depth == 16) { "A brush tip has an unsupported depth" }
         val bytesPerSample = depth / 8
         val rowBytes = width * bytesPerSample
-        val raw = ByteArray(rowBytes * height)
+        val rawBytes = rowBytes * height
         val compressed = reader.byte(start + 2) != 0
-        if (compressed) packBits(reader, start + 3, height, rowBytes, raw) else reader.copy(start + 3, raw)
+        val minimumBytes = if (compressed) height * 2 else rawBytes
+        require(minimumBytes <= end - start - 3) { DAMAGED }
+        reader.spend(width, height, bytesPerSample)
+        val raw = ByteArray(rawBytes)
+        if (compressed) packBits(reader, start + 3, height, rowBytes, raw, end) else reader.copy(start + 3, raw)
         val values = ByteArray(width * height) { raw[it * bytesPerSample] }
         return Tip(name, width, height, values)
     }
@@ -149,13 +161,14 @@ object AbrReader {
         rows: Int,
         rowBytes: Int,
         out: ByteArray,
+        sampleEnd: Int,
     ) {
         val headerEndLong = start.toLong() + rows.toLong() * 2L
-        require(start >= 0 && headerEndLong <= reader.size) { DAMAGED }
+        require(start >= 0 && headerEndLong <= sampleEnd) { DAMAGED }
         var at = headerEndLong.toInt()
         for (row in 0 until rows) {
             val rowLength = reader.short(start + row * 2)
-            require(rowLength <= reader.size - at) { DAMAGED }
+            require(rowLength <= sampleEnd - at) { DAMAGED }
             val end = at + rowLength
             var d = row * rowBytes
             val rowEnd = d + rowBytes
@@ -214,6 +227,8 @@ object AbrReader {
     /** Big-endian, bounds-checked access to the file. */
     private class Reader(
         private val bytes: ByteArray,
+        private val budget: BrushDecodeBudget? = null,
+        private val includeTiles: Boolean = false,
     ) {
         val size = bytes.size
 
@@ -223,7 +238,9 @@ object AbrReader {
         fun spend(
             width: Int,
             height: Int,
+            bytesPerSample: Int,
         ) {
+            budget?.retainTip(width.toLong() * height, bytesPerSample, includeTiles)
             spentPixels += width.toLong() * height
             require(spentPixels <= MAX_TOTAL_PIXELS) { DAMAGED }
         }

@@ -2,8 +2,11 @@ package com.artflow.studio.data.local
 
 import com.artflow.studio.core.export.AbrReader
 import com.artflow.studio.core.export.BinaryPlist
+import com.artflow.studio.core.export.BrushDecodeBudget
 import com.artflow.studio.core.export.ProcreateBrush
 import com.artflow.studio.core.export.ProcreateBrushWriter
+import com.artflow.studio.core.pixels.ImportMemoryBudget
+import com.artflow.studio.core.pixels.ImportPreparation
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -48,21 +51,18 @@ object BrushArchives {
         }
     }
 
-    /** Photoshop brush files: each sampled tip becomes a brush shape, named as the file names it. */
-    fun readAbr(bytes: ByteArray): List<Imported> =
-        AbrReader.read(bytes).map { tip ->
-            // Tips are padded to a square, centred, so long tips keep their whole shape.
-            val side = maxOf(tip.width, tip.height)
-            val square = PixelBuffer(side, side, IntArray(side * side) { OPAQUE_BLACK })
-            val left = (side - tip.width) / 2
-            val top = (side - tip.height) / 2
-            for (y in 0 until tip.height) {
-                for (x in 0 until tip.width) {
-                    val value = tip.values[y * tip.width + x].toInt() and 0xFF
-                    square.pixels[(top + y) * side + left + x] = OPAQUE_BLACK or (value shl 16) or (value shl 8) or value
-                }
+    /** Photoshop tips retain their centered padding and coverage without a full square workspace. */
+    fun readAbr(bytes: ByteArray): List<Imported> = readAbr(bytes, ImportMemoryBudget.currentBytes())
+
+    internal fun readAbr(
+        bytes: ByteArray,
+        memoryBudgetBytes: Long,
+    ): List<Imported> =
+        ImportPreparation.withAdmission {
+            val budget = BrushDecodeBudget(memoryBudgetBytes)
+            AbrReader.read(bytes, budget, includeTiles = true).map { tip ->
+                Imported(PaddedBrushTip.tile(tip), null, name = tip.name)
             }
-            Imported(CustomGrains.tileFrom(square, normalizeContrast = false), null, name = tip.name)
         }
 
     /**
@@ -83,25 +83,56 @@ object BrushArchives {
     fun isArchive(bytes: ByteArray): Boolean =
         bytes.size >= ZIP_SIGNATURE.size && ZIP_SIGNATURE.indices.all { bytes[it] == ZIP_SIGNATURE[it] }
 
-    /** Read a user-selected file without first allocating an unbounded byte array. */
-    fun readInput(input: InputStream): ByteArray = readBounded(input, MAX_ARCHIVE_BYTES)
+    /** Names decide only the early input allowance; payload parsing still validates every brush. */
+    internal fun isBrushOnlyArchive(names: Sequence<String>): Boolean {
+        var brushMember = false
+        for (path in names) {
+            val name = path.substringAfterLast('/').lowercase()
+            if (name == "swatches.json" || name.substringAfterLast('.', "") in MODEL_EXTENSIONS) return false
+            if (name in BRUSH_MEMBERS) brushMember = true
+        }
+        return brushMember
+    }
 
-    /** Primary brushes, in the set's order, with any Sub01 component attached to its parent. */
+    /** Read user-selected brush bytes within the same headroom used by the decoders. */
+    fun readInput(input: InputStream): ByteArray = readInput(input, ImportMemoryBudget.currentBytes())
+
+    internal fun readInput(
+        input: InputStream,
+        memoryBudgetBytes: Long,
+    ): ByteArray = ImportPreparation.withAdmission { readBounded(input, BrushDecodeBudget(memoryBudgetBytes).encodedLimit) }
+
+    /** Trusted decoders may omit images, for example when checking a metadata-only reference corpus. */
     fun read(
         bytes: ByteArray,
         decode: (ByteArray) -> PixelBuffer?,
+    ): List<Imported> = readForImport(bytes, ImportMemoryBudget.currentBytes()) { encoded, _ -> decode(encoded) }
+
+    /** Production image decoders receive their remaining allowance before any bitmap is allocated. */
+    internal fun readForImport(
+        bytes: ByteArray,
+        decode: (ByteArray, Long) -> PixelBuffer?,
+    ): List<Imported> = readForImport(bytes, ImportMemoryBudget.currentBytes(), decode)
+
+    internal fun readForImport(
+        bytes: ByteArray,
+        memoryBudgetBytes: Long,
+        decode: (ByteArray, Long) -> PixelBuffer?,
     ): List<Imported> =
-        try {
-            readContents(bytes, decode)
-        } catch (damaged: IOException) {
-            throw IllegalArgumentException("This brush archive is damaged", damaged)
+        ImportPreparation.withAdmission {
+            try {
+                readContents(bytes, BrushDecodeBudget(memoryBudgetBytes), decode)
+            } catch (damaged: IOException) {
+                throw IllegalArgumentException("This brush archive is damaged", damaged)
+            }
         }
 
     private fun readContents(
         bytes: ByteArray,
-        decode: (ByteArray) -> PixelBuffer?,
+        budget: BrushDecodeBudget,
+        decode: (ByteArray, Long) -> PixelBuffer?,
     ): List<Imported> {
-        require(bytes.size <= MAX_ARCHIVE_BYTES) { "This brush archive is too large" }
+        budget.retainInput(bytes.size)
         val found = sortedMapOf<String, MutableMap<String, ByteArray>>()
         var expanded = 0
         val seen = mutableSetOf<String>()
@@ -110,10 +141,9 @@ object BrushArchives {
             var entry = zip.nextEntry
             while (entry != null) {
                 require(++entries <= MAX_ENTRIES) { "This brush file has too many entries" }
+                budget.retainPath(entry.name.length)
                 val path = entry.name.removeSuffix("/")
-                require(path.isNotEmpty() && '\\' !in path && path.split('/').none { it.isEmpty() || it == "." || it == ".." }) {
-                    "This brush file contains an invalid path"
-                }
+                require(validPath(path)) { "This brush file contains an invalid path" }
                 require(seen.add(path.lowercase())) { "This brush file contains duplicate paths" }
                 val kind =
                     when (path.substringAfterLast('/').lowercase()) {
@@ -124,10 +154,13 @@ object BrushArchives {
                         else -> null
                     }
                 // Drain ignored members too: ZipInputStream.closeEntry otherwise inflates them without a budget.
-                val limit = minOf(MAX_EXPANDED_BYTES - expanded, if (kind == SETTINGS) MAX_SETTINGS_BYTES else MAX_IMAGE_BYTES)
+                val memberLimit = if (kind == SETTINGS || kind == SET) MAX_SETTINGS_BYTES else MAX_IMAGE_BYTES
+                val limit = budget.entryLimit(minOf(MAX_EXPANDED_BYTES - expanded, memberLimit))
+                require(entry.size < 0 || entry.size <= limit) { BrushDecodeBudget.MEMORY_MESSAGE }
                 val content = readBounded(zip, limit)
                 expanded += content.size
                 if (!entry.isDirectory && kind != null) {
+                    budget.retainEntry(content.size)
                     val folder = path.substringBeforeLast('/', "")
                     require(found.size < MAX_FOLDERS || folder in found) { "This brush set has too many folders" }
                     found.getOrPut(folder) { mutableMapOf() }[kind] = content
@@ -146,7 +179,7 @@ object BrushArchives {
         val listed =
             found[""]
                 ?.get(SET)
-                ?.let(::listedFolders)
+                ?.let { listedFolders(it, budget) }
                 .orEmpty()
                 .distinct()
         val folders = listed.filter { it in primaries } + primaries.filter { it !in listed }
@@ -155,9 +188,9 @@ object BrushArchives {
                 val secondaryPath = if (folder.isEmpty()) SECONDARY else "$folder/$SECONDARY"
                 val secondary =
                     components[secondaryPath]?.let {
-                        requireNotNull(component(it, decode)) { "The secondary brush cannot be read" }
+                        requireNotNull(component(it, budget, decode)) { "The secondary brush cannot be read" }
                     }
-                val primary = component(components.getValue(folder), decode)
+                val primary = component(components.getValue(folder), budget, decode)
                 require(primary != null || secondary == null) { "A secondary brush has no readable primary brush" }
                 primary?.let { Imported(it.shape, it.grain, it.settings, it.name, secondary) }
             }
@@ -169,21 +202,42 @@ object BrushArchives {
 
     private fun component(
         files: Map<String, ByteArray>,
-        decode: (ByteArray) -> PixelBuffer?,
+        budget: BrushDecodeBudget,
+        decode: (ByteArray, Long) -> PixelBuffer?,
     ): Imported? {
-        val settings = files[SETTINGS]?.let(::settings)
-        val shape = files[SHAPE]?.let(decode)?.let { tile(it, settings?.shapeInverted == true) }
-        val grain = files[GRAIN]?.let(decode)?.let { tile(it, settings?.grainInverted == true) }
+        val settings = files[SETTINGS]?.let { settings(it, budget) }
+        val shape = files[SHAPE]?.let { image(it, settings?.shapeInverted == true, budget, decode) }
+        val grain = files[GRAIN]?.let { image(it, settings?.grainInverted == true, budget, decode) }
         return if (shape == null && grain == null && settings == null) null else Imported(shape, grain, settings)
     }
 
     /** The brush's settings, or null when its archive cannot be read (the images still come in). */
-    private fun settings(archive: ByteArray): ProcreateBrush.Settings? =
-        try {
-            ProcreateBrush.read(archive)
-        } catch (unreadable: IllegalArgumentException) {
+    private fun settings(
+        archive: ByteArray,
+        budget: BrushDecodeBudget,
+    ): ProcreateBrush.Settings? {
+        val allowance = budget.metadataAllowance(archive.size)
+        return try {
+            ProcreateBrush.read(archive, allowance)
+        } catch (limited: BinaryPlist.AllocationLimitException) {
+            throw limited
+        } catch (_: IllegalArgumentException) {
             null
         }
+    }
+
+    private fun image(
+        encoded: ByteArray,
+        inverted: Boolean,
+        budget: BrushDecodeBudget,
+        decode: (ByteArray, Long) -> PixelBuffer?,
+    ): CustomGrains.Tile? {
+        budget.retainTile()
+        val allowance = budget.imageAllowance()
+        val image = decode(encoded, allowance) ?: return null
+        require(image.width.toLong() * image.height * 16 <= allowance) { BrushDecodeBudget.MEMORY_MESSAGE }
+        return tile(image, inverted)
+    }
 
     private fun tile(
         image: PixelBuffer,
@@ -195,15 +249,44 @@ object BrushArchives {
     }
 
     /** The brush folder names a set's property list (XML or binary) gives under "brushes". */
-    internal fun listedFolders(plist: ByteArray): List<String> {
+    internal fun listedFolders(plist: ByteArray): List<String> = listedFolders(plist, BrushDecodeBudget())
+
+    private fun listedFolders(
+        plist: ByteArray,
+        budget: BrushDecodeBudget,
+    ): List<String> {
+        val allowance = budget.metadataAllowance(plist.size)
         if (BinaryPlist.isBinaryPlist(plist)) {
-            val brushes = (runCatching { BinaryPlist.read(plist) }.getOrNull() as? Map<*, *>)?.get("brushes") as? List<*>
+            val decoded =
+                try {
+                    BinaryPlist.read(plist, allowance)
+                } catch (limited: BinaryPlist.AllocationLimitException) {
+                    throw limited
+                } catch (_: IllegalArgumentException) {
+                    null
+                }
+            val brushes = (decoded as? Map<*, *>)?.get("brushes") as? List<*>
+            require((brushes?.size ?: 0) <= MAX_FOLDERS) { "This brush set lists too many folders" }
             return brushes.orEmpty().filterIsInstance<String>()
         }
         val array =
             Regex("<key>\\s*brushes\\s*</key>\\s*<array>(.*?)</array>", RegexOption.DOT_MATCHES_ALL).find(plist.decodeToString())
                 ?: return emptyList()
-        return Regex("<string>(.*?)</string>").findAll(array.groupValues[1]).map { it.groupValues[1].trim() }.toList()
+        val matches = Regex("<string>(.*?)</string>").findAll(array.groupValues[1]).take(MAX_FOLDERS + 1).toList()
+        require(matches.size <= MAX_FOLDERS) { "This brush set lists too many folders" }
+        return matches.map { it.groupValues[1].trim() }
+    }
+
+    private fun validPath(path: String): Boolean {
+        if (path.isEmpty() || '\\' in path) return false
+        var start = 0
+        while (start <= path.length) {
+            val end = path.indexOf('/', start).takeIf { it >= 0 } ?: path.length
+            val length = end - start
+            if (length == 0 || length <= 2 && (start until end).all { path[it] == '.' }) return false
+            start = end + 1
+        }
+        return true
     }
 
     /**
@@ -238,16 +321,16 @@ object BrushArchives {
         return out.toByteArray()
     }
 
+    private val BRUSH_MEMBERS = setOf("brush.archive", "brushset.plist", "shape.png", "grain.png")
+    private val MODEL_EXTENSIONS = setOf("obj", "gltf", "glb", "usd", "usda", "usdc", "usdz")
     private val ZIP_SIGNATURE = byteArrayOf(0x50, 0x4B, 0x03, 0x04)
     private const val SHAPE = "shape"
     private const val GRAIN = "grain"
     private const val SETTINGS = "settings"
-    private const val OPAQUE_BLACK = 0xFF000000.toInt()
     private const val SET = "set"
     private const val MAX_ENTRIES = 2_000
     private const val MAX_BRUSHES = 100
     private const val MAX_FOLDERS = MAX_BRUSHES * 2 + 1
-    private const val MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
     private const val MAX_EXPANDED_BYTES = 64 * 1024 * 1024
     private const val MAX_SETTINGS_BYTES = 2 * 1024 * 1024
     private const val SECONDARY = "Sub01"

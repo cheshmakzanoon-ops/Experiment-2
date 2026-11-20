@@ -234,19 +234,41 @@ object ArtflowPackage {
     }
 
     /** Recognises a generic ZIP without inflating any payload; [openFile] performs full package validation. */
-    fun isPackageFile(file: File): Boolean = ZipFile(file).use { it.getEntry(MARKER) != null }
+    fun isPackageFile(file: File): Boolean = isPackageFile(file, indexAllowance()) { ZipFile(it) }
+
+    /** An injected allowance may only narrow the production index budget. */
+    internal fun isPackageFile(
+        file: File,
+        indexByteLimit: Long,
+        openArchive: (File) -> ZipFile,
+    ): Boolean = openCheckedZip(file, indexByteLimit, openArchive).use { it.getEntry(MARKER) != null }
+
+    /**
+     * Classifies non-native ZIPs from names only; the predicate is consumed before the archive closes.
+     * Gallery may inspect twice (native recognition, then brush classification), with both indexes admitted.
+     */
+    internal fun inspectArchiveEntries(
+        file: File,
+        matches: (Sequence<String>) -> Boolean,
+    ): Boolean =
+        openCheckedZip(file, indexAllowance()) { ZipFile(it) }.use { zip ->
+            matches(zip.entries().asSequence().map { it.name })
+        }
 
     /** Opens an `.artflow` zip file on disk, validates every entry path, count, and header without loading payloads into heap. */
     fun openFile(
         file: File,
         maxTotalBytes: Long = MAX_TOTAL_BYTES,
+    ): StreamContents = openFile(file, maxTotalBytes, indexAllowance()) { ZipFile(it) }
+
+    internal fun openFile(
+        file: File,
+        maxTotalBytes: Long,
+        indexByteLimit: Long,
+        openArchive: (File) -> ZipFile,
     ): StreamContents {
-        val zip =
-            try {
-                ZipFile(file)
-            } catch (damaged: IOException) {
-                throw IllegalArgumentException("This artwork file is damaged", damaged)
-            }
+        require(maxTotalBytes > 0) { "The import size limit must be positive" }
+        val zip = openCheckedZip(file, indexByteLimit, openArchive)
         var opened = false
         try {
             val contents = parseOpenFile(zip, maxTotalBytes)
@@ -256,6 +278,32 @@ object ArtflowPackage {
             if (!opened) zip.close()
         }
     }
+
+    /** Admit the platform index, decoded names and entry bookkeeping before ZipFile allocates them. */
+    private fun openCheckedZip(
+        file: File,
+        indexByteLimit: Long,
+        openArchive: (File) -> ZipFile,
+    ): ZipFile {
+        require(indexByteLimit in 1..indexAllowance()) { "Invalid artwork archive index allowance" }
+        try {
+            ZipDirectoryPreflight(
+                maximumEntries = MAX_ENTRIES,
+                damagedMessage = "The artwork archive index is damaged",
+                entryLimitMessage = "This artwork has too many files",
+            ) { directoryBytes, entryCount ->
+                // Check the quotient first so even damaged ZIP64 sizes cannot overflow accounting.
+                require(directoryBytes <= indexByteLimit / 8 && directoryBytes * 8 + entryCount.toLong() * 512 <= indexByteLimit) {
+                    "This artwork has an archive index too large for the available memory"
+                }
+            }.check(file)
+            return openArchive(file)
+        } catch (damaged: IOException) {
+            throw IllegalArgumentException("This artwork file is damaged", damaged)
+        }
+    }
+
+    private fun indexAllowance(): Long = minOf(16L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 16)
 
     private fun parseOpenFile(
         zip: ZipFile,

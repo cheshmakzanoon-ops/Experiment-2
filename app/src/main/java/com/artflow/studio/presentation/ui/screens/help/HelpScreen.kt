@@ -104,6 +104,21 @@ object Tutorials {
                     "enables for the current layer. Symmetry replicates the brush motion, so width and texture stay correct.",
                 "tool.guides",
             ),
+            TutorialStep(
+                "Importing brushes",
+                "Use Import in Brush Studio to add supported ArtFlow, Procreate or Photoshop brush files. " +
+                    "The complete set must fit the library and this device's memory. A rejected import leaves " +
+                    "your existing saved brushes and textures intact. If a limit is reached, import a smaller " +
+                    "set or use smaller source images.",
+                "tool.brushImport",
+            ),
+            TutorialStep(
+                "Loading saved brushes",
+                "ArtFlow loads saved brush shapes and textures before you start editing. If loading fails, " +
+                    "choose Retry or Open with available brushes. Continuing with missing shapes or textures " +
+                    "can make those brushes paint differently.",
+                "tool.brushStartup",
+            ),
         )
 
     val WORKFLOW =
@@ -148,6 +163,22 @@ object Tutorials {
                     "duplicate or delete several at once. With Autosave enabled, ArtFlow periodically keeps a recovery copy. " +
                     "Reopening an artwork offers recovery when an unsaved copy is available.",
                 "flow.saving",
+            ),
+            TutorialStep(
+                "Opening artwork files",
+                "A file's size does not tell you how much memory its artwork needs. Imports must fit this " +
+                    "device's memory and the supported format limits. If an artwork is too large, reduce its " +
+                    "dimensions, layers or custom textures in the source app before trying again. " +
+                    "Recovering an autosave also restores the saved selections from that copy.",
+                "flow.importLimits",
+            ),
+            TutorialStep(
+                "Fonts in shared artworks",
+                "Native artwork packages include font information but do not bundle imported font files. " +
+                    "ArtFlow keeps the saved pixels and tells you when a font is missing, different or cannot " +
+                    "be verified. A font with the same name can have different contents. Use the matching " +
+                    "original font when editing the text to preserve its typography.",
+                "flow.sharedFonts",
             ),
         )
 
