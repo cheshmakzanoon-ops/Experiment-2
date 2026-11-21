@@ -20,6 +20,7 @@ The passing workflows for the audit baseline do not qualify this later change.
 | Timelapse exports could share a timestamp-named snapshot directory, and cancelled dispatcher handoffs could skip cleanup. | Every export owns a unique snapshot directory; temporary-file cleanup remains in its creating I/O scope. Cancellation propagates instead of becoming an ordinary export failure. | [TimelapseExportLifecycleTest](../../app/src/test/java/com/artflow/studio/data/export/TimelapseExportLifecycleTest.kt), actual three-frame timelapse encoding with timestamp/final-duration and recording-preservation assertions in [ExportDeviceTest](../../app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt). |
 | A delayed or suspended recording collector could continue after the editor changed project identity. | Opening another artwork cancels the old collector before the identity changes. Each collector captures its own project ID and checks cancellation after composition. Failed opens and retries cannot transfer another artwork's pixels into its recording. | [CanvasTimelapseLifecycleTest](../../app/src/test/java/com/artflow/studio/presentation/CanvasTimelapseLifecycleTest.kt), covering a suspended lookup, a late-returning compositor, and failed-open/retry behavior. |
 | Incoming shares accumulated without limit while the gallery was not receiving. | The activity accepts at most 32 pending file URIs in FIFO order, preserves previously accepted work, and reports accepted/rejected counts with retry guidance. Processing or revisiting Gallery frees capacity. | [IncomingFileQueueTest](../../app/src/test/java/com/artflow/studio/presentation/ui/IncomingFileQueueTest.kt), including 1,000 refused shares with preserved FIFO contents, plus real Android intent cases in [IncomingFilesTest](../../app/src/androidTest/java/com/artflow/studio/IncomingFilesTest.kt). |
+| Export submission left the filename field focused while the keyboard and result layout could change. | Artwork and timelapse export submission clear text focus and dismiss the keyboard before dispatching the export. | The existing [OptimizedArtworkWorkflowTest](../../app/src/androidTest/java/com/artflow/studio/OptimizedArtworkWorkflowTest.kt) explicitly exercises focused filename entry and verifies released focus, retaining visible-result and every-pixel assertions. |
 
 ## Verification requirements
 
@@ -37,8 +38,25 @@ The original failed run is retained. That checkpoint separately passed
 [optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676209),
 [normal release payload UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676151),
 and [installed application upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676174).
-The corrected fixture requires its own complete CI execution; see [PR #42](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42)
-for subsequent exact-revision results.
+The corrected-fixture checkpoint, `1b320676d48c4f3c6c8880e41d726e741c8e4b5e`, passed the
+complete build job in [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44918014214):
+2,331 JVM cases in 368 suites with zero failures, errors or skips, Android test compilation,
+static analysis, packaged builds and all required artifact/provenance gates. The retained
+checkout was PR merge `db1490160b77d2bf9cbc148f16b7a413ef992dc6`, with the same source tree as
+the branch head. This is PR candidate evidence, not final-main qualification. The checkpoint
+also passed [normal release payload UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44918014163)
+and [installed application upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44918014293).
+Its [optimized run](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44918014142)
+executed 69 cases: 68 passed and one failed at the exported filename's visibility assertion.
+The filename node existed, but Android logged the keyboard opening immediately before the
+failure. No screenshot or semantic bounds were retained for that failed assertion, so the
+record does not claim measured clipping or a definitive layout diagnosis. The export form's
+focus handoff is now explicit. The UI case checks released focus and settled keyboard insets
+before checking the result; the original visibility/pixel gates remain required. Any new
+failure also retains a screenshot and semantic tree before the activity closes.
+The failed attempt is retained; its later missing workflow receipt is not a successful export
+qualification. See [PR #42](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42) for the
+subsequent candidate's exact checkout, complete workflow results, and any remaining gates.
 
 Focused JVM verification:
 

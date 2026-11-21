@@ -7,6 +7,8 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.data.local.ProjectStorage
@@ -105,7 +107,19 @@ class OptimizedArtworkWorkflowTest {
                     awaitCanvas(scenario)
                     assertArrayEquals("Reopen must restore the saved pixels", painted, pixels())
                     assertFalse(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
-                    exportPng(projectId, painted)
+                    try {
+                        exportPng(scenario, projectId, painted)
+                    } catch (failure: Throwable) {
+                        // Retain the live panel and node bounds before ActivityScenario closes it.
+                        runCatching { TestEvidence.screenshot("optimized-workflow-export-failure.png") }
+                            .exceptionOrNull()
+                            ?.let(failure::addSuppressed)
+                        runCatching {
+                            File(TestEvidence.directory(), "optimized-workflow-export-failure-semantics.txt")
+                                .writeText(compose.onRoot(useUnmergedTree = true).printToString())
+                        }.exceptionOrNull()?.let(failure::addSuppressed)
+                        throw failure
+                    }
                     assertArrayEquals(
                         "Export must leave the editable document intact",
                         savedBytes,
@@ -128,6 +142,7 @@ class OptimizedArtworkWorkflowTest {
     }
 
     private fun exportPng(
+        scenario: ActivityScenario<MainActivity>,
         projectId: Long,
         expectedPixels: IntArray,
     ) {
@@ -143,8 +158,25 @@ class OptimizedArtworkWorkflowTest {
             .assertIsOff()
             .performClick()
             .assertIsOn()
-        compose.onNodeWithText("File name (optional)").performScrollTo().performTextReplacement("optimized-reopen")
+        compose
+            .onNodeWithText("File name (optional)")
+            .performScrollTo()
+            .performTextReplacement("optimized-reopen")
+            .assertIsFocused()
         compose.onNodeWithText("Export PNG").performScrollTo().performClick()
+        compose.onNodeWithText("File name (optional)").assertIsNotFocused()
+        // The phone panel's scroll viewport follows platform IME insets. Compose idleness alone
+        // does not finish the keyboard transition, so require its actual dismissal and layout.
+        compose.waitUntil(15_000) {
+            var ready = false
+            scenario.onActivity {
+                val view = it.window.decorView
+                val insets = ViewCompat.getRootWindowInsets(view)
+                ready = insets != null && !insets.isVisible(WindowInsetsCompat.Type.ime()) && !view.isLayoutRequested
+            }
+            ready
+        }
+        compose.waitForIdle()
         val exported = File(storage.exportsDir(projectId), "optimized-reopen.png")
         compose.waitUntil(15_000) {
             compose.onAllNodesWithText(exported.name).fetchSemanticsNodes().isNotEmpty()

@@ -19,6 +19,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +50,8 @@ fun ExportSheet(
     val onDismissResult = actions.dismissResult
     val onExportTimelapse = actions.exportTimelapse
     val onClearTimelapse = actions.clearTimelapse
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     var options by remember {
         mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi, gifLoop = animationLoop))
     }
@@ -147,7 +151,12 @@ fun ExportSheet(
         }
         val running = exportState is ExportUiState.Running
         Button(
-            onClick = { onExport(options.copy(fileName = options.fileName?.ifBlank { null })) },
+            onClick = {
+                // End filename editing before export changes the sheet's contents and scroll bounds.
+                focusManager.clearFocus()
+                keyboardController?.hide()
+                onExport(options.copy(fileName = options.fileName?.ifBlank { null }))
+            },
             enabled = !running && safe && validArea && (!options.format.requiresAnimation || frameCount > 1),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -173,7 +182,14 @@ fun ExportSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onExportTimelapse, enabled = !running) { Text(stringResource(R.string.export_timelapse_action)) }
+                OutlinedButton(
+                    onClick = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        onExportTimelapse()
+                    },
+                    enabled = !running,
+                ) { Text(stringResource(R.string.export_timelapse_action)) }
                 if (onClearTimelapse != null) {
                     TextButton(onClick = onClearTimelapse, enabled = !running) { Text(stringResource(R.string.export_timelapse_clear)) }
                 }
