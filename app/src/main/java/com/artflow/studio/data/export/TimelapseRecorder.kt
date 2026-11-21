@@ -6,11 +6,15 @@ import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -110,30 +114,31 @@ class TimelapseRecorder
         /**
          * Encodes the recording as an MP4: every frame at about 30 fps for [fullLength], otherwise a
          * replay of about [TARGET_DURATION_MS], like Procreate's 30-second export.
+         * Storage/codec failures become export results; cancellation and fatal errors still propagate.
          */
+        @Suppress("TooGenericExceptionCaught")
         suspend fun export(
             projectId: Long,
             projectName: String,
             fullLength: Boolean = false,
         ): Result<ExportResult> =
-            withContext(Dispatchers.Default) {
-                runCatching {
-                    val tempDir =
-                        withContext(Dispatchers.IO) {
-                            File(storage.exportsDir(projectId), "timelapse_snap_${System.currentTimeMillis()}").apply { mkdirs() }
-                        }
+            withContext(Dispatchers.IO) {
+                try {
+                    // Each export owns its snapshot, even when two exports start in the same
+                    // millisecond. Keep creation and cleanup in this dispatcher so cancellation
+                    // cannot lose the directory while returning it to another dispatcher.
+                    val tempDir = Files.createTempDirectory(storage.exportsDir(projectId).toPath(), "timelapse_snap_").toFile()
                     try {
                         val files =
                             mutex.withLock {
-                                withContext(Dispatchers.IO) {
-                                    val recorded = frames(projectId)
-                                    require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
-                                    val selected = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
-                                    selected.mapIndexed { index, file ->
-                                        val snapFile = File(tempDir, "%06d%s".format(index, EXTENSION))
-                                        file.copyTo(snapFile, overwrite = true)
-                                        snapFile
-                                    }
+                                val recorded = frames(projectId)
+                                require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
+                                val selected = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
+                                selected.mapIndexed { index, file ->
+                                    currentCoroutineContext().ensureActive()
+                                    val snapFile = File(tempDir, "%06d%s".format(index, EXTENSION))
+                                    file.copyTo(snapFile)
+                                    snapFile
                                 }
                             }
                         val first = decode(files.first())
@@ -156,29 +161,35 @@ class TimelapseRecorder
                         val temp = File.createTempFile("timelapse", ".mp4", storage.exportsDir(projectId))
                         try {
                             val options = ExportOptions(format = ExportFormat.MP4, backgroundColor = 0xFFFFFFFF.toInt())
-                            Mp4Encoder.encode(temp, width, height, files.size, delays, options) { index ->
-                                val decoded = if (index == 0) first else decode(files[index])
-                                if (decoded.width == width && decoded.height == height) decoded else decoded.scaled(width, height)
+                            withContext(Dispatchers.Default) {
+                                Mp4Encoder.encode(temp, width, height, files.size, delays, options) { index ->
+                                    val decoded = if (index == 0) first else decode(files[index])
+                                    if (decoded.width == width && decoded.height == height) decoded else decoded.scaled(width, height)
+                                }
                             }
-                            val bytes = withContext(Dispatchers.IO) { temp.readBytes() }
-                            val file = storage.saveExport(projectId, fileName, bytes)
-                            ExportResult(
-                                format = ExportFormat.MP4,
-                                filePath = file.absolutePath,
-                                fileName = fileName,
-                                byteCount = bytes.size.toLong(),
-                                width = width,
-                                height = height,
-                                frameCount = files.size,
+                            val file = storage.saveExportFromFile(projectId, fileName, temp)
+                            Result.success(
+                                ExportResult(
+                                    format = ExportFormat.MP4,
+                                    filePath = file.absolutePath,
+                                    fileName = fileName,
+                                    byteCount = file.length(),
+                                    width = width,
+                                    height = height,
+                                    frameCount = files.size,
+                                ),
                             )
                         } finally {
                             temp.delete()
                         }
                     } finally {
-                        withContext(Dispatchers.IO) {
-                            tempDir.deleteRecursively()
-                        }
+                        // No suspending handoff here: this must run even when encoding is cancelled.
+                        tempDir.deleteRecursively()
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Result.failure(error)
                 }
             }
 

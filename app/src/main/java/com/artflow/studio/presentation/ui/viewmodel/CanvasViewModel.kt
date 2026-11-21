@@ -294,6 +294,8 @@ class CanvasViewModel
             loadJob?.cancel()
             autosaveJob?.cancel()
             observationJob?.cancel()
+            timelapseJob?.cancel()
+            timelapseJob = null
             stopPlayback()
             allowAutosave = true
             currentProjectId = projectId
@@ -382,6 +384,7 @@ class CanvasViewModel
         /** Captures one time-lapse frame per settled edit, [TIMELAPSE_INTERVAL_MS] after it lands. */
         private fun startTimelapse() {
             timelapseJob?.cancel()
+            val projectId = currentProjectId
             timelapseRevision = canvasRepository.contentRevision
             timelapseJob =
                 viewModelScope.launch {
@@ -389,13 +392,14 @@ class CanvasViewModel
                         if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
-                        val projectId = currentProjectId
+                        if (projectId == 0L || currentProjectId != projectId) return@collect
                         val revision = canvasRepository.contentRevision
                         // Playback only switches frames; it is not an edit worth recording.
-                        if (projectId == 0L || revision == timelapseRevision || playbackActive) return@collect
+                        if (revision == timelapseRevision || playbackActive) return@collect
                         try {
                             // Private layers (Insert a private photo) are left out of the recording.
                             val composite = canvasRepository.compositeWithoutPrivateLayers() ?: return@collect
+                            ensureActive()
                             // Stored values are in the document's profile; the recording is sRGB.
                             val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
                             timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide)

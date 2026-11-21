@@ -79,8 +79,14 @@ class MainActivity : ComponentActivity() {
     private fun acceptFiles(intent: Intent?) {
         val received = IncomingFiles.offer(intent)
         // The editor registers as the shortcut host, so a registered host means an artwork is open.
-        if (received > 0 && ShortcutHost.handler != null) {
-            Toast.makeText(this, R.string.incoming_files_wait_for_gallery, Toast.LENGTH_LONG).show()
+        val message =
+            when {
+                received.rejected > 0 -> getString(R.string.incoming_files_queue_full, received.accepted, received.rejected)
+                received.accepted > 0 && ShortcutHost.handler != null -> getString(R.string.incoming_files_wait_for_gallery)
+                else -> null
+            }
+        if (message != null) {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
     }
 

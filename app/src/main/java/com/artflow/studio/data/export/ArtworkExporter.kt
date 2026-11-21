@@ -292,60 +292,60 @@ class ArtworkExporter
                         }
                     val fileName = ExportNaming.fileName(projectName, options)
 
-                    val bytes =
-                        when (options.format) {
-                            ExportFormat.GIF -> {
-                                buildGif(prepared, delaysMs, options)
-                            }
+                    val file =
+                        if (options.format == ExportFormat.MP4) {
+                            exportMp4(projectId, fileName, prepared, delaysMs, options)
+                        } else {
+                            val bytes =
+                                when (options.format) {
+                                    ExportFormat.GIF -> {
+                                        buildGif(prepared, delaysMs, options)
+                                    }
 
-                            ExportFormat.MP4 -> {
-                                buildMp4(prepared, delaysMs, options)
-                            }
+                                    ExportFormat.APNG -> {
+                                        ApngEncoder.encode(
+                                            prepared.map { BitmapPixelBridge.toPngBytes(flatten(it, options), options.dpi) },
+                                            delaysMs,
+                                            loops = if (options.gifLoop) 0 else 1,
+                                        )
+                                    }
 
-                            ExportFormat.APNG -> {
-                                ApngEncoder.encode(
-                                    prepared.map { BitmapPixelBridge.toPngBytes(flatten(it, options), options.dpi) },
-                                    delaysMs,
-                                    loops = if (options.gifLoop) 0 else 1,
-                                )
-                            }
+                                    ExportFormat.FRAME_SEQUENCE -> {
+                                        buildFrameSequenceZip(prepared, projectName, options)
+                                    }
 
-                            ExportFormat.FRAME_SEQUENCE -> {
-                                buildFrameSequenceZip(prepared, projectName, options)
-                            }
+                                    ExportFormat.PNG -> {
+                                        BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi, options.outputProfile)
+                                    }
 
-                            ExportFormat.PNG -> {
-                                BitmapPixelBridge.toPngBytes(flatten(prepared.first(), options), options.dpi, options.outputProfile)
-                            }
+                                    ExportFormat.JPEG -> {
+                                        BitmapPixelBridge.toJpegBytes(
+                                            flatten(prepared.first(), options),
+                                            options.quality,
+                                            options.outputBackground,
+                                            options.dpi,
+                                            options.outputProfile,
+                                        )
+                                    }
 
-                            ExportFormat.JPEG -> {
-                                BitmapPixelBridge.toJpegBytes(
-                                    flatten(prepared.first(), options),
-                                    options.quality,
-                                    options.outputBackground,
-                                    options.dpi,
-                                    options.outputProfile,
-                                )
-                            }
+                                    ExportFormat.PDF -> {
+                                        buildPdf(prepared, options)
+                                    }
 
-                            ExportFormat.PDF -> {
-                                buildPdf(prepared, options)
-                            }
-
-                            else -> {
-                                return@withContext Result.failure(
-                                    ExportFailure(ExportError.UnsupportedFormat(options.format).message),
-                                )
-                            }
+                                    else -> {
+                                        return@withContext Result.failure(
+                                            ExportFailure(ExportError.UnsupportedFormat(options.format).message),
+                                        )
+                                    }
+                                }
+                            storage.saveExport(projectId, fileName, bytes)
                         }
-
-                    val file = storage.saveExport(projectId, fileName, bytes)
                     val result =
                         ExportResult(
                             format = options.format,
                             filePath = file.absolutePath,
                             fileName = fileName,
-                            byteCount = bytes.size.toLong(),
+                            byteCount = file.length(),
                             width = if (options.format == ExportFormat.MP4) (targetWidth + 1) and -2 else targetWidth,
                             height = if (options.format == ExportFormat.MP4) (targetHeight + 1) and -2 else targetHeight,
                             frameCount = prepared.size,
@@ -783,19 +783,24 @@ class ArtworkExporter
         }
 
         /** The encoder preserves every source pixel and pads odd dimensions instead of shrinking. */
-        private suspend fun buildMp4(
+        private suspend fun exportMp4(
+            projectId: Long,
+            fileName: String,
             frames: List<PixelBuffer>,
             delaysMs: List<Int>,
             options: ExportOptions,
-        ): ByteArray {
-            val tempFile = File.createTempFile("artflow-video", ".mp4", context.cacheDir)
-            return try {
-                Mp4Encoder.encode(tempFile, frames, delaysMs, options)
-                withContext(Dispatchers.IO) { tempFile.readBytes() }
-            } finally {
-                tempFile.delete()
+        ): File =
+            withContext(Dispatchers.IO) {
+                // Keep ownership inside this dispatcher: cancellation of a handoff must not lose
+                // the temporary path before its cleanup block has been entered.
+                val tempFile = File.createTempFile("artflow-video", ".mp4", context.cacheDir)
+                try {
+                    withContext(Dispatchers.Default) { Mp4Encoder.encode(tempFile, frames, delaysMs, options) }
+                    storage.saveExportFromFile(projectId, fileName, tempFile)
+                } finally {
+                    tempFile.delete()
+                }
             }
-        }
 
         /** Converts to the output profile and applies the output scale and fit mode. */
         private fun prepare(
