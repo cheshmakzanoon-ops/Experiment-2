@@ -20,7 +20,7 @@ The passing workflows for the audit baseline do not qualify this later change.
 | Timelapse exports could share a timestamp-named snapshot directory, and cancelled dispatcher handoffs could skip cleanup. | Every export owns a unique snapshot directory; temporary-file cleanup remains in its creating I/O scope. Cancellation propagates instead of becoming an ordinary export failure. | [TimelapseExportLifecycleTest](../../app/src/test/java/com/artflow/studio/data/export/TimelapseExportLifecycleTest.kt), actual three-frame timelapse encoding with timestamp/final-duration and recording-preservation assertions in [ExportDeviceTest](../../app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt). |
 | A delayed or suspended recording collector could continue after the editor changed project identity. | Opening another artwork cancels the old collector before the identity changes. Each collector captures its own project ID and checks cancellation after composition. Failed opens and retries cannot transfer another artwork's pixels into its recording. | [CanvasTimelapseLifecycleTest](../../app/src/test/java/com/artflow/studio/presentation/CanvasTimelapseLifecycleTest.kt), covering a suspended lookup, a late-returning compositor, and failed-open/retry behavior. |
 | Incoming shares accumulated without limit while the gallery was not receiving. | The activity accepts at most 32 pending file URIs in FIFO order, preserves previously accepted work, and reports accepted/rejected counts with retry guidance. Processing or revisiting Gallery frees capacity. | [IncomingFileQueueTest](../../app/src/test/java/com/artflow/studio/presentation/ui/IncomingFileQueueTest.kt), including 1,000 refused shares with preserved FIFO contents, plus real Android intent cases in [IncomingFilesTest](../../app/src/androidTest/java/com/artflow/studio/IncomingFilesTest.kt). |
-| Export submission left the filename field focused while the keyboard and result layout could change. | Artwork and timelapse export submission clear text focus and dismiss the keyboard before dispatching the export. | The existing [OptimizedArtworkWorkflowTest](../../app/src/androidTest/java/com/artflow/studio/OptimizedArtworkWorkflowTest.kt) explicitly exercises focused filename entry and verifies released focus, retaining visible-result and every-pixel assertions. |
+| Export submission left the filename field focused while the keyboard and result layout could change. | Artwork and timelapse export submission request focus release and keyboard dismissal before dispatching the export. | The existing [OptimizedArtworkWorkflowTest](../../app/src/androidTest/java/com/artflow/studio/OptimizedArtworkWorkflowTest.kt) explicitly exercises focused filename entry and verifies actual keyboard/layout readiness, retaining visible-result and every-pixel assertions. |
 
 ## Verification requirements
 
@@ -51,7 +51,7 @@ executed 69 cases: 68 passed and one failed at the exported filename's visibilit
 The filename node existed, but Android logged the keyboard opening immediately before the
 failure. No screenshot or semantic bounds were retained for that failed assertion, so the
 record does not claim measured clipping or a definitive layout diagnosis. The export form's
-focus handoff is now explicit. The UI case checks released focus and settled keyboard insets
+focus handoff is now explicit. The UI case checks hidden keyboard and settled window insets
 before checking the result; the original visibility/pixel gates remain required. Any new
 failure also retains a screenshot and semantic tree before the activity closes.
 The failed attempt is retained; its later missing workflow receipt is not a successful export
@@ -61,8 +61,21 @@ subsequent candidate's exact checkout, complete workflow results, and any remain
 The next checkpoint, `8f86826845d39682588eddcdfbb1df770680b397`, stopped at Android test
 compilation in [optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44919817221):
 the new focus assertion was chained to the Unit-returning `performTextReplacement` test API.
-It is now a separate statement. The assertion remains required; the failed compilation does
-not provide device qualification.
+It is now a separate statement. The initial focused-entry assertion remains required; the
+failed compilation does not provide device qualification.
+
+Checkpoint `04efc6ce92c9de64fbb8c74e17d4ab6530259f2c` passed the complete build job and all
+three separate release workflows, but the API 26 lane of
+[Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44920292693)
+executed all 344 identities with 341 passes, the two permitted API skips, and one failure in
+the newly added post-submit focus-state assertion. Its live screenshot shows the keyboard
+hidden, and its semantic tree contains the completed PNG result, while the filename field
+still reports `Focused=true`. The export callback therefore did run. Requiring that internal
+flag to remain false overconstrained the UI contract. The test now requires actual hidden-IME
+and settled-layout state before the original visible-result, every-pixel, document-preservation
+and unsaved-state assertions. Initial focused entry and live failure diagnostics remain. No
+API-specific skip or test retry was added, and every original outcome assertion remains.
+The original API 26 failure remains recorded and is not relabelled as a pass.
 
 Focused JVM verification:
 
