@@ -24,6 +24,7 @@ import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.export.ArtworkExporter
 import com.artflow.studio.data.export.LayerRaster
+import com.artflow.studio.data.export.TimelapseRecorder
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
@@ -265,6 +266,7 @@ class ExportDeviceTest {
     @Test
     fun mp4ContainsAllFramesCorrectTimingAndDecodedColours() =
         runBlocking {
+            val temporaryFiles = videoTemporaryFiles()
             val frames = listOf(Color.RED, Color.GREEN, Color.BLUE).map { PixelBuffer.filled(65, 33, it) }
             val result =
                 exporter
@@ -278,6 +280,8 @@ class ExportDeviceTest {
             evidence(result, "timing-diagnostic.mp4")
             assertEquals(66, result.width)
             assertEquals(34, result.height)
+            assertEquals(File(result.filePath).length(), result.byteCount)
+            assertEquals(temporaryFiles, videoTemporaryFiles())
             val extractor = MediaExtractor()
             try {
                 extractor.setDataSource(result.filePath)
@@ -322,6 +326,7 @@ class ExportDeviceTest {
     @Test
     fun invalidVideoSizeReturnsFailureWithoutPublishingAFile() =
         runBlocking {
+            val temporaryFiles = videoTemporaryFiles()
             val result =
                 exporter.exportAnimation(
                     projectId,
@@ -332,7 +337,58 @@ class ExportDeviceTest {
                 )
             assertTrue(result.isFailure)
             assertTrue(storage.listExports(projectId).isEmpty())
+            assertEquals(temporaryFiles, videoTemporaryFiles())
         }
+
+    @Test
+    fun timelapsePublishesAllFramesWithoutRetainingTemporarySnapshots() =
+        runBlocking {
+            val recorder = TimelapseRecorder(storage)
+            for (color in listOf(Color.RED, Color.GREEN, Color.BLUE)) {
+                recorder.capture(projectId, PixelBuffer.filled(64, 32, color))
+            }
+            val originalFrames = recorder.frameFiles(projectId).associate { it.name to it.readBytes() }
+            val result = recorder.export(projectId, "Recorded", fullLength = true).getOrThrow()
+
+            assertEquals(3, result.frameCount)
+            assertEquals(File(result.filePath).length(), result.byteCount)
+            assertEquals(listOf(result.fileName), storage.exportsDir(projectId).list()!!.toList())
+            assertEquals(originalFrames.keys, recorder.frameFiles(projectId).map { it.name }.toSet())
+            recorder.frameFiles(projectId).forEach { assertArrayEquals(originalFrames.getValue(it.name), it.readBytes()) }
+            val extractor = MediaExtractor()
+            try {
+                extractor.setDataSource(result.filePath)
+                assertEquals(1, extractor.trackCount)
+                val format = extractor.getTrackFormat(0)
+                assertEquals("video/avc", format.getString(MediaFormat.KEY_MIME))
+                assertEquals(64, format.getInteger(MediaFormat.KEY_WIDTH))
+                assertEquals(32, format.getInteger(MediaFormat.KEY_HEIGHT))
+                assertTrue(abs(format.getLong(MediaFormat.KEY_DURATION) - 2_566_000L) <= 4_000L)
+                extractor.selectTrack(0)
+                val times = mutableListOf<Long>()
+                val sample = ByteBuffer.allocate(512 * 1024)
+                while (extractor.readSampleData(sample, 0) >= 0) {
+                    times += extractor.sampleTime
+                    extractor.advance()
+                    sample.clear()
+                }
+                assertEquals(3, times.size)
+                listOf(0L, 33_000L, 66_000L).forEachIndexed { index, expected ->
+                    assertTrue(abs(times[index] - expected) <= 1_000L)
+                }
+            } finally {
+                extractor.release()
+            }
+            evidence(result, "timelapse.mp4")
+        }
+
+    private fun videoTemporaryFiles(): Set<String> =
+        context.cacheDir
+            .listFiles()
+            .orEmpty()
+            .filter { it.name.startsWith("artflow-video") }
+            .map { it.name }
+            .toSet()
 
     @Test
     fun galleryPublishesPngAsImageAndMp4AsVideo() =

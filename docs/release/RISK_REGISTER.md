@@ -1,11 +1,17 @@
 # Release risk register
 
-Current source behavior follows the [November 19 hardening record](PRODUCTION_HARDENING_2026-11-19.md).
+Current source behavior includes the [November 21 hardening record](PRODUCTION_HARDENING_2026-11-21.md)
+and the earlier [November 19 hardening](PRODUCTION_HARDENING_2026-11-19.md).
 Implemented mitigations still require their exact candidate's execution evidence. This register
 does not turn a test's presence or an earlier successful revision into release acceptance.
 
 | Risk | Current treatment | Remaining evidence/work |
 | --- | --- | --- |
+| Gallery duplication races admitted background autosave/pruning | Capture exact saved/recovery metadata, hold counted raster leases, and retain mutable asset descriptors until copying finishes | Final-revision concurrent save/prune/copy, autosave-only, cancellation and recovery-ordering results. |
+| Long MP4 publication allocates a second full encoded video | Stream completed encoder files through an 8 KiB buffer into atomic publication; retain original exports on copy refusal or cancellation detected before publication | Actual encoder/timelapse sample timing, byte integrity and cleanup, plus physical long-recording/low-storage measurements; late cancellation cannot undo a completed atomic commit. |
+| Timelapse work crosses artwork or export ownership | Cancel recording before identity changes, bind each collector to one artwork, use unique export snapshots and cancellation-safe cleanup | Delayed and suspended composition, failed-open/retry, overlapping exports, and actual device encoding results. |
+| External file shares accumulate while Gallery is closed | Preserve a bounded 32-file FIFO, reject excess work explicitly, and show retry guidance | Queue saturation/resume and real intent/device execution; process-local intake is not durable storage. |
+| Export result layout changes while filename entry retains keyboard focus | Request focus release and keyboard dismissal before artwork or timelapse export submission | Real focused-input submission, hidden keyboard and settled layout, visible export result and all-pixel comparison in the final candidate's UI qualification. |
 | Saved document exceeds reopen raster budget | Common prospective budget checks growth before mutation and eager loading | Regression plus real device persistence verification. |
 | Archive heap spikes / orphan temporary files | Bounded disk staging, streamed repository operations and owned pending-import cleanup | Oversize, cancellation, damaged archive, navigation and cleanup results; bounded encoded bytes alone do not cover decoded allocations. |
 | Failed package changes existing brush textures | Prevalidate metadata and all grains; reject differing existing IDs; retain ownership through Room publication | File/cache collision, failed/cancelled publication, and concurrent-adoption regressions. |

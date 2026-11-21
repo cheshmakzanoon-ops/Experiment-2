@@ -7,6 +7,8 @@ import com.artflow.studio.data.export.StagedImport
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -22,6 +24,7 @@ import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Singleton
+import kotlin.coroutines.coroutineContext
 
 /**
  * Reads and writes everything that belongs to one project inside the app's private storage.
@@ -132,11 +135,13 @@ class ProjectStorage
         ): File =
             withContext(ioDispatcher) {
                 val bytes = encodeDocument(document)
-                val file = documentFile(projectId)
-                val previous = maxOf(file.lastModified(), autosaveFile(projectId).lastModified())
-                writeAtomically(file, previous) { out -> out.write(bytes) }
-                Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
-                file
+                rasterRetentionMutex.withLock {
+                    val file = documentFile(projectId)
+                    val previous = maxOf(file.lastModified(), autosaveFile(projectId).lastModified())
+                    writeAtomically(file, previous) { out -> out.write(bytes) }
+                    Timber.d("Saved project $projectId (v${document.version}, ${document.resolvedFrames().size} frames)")
+                    file
+                }
             }
 
         /** Writes recovery metadata only after the caller has committed its immutable rasters. */
@@ -146,10 +151,12 @@ class ProjectStorage
         ): File =
             withContext(ioDispatcher) {
                 val bytes = encodeDocument(document)
-                val file = autosaveFile(projectId)
-                val previous = maxOf(file.lastModified(), documentFile(projectId).lastModified())
-                writeAtomically(file, previous) { out -> out.write(bytes) }
-                file
+                rasterRetentionMutex.withLock {
+                    val file = autosaveFile(projectId)
+                    val previous = maxOf(file.lastModified(), documentFile(projectId).lastModified())
+                    writeAtomically(file, previous) { out -> out.write(bytes) }
+                    file
+                }
             }
 
         private fun encodeDocument(document: CanvasDocument): ByteArray {
@@ -164,8 +171,10 @@ class ProjectStorage
 
         suspend fun discardAutosave(projectId: Long) =
             withContext(ioDispatcher) {
-                val file = autosaveFile(projectId)
-                check(!file.exists() || file.delete()) { "Could not discard the recovery snapshot" }
+                rasterRetentionMutex.withLock {
+                    val file = autosaveFile(projectId)
+                    check(!file.exists() || file.delete()) { "Could not discard the recovery snapshot" }
+                }
             }
 
         suspend fun loadDocument(projectId: Long): CanvasDocument? =
@@ -311,6 +320,9 @@ class ProjectStorage
         ): Boolean = relativePath != null && resolve(projectId, relativePath).exists()
 
         private val pinnedRasters = ConcurrentHashMap<Long, Map<String, Int>>()
+
+        // Snapshot acquisition must observe both manifests and their timestamp ordering together.
+        // Writers publish metadata under this lock; streaming/copying holds only counted leases.
         private val rasterRetentionMutex = Mutex()
 
         fun pinRasters(
@@ -764,6 +776,83 @@ class ProjectStorage
                 .flatMap { listOfNotNull(it.rasterFile, it.maskFile) }
                 .distinct()
 
+        private data class CopyManifest(
+            val bytes: ByteArray,
+            val document: CanvasDocument,
+            val modifiedAt: Long,
+        )
+
+        private data class CopySnapshot(
+            val saved: CopyManifest?,
+            val recovery: CopyManifest?,
+            val sources: List<ArtflowPackage.EntrySource>,
+        ) {
+            val newerRecovery: Boolean
+                get() = recovery != null && (saved == null || recovery.modifiedAt > saved.modifiedAt)
+        }
+
+        private fun copyManifest(
+            projectId: Long,
+            name: String,
+        ): CopyManifest? {
+            val file = projectFile(projectId, name)
+            if (!file.exists()) return null
+            val bytes = readDocumentBytes(file, projectId)
+            return CopyManifest(bytes, decodeDocument(bytes, projectId), file.lastModified())
+        }
+
+        /** Captures a duplication's saved and recovery generations before either can be pruned. */
+        private suspend fun <T> withCopySnapshot(
+            projectId: Long,
+            block: suspend (CopySnapshot) -> T,
+        ): T =
+            PackageAssetSnapshots().use { assets ->
+                var pinned: List<String> = emptyList()
+                try {
+                    val snapshot =
+                        rasterRetentionMutex.withLock {
+                            val saved = copyManifest(projectId, DOCUMENT_NAME)
+                            val recovery = copyManifest(projectId, AUTOSAVE_NAME)
+                            pinned = listOfNotNull(saved, recovery).flatMap { referencedFiles(it.document) }.distinct()
+                            pinRasters(projectId, pinned)
+                            val sources =
+                                pinned
+                                    .map { relative ->
+                                        val file = resolve(projectId, relative)
+                                        require(file.isFile && file.length() in 1..MAX_RASTER_BYTES) {
+                                            "Missing or invalid layer pixels: $relative"
+                                        }
+                                        ArtflowPackage.EntrySource(relative) { FileInputStream(file) }
+                                    }.toMutableList()
+                            listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
+                                val file = resolve(projectId, name)
+                                if (file.isFile) {
+                                    val limit = if (name == MODEL_NAME) MAX_MODEL_BYTES else MAX_RASTER_BYTES
+                                    sources += assets.capture(name, file, limit)
+                                }
+                            }
+                            CopySnapshot(saved, recovery, sources)
+                        }
+                    block(snapshot)
+                } finally {
+                    unpinRasters(projectId, pinned)
+                }
+            }
+
+        /** Preserve compatible metadata verbatim; only destination publication times are new. */
+        private suspend fun copyManifestTo(
+            projectId: Long,
+            name: String,
+            manifest: CopyManifest?,
+        ) {
+            if (manifest == null) return
+            rasterRetentionMutex.withLock {
+                val target = projectFile(projectId, name)
+                val previous = maxOf(documentFile(projectId).lastModified(), autosaveFile(projectId).lastModified())
+                writeAtomically(target, previous) { it.write(manifest.bytes) }
+            }
+        }
+
         /**
          * Copies immutable saved/recovery generations into a new project, never sharing files with
          * the original. Call inside the gallery transaction so an incomplete copy is not visible.
@@ -778,50 +867,40 @@ class ProjectStorage
         ): CanvasDocument? =
             withContext(ioDispatcher) {
                 require(sourceId > 0 && destinationId > 0 && sourceId != destinationId) { "Invalid project copy" }
-                val document = loadDocument(sourceId)
-                val recovery = loadAutosave(sourceId)
-                val newerRecovery = hasUnsavedRecovery(sourceId)
-                val destination = ownedPath("projects/$destinationId")
-                check(!Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The destination already contains project data" }
-                check(destination.mkdirs()) { "Cannot create the copied project directory" }
-                var completed = false
-                try {
-                    // The callback is inside cleanup ownership, including when it throws.
-                    onDestinationCreated()
-                    val paths =
-                        listOfNotNull(document, recovery)
-                            .flatMap { it.resolvedFrames() }
-                            .flatMap { it.layers }
-                            .flatMap { listOfNotNull(it.rasterFile, it.maskFile) }
-                            .distinct()
-                    paths.forEach { relative ->
-                        val bytes = requireNotNull(readRaster(sourceId, relative))
-                        writeAtomically(resolve(destinationId, relative)) { it.write(bytes) }
-                    }
-                    listOf(FLATTENED_NAME, THUMBNAIL_NAME, MODEL_NAME).forEach { name ->
-                        val source = resolve(sourceId, name)
-                        if (source.isFile) {
-                            writeAtomically(resolve(destinationId, name)) { out -> source.inputStream().use { it.copyTo(out) } }
+                withCopySnapshot(sourceId) { snapshot ->
+                    val destination = ownedPath("projects/$destinationId")
+                    check(
+                        !Files.exists(destination.toPath(), LinkOption.NOFOLLOW_LINKS),
+                    ) { "The destination already contains project data" }
+                    check(destination.mkdirs()) { "Cannot create the copied project directory" }
+                    var completed = false
+                    try {
+                        // The callback is inside cleanup ownership, including when it throws.
+                        onDestinationCreated()
+                        snapshot.sources.forEach { source ->
+                            coroutineContext.ensureActive()
+                            writeAtomically(resolve(destinationId, source.path)) { out -> source.openStream().use { it.copyTo(out) } }
                         }
-                    }
-                    // Commit the authoritative snapshot last. Its timestamp ordering is durable
-                    // before publication; savedAt is retained without claiming a new user edit.
-                    if (newerRecovery) {
-                        document?.let { saveDocument(destinationId, it) }
-                        recovery?.let { saveAutosave(destinationId, it) }
-                    } else {
-                        recovery?.let { saveAutosave(destinationId, it) }
-                        document?.let { saveDocument(destinationId, it) }
-                    }
-                    completed = true
-                    document
-                } finally {
-                    if (!completed) {
-                        try {
-                            StorageFileTree.delete(destination, context.filesDir)
-                        } catch (cleanupFailure: IOException) {
-                            // Preserve the original copy failure; an orphan still reserves its ID.
-                            Timber.w(cleanupFailure, "Could not remove incomplete project copy")
+                        coroutineContext.ensureActive()
+                        // Commit the captured authoritative snapshot last, preserving both exact
+                        // manifests and their recovery ordering even if the source has since changed.
+                        if (snapshot.newerRecovery) {
+                            copyManifestTo(destinationId, DOCUMENT_NAME, snapshot.saved)
+                            copyManifestTo(destinationId, AUTOSAVE_NAME, snapshot.recovery)
+                        } else {
+                            copyManifestTo(destinationId, AUTOSAVE_NAME, snapshot.recovery)
+                            copyManifestTo(destinationId, DOCUMENT_NAME, snapshot.saved)
+                        }
+                        completed = true
+                        snapshot.saved?.document
+                    } finally {
+                        if (!completed) {
+                            try {
+                                StorageFileTree.delete(destination, context.filesDir)
+                            } catch (cleanupFailure: IOException) {
+                                // Preserve the original copy failure; an orphan still reserves its ID.
+                                Timber.w(cleanupFailure, "Could not remove incomplete project copy")
+                            }
                         }
                     }
                 }
@@ -874,6 +953,40 @@ class ProjectStorage
                     android.system.Os.fsync(descriptor)
                 } finally {
                     android.system.Os.close(descriptor)
+                }
+                target
+            }
+
+        /** Publishes an encoded file without allocating a second, file-sized byte array. */
+        suspend fun saveExportFromFile(
+            projectId: Long,
+            fileName: String,
+            source: File,
+        ): File =
+            withContext(ioDispatcher) {
+                require(fileName.isNotBlank() && fileName.length <= 180 && fileName !in setOf(".", "..")) { "Invalid export filename" }
+                require(fileName.none { it == '/' || it == '\\' || it.code < 32 }) { "Export filename must not contain a path" }
+                require(Files.isRegularFile(source.toPath(), LinkOption.NOFOLLOW_LINKS)) { "The encoded export is unavailable" }
+                val expectedBytes = source.length()
+                require(expectedBytes > 0L) { "The export is empty" }
+                val coroutine = currentCoroutineContext()
+                val target = File(exportsDir(projectId), fileName)
+                writeAtomically(target) { out ->
+                    coroutine.ensureActive()
+                    source.inputStream().use { input ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var copied = 0L
+                        while (true) {
+                            coroutine.ensureActive()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            copied += count
+                            check(copied <= expectedBytes) { "The encoded export changed while it was being published" }
+                            out.write(buffer, 0, count)
+                        }
+                        check(copied == expectedBytes) { "The encoded export changed while it was being published" }
+                    }
+                    coroutine.ensureActive()
                 }
                 target
             }

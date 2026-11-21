@@ -18,6 +18,13 @@ not establish physical performance, complete format compatibility, or Procreate 
 
 ## Current development
 
+The [November 21 production hardening](docs/release/PRODUCTION_HARDENING_2026-11-21.md) protects
+artwork duplication against concurrent autosave cleanup, streams completed MP4 exports without
+a second full-video memory allocation, keeps timelapse work bound to its artwork, and caps
+incoming shared files at 32 pending items with explicit overflow feedback. The record links
+failure/concurrency regressions, export-submission keyboard handling, and the unchanged release
+qualification requirements.
+
 The [production follow-through record](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md) tracks
 the twenty-wave maintenance effort and its publication checkpoints. It covers selection/history
 admission, provider work off the UI thread, early import/export allocation checks, saved-brush
