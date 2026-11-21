@@ -110,7 +110,8 @@ class CanvasTimelapseLifecycleTest {
             try {
                 fixture.viewModel.open(FIRST_PROJECT)
                 runCurrent()
-                assertTrue(fixture.viewModel.uiState.value is CanvasUiState.Ready)
+                val state = fixture.viewModel.uiState.value
+                assertTrue(state.toString(), state is CanvasUiState.Ready)
                 block(fixture)
             } finally {
                 fixture.viewModel.viewModelScope.cancel()
@@ -123,7 +124,15 @@ class CanvasTimelapseLifecycleTest {
         }
 
     private class Fixture {
-        val canvas = CanvasRepositoryImpl(mock(ProjectStorage::class.java))
+        private val storage =
+            mock(ProjectStorage::class.java) { call ->
+                when (call.method.name) {
+                    "loadDocument", "loadModel" -> null
+                    "hasUnsavedRecovery" -> false
+                    else -> error("Unexpected storage call: ${call.method.name}")
+                }
+            }
+        val canvas = CanvasRepositoryImpl(storage)
         var pauseSecondOpen = false
         var missingSecondProject = false
         var pauseComposite = false

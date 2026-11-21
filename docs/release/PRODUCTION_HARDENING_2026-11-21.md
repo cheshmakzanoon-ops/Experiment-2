@@ -3,8 +3,8 @@
 ## Scope and release decision
 
 This maintenance change follows an audit of main
-`7477eaa8fbc26b03e70618409505d9780fd4acfc`. It addresses four reproducible ownership and
-resource-lifetime gaps in supported offline workflows. It does not expand the advertised
+`7477eaa8fbc26b03e70618409505d9780fd4acfc`. It addresses ownership and resource-lifetime gaps
+in four supported offline workflow areas. It does not expand the advertised
 feature set, change the document format, or declare the application approved for public rollout.
 
 The existing [release sign-off](RELEASE_SIGNOFF.md) still requires final-revision engineering
@@ -16,7 +16,7 @@ The passing workflows for the audit baseline do not qualify this later change.
 | Problem | Resulting behavior | Regression coverage |
 | --- | --- | --- |
 | Gallery duplication read manifests and rasters at different times; the prior editor's admitted background autosave could replace and prune those generations during copying. | Duplication captures saved and recovery metadata together, retains their raster generations through the copy, and captures preview/model file descriptors. Exact compatible manifest bytes and recovery ordering survive; failed or cancelled copies release their own resources and destination. | [ProjectCopySnapshotTest](../../app/src/test/java/com/artflow/studio/data/local/ProjectCopySnapshotTest.kt), existing [ProjectRecoveryOrderingTest](../../app/src/test/java/com/artflow/studio/data/local/ProjectRecoveryOrderingTest.kt), [ProjectPackageSnapshotTest](../../app/src/test/java/com/artflow/studio/data/local/ProjectPackageSnapshotTest.kt). |
-| Animation and timelapse MP4 export read the complete encoded video into memory before saving it. | Finished MP4 files publish through an 8 KiB copy buffer and the existing atomic writer. Empty, truncated, length-changing or cancelled source copies preserve the previous export. The result reports the committed file size. | [EncodedExportPublicationTest](../../app/src/test/java/com/artflow/studio/data/local/EncodedExportPublicationTest.kt), real MediaCodec/muxer cases in [ExportDeviceTest](../../app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt). |
+| Animation and timelapse MP4 export read the complete encoded video into memory before saving it. | Finished MP4 files publish through an 8 KiB copy buffer and the existing atomic writer. Empty, truncated or length-changing source copies, and cancellation detected before publication, preserve the previous export. The result reports the committed file size. | [EncodedExportPublicationTest](../../app/src/test/java/com/artflow/studio/data/local/EncodedExportPublicationTest.kt), real MediaCodec/muxer cases in [ExportDeviceTest](../../app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt). |
 | Timelapse exports could share a timestamp-named snapshot directory, and cancelled dispatcher handoffs could skip cleanup. | Every export owns a unique snapshot directory; temporary-file cleanup remains in its creating I/O scope. Cancellation propagates instead of becoming an ordinary export failure. | [TimelapseExportLifecycleTest](../../app/src/test/java/com/artflow/studio/data/export/TimelapseExportLifecycleTest.kt), actual three-frame timelapse encoding with timestamp/final-duration and recording-preservation assertions in [ExportDeviceTest](../../app/src/androidTest/java/com/artflow/studio/data/ExportDeviceTest.kt). |
 | A delayed or suspended recording collector could continue after the editor changed project identity. | Opening another artwork cancels the old collector before the identity changes. Each collector captures its own project ID and checks cancellation after composition. Failed opens and retries cannot transfer another artwork's pixels into its recording. | [CanvasTimelapseLifecycleTest](../../app/src/test/java/com/artflow/studio/presentation/CanvasTimelapseLifecycleTest.kt), covering a suspended lookup, a late-returning compositor, and failed-open/retry behavior. |
 | Incoming shares accumulated without limit while the gallery was not receiving. | The activity accepts at most 32 pending file URIs in FIFO order, preserves previously accepted work, and reports accepted/rejected counts with retry guidance. Processing or revisiting Gallery frees capacity. | [IncomingFileQueueTest](../../app/src/test/java/com/artflow/studio/presentation/ui/IncomingFileQueueTest.kt), including 1,000 refused shares with preserved FIFO contents, plus real Android intent cases in [IncomingFilesTest](../../app/src/androidTest/java/com/artflow/studio/IncomingFilesTest.kt). |
@@ -27,6 +27,18 @@ The implementation and regression presence are separate from execution evidence.
 request's checks and retained Actions artifacts identify the tested revision and original
 results. Local environment/setup failures must not be presented as application passes or
 hidden by weakening tests, inventory rules or static-analysis baselines.
+
+The first published checkpoint, `c625381ee2c67947dc6d30dc7db201f2191787ae`, completed
+2,331 JVM cases in [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676253):
+2,328 passed and three new editor-lifecycle cases failed at their initial ready-state assertion.
+Their storage mock did not supply a Boolean for the suspending recovery query. The fixture now
+models an artwork with no recovery explicitly; all recording and ownership assertions remain.
+The original failed run is retained. That checkpoint separately passed
+[optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676209),
+[normal release payload UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676151),
+and [installed application upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44916676174).
+The corrected fixture requires its own complete CI execution; see [PR #42](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42)
+for subsequent exact-revision results.
 
 Focused JVM verification:
 
@@ -52,3 +64,5 @@ every export format: decoded-frame preparation, platform codecs, GIF/APNG, frame
 and PDF retain their own budgets and implementation boundaries. The incoming-file queue is
 process-local pending work, not durable import storage. Physical long-recording, low-storage,
 process-death, stylus and ARM64 acceptance remains part of the release campaign.
+Cancellation after the atomic export commit may still reach the caller even though the new
+export is already durable; cancellation does not roll back a completed publication.

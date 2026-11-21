@@ -3,9 +3,11 @@
 The current runtime scope is defined in [README](../../README.md). Implementation status and
 execution evidence are separate: the regression links below identify coverage, while
 [test evidence](TEST_EVIDENCE.md) records observed results for specific revisions and attempts.
+[PR #42](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42) and the
+[November 21 hardening record](PRODUCTION_HARDENING_2026-11-21.md) track the current candidate.
 [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41) and the
-[November 19 hardening record](PRODUCTION_HARDENING_2026-11-19.md) track the current candidate.
-PR #40 records the preceding integration. Historical qualification does not qualify a later revision.
+[November 19 hardening record](PRODUCTION_HARDENING_2026-11-19.md) retain the preceding work;
+PR #40 records the earlier integration. Historical qualification does not qualify a later revision.
 
 | Area | Current disposition | Acceptance evidence |
 | --- | --- | --- |
@@ -18,7 +20,7 @@ PR #40 records the preceding integration. Historical qualification does not qual
 | Native package snapshot consistency | One captured manifest and counted raster leases protect overlapping exports through serialization | [Snapshot regressions](../../app/src/test/java/com/artflow/studio/data/local/ProjectPackageSnapshotTest.kt); integrated/device verification belongs to the final candidate. |
 | Preview allocation failure | Device texture caps and smaller previews preserve document pixels; unavailable primary preview blocks/cancels pointer edits | [Availability implementation](../../app/src/main/java/com/artflow/studio/data/renderer/opengl/CanvasPreviewState.kt) and the wave 07/09 execution record; physical workloads remain open. |
 | Resolved release dependencies | Strict release-runtime lock, graph/artifact hashes and hash-verified POM license evidence | [Dependency integrity scope](../verification/release-dependency-integrity.md) and exact inventory artifacts; no vulnerability-free or final-binary inventory claim. |
-| Complete Gradle and emulator matrix | Qualification is specific to the tested revision and retained attempts | [Recorded results](TEST_EVIDENCE.md), the [live verification index](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41), and the unchanged [multi-run acceptance contract](RELEASE_SIGNOFF.md#engineering-acceptance). All build gates and seven full device configurations remain required; disclose any recovery. |
+| Complete Gradle and emulator matrix | Qualification is specific to the tested revision and retained attempts | [Recorded results](TEST_EVIDENCE.md), the [current verification index](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42), and the unchanged [multi-run acceptance contract](RELEASE_SIGNOFF.md#engineering-acceptance). All build gates and seven full device configurations remain required; disclose any recovery. |
 | Optimized workflows | Separate minified instrumentation lane with generated external test ABI retention; actual runtime success must be recorded | [Optimization/test boundary](../verification/optimized-test-r8.md), exact selected identities and retained APK/R8 evidence. This scoped test artifact differs from publisher release. |
 | Normal release payload UI workflow | Separate self-instrumenting UI driver exercises the ordinary release APK; final-revision runtime qualification is required | [Payload/UI protocol](../verification/release-payload-ui.md), installed APK hashes, unchanged payload after disposable signing, original test outcome and all-pixel comparison after process death. Local APK assembly alone is insufficient; publisher/physical/store qualification remains separate. |
 | Installed-package upgrade | Executable package campaign; Room migration fixtures alone are insufficient | [Campaign protocol](../verification/installed-package-upgrade.md); an identified historical source or host-tool pass does not establish a completed upgrade. |
