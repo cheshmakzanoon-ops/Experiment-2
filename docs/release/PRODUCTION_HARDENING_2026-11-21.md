@@ -58,6 +58,12 @@ The failed attempt is retained; its later missing workflow receipt is not a succ
 qualification. See [PR #42](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/42) for the
 subsequent candidate's exact checkout, complete workflow results, and any remaining gates.
 
+The next checkpoint, `8f86826845d39682588eddcdfbb1df770680b397`, stopped at Android test
+compilation in [optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44919817221):
+the new focus assertion was chained to the Unit-returning `performTextReplacement` test API.
+It is now a separate statement. The assertion remains required; the failed compilation does
+not provide device qualification.
+
 Focused JVM verification:
 
 ```bash

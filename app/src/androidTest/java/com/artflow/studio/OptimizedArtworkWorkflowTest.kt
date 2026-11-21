@@ -162,7 +162,7 @@ class OptimizedArtworkWorkflowTest {
             .onNodeWithText("File name (optional)")
             .performScrollTo()
             .performTextReplacement("optimized-reopen")
-            .assertIsFocused()
+        compose.onNodeWithText("File name (optional)").assertIsFocused()
         compose.onNodeWithText("Export PNG").performScrollTo().performClick()
         compose.onNodeWithText("File name (optional)").assertIsNotFocused()
         // The phone panel's scroll viewport follows platform IME insets. Compose idleness alone
