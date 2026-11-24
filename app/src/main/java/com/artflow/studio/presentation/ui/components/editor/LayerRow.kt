@@ -104,22 +104,31 @@ internal fun LayerRow(
                         else -> actions.onSelect(layer.id)
                     }
                 },
+        shape = RoundedCornerShape(12.dp),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                width = if (isActive) 1.25.dp else 0.75.dp,
+                color =
+                    when {
+                        isActive -> MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                        picked -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.65f)
+                        else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
+                    },
+            ),
         colors =
             CardDefaults.cardColors(
                 containerColor =
-                    if (isActive) {
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
-                    } else if (picked) {
-                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-                    } else {
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    when {
+                        isActive -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
+                        picked -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
+                        else -> MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f)
                     },
             ),
     ) {
-        Column(modifier = Modifier.padding(6.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 LayerThumbnail(layer, thumbnail)
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(layer.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     LayerStatus(layer)
