@@ -2,6 +2,7 @@
 
 package com.artflow.studio.presentation.ui.components.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -39,6 +41,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
@@ -115,55 +118,63 @@ fun StudioTopBar(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
         tonalElevation = 2.dp,
+        shadowElevation = 4.dp,
         modifier = modifier.fillMaxWidth(),
     ) {
-        BoxWithConstraints(
-            Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
-        ) {
-            val modify: @Composable () -> Unit = {
-                listOf(StudioButton.ACTIONS, StudioButton.ADJUSTMENTS, StudioButton.SELECTION, StudioButton.TRANSFORM).forEach { button ->
-                    Box {
-                        StudioIconButton(button, button in highlighted || openMenu == button) { onButton(button) }
-                        DropdownMenu(expanded = openMenu == button, onDismissRequest = onDismissMenu) { menuFor(button) }
+        Column {
+            BoxWithConstraints(
+                Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)),
+            ) {
+                val modify: @Composable () -> Unit = {
+                    val modifyButtons =
+                        listOf(StudioButton.ACTIONS, StudioButton.ADJUSTMENTS, StudioButton.SELECTION, StudioButton.TRANSFORM)
+                    modifyButtons.forEach { button ->
+                        Box {
+                            StudioIconButton(button, button in highlighted || openMenu == button) { onButton(button) }
+                            DropdownMenu(expanded = openMenu == button, onDismissRequest = onDismissMenu) { menuFor(button) }
+                        }
                     }
                 }
-            }
-            val paint: @Composable () -> Unit = {
-                listOf(StudioButton.PAINT, StudioButton.SMUDGE, StudioButton.ERASE, StudioButton.LAYERS).forEach { button ->
-                    StudioIconButton(button, button in highlighted) { onButton(button) }
+                val paint: @Composable () -> Unit = {
+                    listOf(StudioButton.PAINT, StudioButton.SMUDGE, StudioButton.ERASE, StudioButton.LAYERS).forEach { button ->
+                        StudioIconButton(button, button in highlighted) { onButton(button) }
+                    }
+                    Spacer(Modifier.width(6.dp))
+                    colorSwatch()
+                    Spacer(Modifier.width(10.dp))
                 }
-                Spacer(Modifier.width(4.dp))
-                colorSwatch()
-                Spacer(Modifier.width(8.dp))
-            }
-            val gallery: @Composable () -> Unit = {
-                TextButton(onClick = { onButton(StudioButton.GALLERY) }) { Text(StudioButton.GALLERY.label) }
-            }
-            if (maxWidth < COMPACT_BAR_WIDTH) {
-                // Narrow phones: every button in a single row would squeeze some of them out of reach.
-                Column(Modifier.padding(horizontal = 4.dp)) {
-                    Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                val gallery: @Composable () -> Unit = {
+                    TextButton(onClick = { onButton(StudioButton.GALLERY) }) {
+                        Text(StudioButton.GALLERY.label, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (maxWidth < COMPACT_BAR_WIDTH) {
+                    // Narrow phones: every button in a single row would squeeze some of them out of reach.
+                    Column(Modifier.padding(horizontal = 4.dp)) {
+                        Row(Modifier.height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            gallery()
+                            modify()
+                        }
+                        Row(
+                            Modifier.fillMaxWidth().height(48.dp),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) { paint() }
+                    }
+                } else {
+                    Row(Modifier.height(52.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         gallery()
-                        modify()
+                        Row(
+                            modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) { modify() }
+                        paint()
                     }
-                    Row(
-                        Modifier.fillMaxWidth().height(48.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) { paint() }
-                }
-            } else {
-                Row(Modifier.height(52.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    gallery()
-                    Row(
-                        modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) { modify() }
-                    paint()
                 }
             }
+            HorizontalDivider(thickness = 0.75.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
         }
     }
 }
@@ -177,7 +188,23 @@ private fun StudioIconButton(
     active: Boolean,
     onClick: () -> Unit,
 ) {
-    IconToggleButton(checked = active, onCheckedChange = { onClick() }) {
+    val activeBg = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+    val activeBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    val pillShape = RoundedCornerShape(12.dp)
+    IconToggleButton(
+        checked = active,
+        onCheckedChange = { onClick() },
+        modifier =
+            if (active) {
+                Modifier
+                    .padding(horizontal = 1.dp)
+                    .clip(pillShape)
+                    .background(activeBg, pillShape)
+                    .border(0.75.dp, activeBorder, pillShape)
+            } else {
+                Modifier.padding(horizontal = 1.dp)
+            },
+    ) {
         Icon(
             button.icon(),
             contentDescription = button.label,
@@ -230,46 +257,101 @@ private fun StudioSidebarContent(
     actions: StudioSidebarActions,
     sliderHeight: Dp,
 ) {
-    Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        tonalElevation = 3.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+    var draggingSize by remember { mutableStateOf(false) }
+    var draggingOpacity by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
+            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            shadowElevation = 8.dp,
         ) {
-            VerticalSlider(
-                value = sizeToSlider(state.size, state.sizeRange),
-                onValueChange = { actions.onSize(sliderToSize(it, state.sizeRange)) },
-                label = "Brush size ${state.size.toInt()} px",
-                height = sliderHeight,
+            Column(
+                modifier = Modifier.padding(horizontal = 7.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                VerticalSlider(
+                    value = sizeToSlider(state.size, state.sizeRange),
+                    onValueChange = { actions.onSize(sliderToSize(it, state.sizeRange)) },
+                    label = "Brush size ${state.size.toInt()} px",
+                    height = sliderHeight,
+                    onDraggingChanged = { draggingSize = it },
+                )
+                val pickDescription = stringResource(R.string.studiochrome_pick_colour_from_canvas)
+                val modifyBg =
+                    if (state.eyedropperActive) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.6f)
+                    }
+                val modifyBorder =
+                    if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                Box(
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(modifyBg)
+                            .border(
+                                width = 1.75.dp,
+                                color = modifyBorder,
+                                shape = RoundedCornerShape(8.dp),
+                            ).semantics { contentDescription = pickDescription }
+                            .combinedClickable(
+                                onClick = actions.onModify,
+                                onLongClick = actions.onQuickMenu,
+                                onLongClickLabel = stringResource(R.string.studiochrome_quickmenu),
+                            ),
+                )
+                VerticalSlider(
+                    value = toSlider(state.opacity, state.opacityRange),
+                    onValueChange = { actions.onOpacity(fromSlider(it, state.opacityRange)) },
+                    label = "Opacity ${(state.opacity * 100).toInt()}%",
+                    height = sliderHeight,
+                    onDraggingChanged = { draggingOpacity = it },
+                )
+                HistoryButton(Icons.Default.Undo, "Undo", state.canUndo, actions.onUndo, actions.onHistory)
+                HistoryButton(Icons.Default.Redo, "Redo", state.canRedo, actions.onRedo, actions.onHistory)
+            }
+        }
+        if (draggingSize || draggingOpacity) {
+            SliderReadoutPill(
+                text = if (draggingSize) "${state.size.roundToInt()} px" else "${(state.opacity * 100).roundToInt()}%",
+                previewFraction = if (draggingSize) sizeToSlider(state.size, state.sizeRange) else null,
             )
-            val pickDescription = stringResource(R.string.studiochrome_pick_colour_from_canvas)
-            Box(
-                modifier =
-                    Modifier
-                        .size(28.dp)
-                        .border(
-                            width = 2.dp,
-                            color = if (state.eyedropperActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(6.dp),
-                        ).semantics { contentDescription = pickDescription }
-                        .combinedClickable(
-                            onClick = actions.onModify,
-                            onLongClick = actions.onQuickMenu,
-                            onLongClickLabel = stringResource(R.string.studiochrome_quickmenu),
-                        ),
+        }
+    }
+}
+
+@Composable
+private fun SliderReadoutPill(
+    text: String,
+    previewFraction: Float?,
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        shadowElevation = 6.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (previewFraction != null) {
+                val ringColor = MaterialTheme.colorScheme.primary
+                Canvas(Modifier.size(18.dp)) {
+                    val radius = (3.dp.toPx() + previewFraction.coerceIn(0f, 1f) * 5.5.dp.toPx())
+                    drawCircle(color = ringColor, radius = radius, style = Stroke(width = 1.75.dp.toPx()))
+                }
+            }
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"),
+                color = MaterialTheme.colorScheme.onSurface,
             )
-            VerticalSlider(
-                value = toSlider(state.opacity, state.opacityRange),
-                onValueChange = { actions.onOpacity(fromSlider(it, state.opacityRange)) },
-                label = "Opacity ${(state.opacity * 100).toInt()}%",
-                height = sliderHeight,
-            )
-            HistoryButton(Icons.Default.Undo, "Undo", state.canUndo, actions.onUndo, actions.onHistory)
-            HistoryButton(Icons.Default.Redo, "Redo", state.canRedo, actions.onRedo, actions.onHistory)
         }
     }
 }
@@ -283,10 +365,11 @@ private fun HistoryButton(
     onClick: () -> Unit,
     onHistory: () -> Unit,
 ) {
-    val tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    val tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.32f)
     Box(
         Modifier
             .size(36.dp)
+            .clip(CircleShape)
             .combinedClickable(enabled = enabled, onClick = onClick, onLongClick = onHistory, onLongClickLabel = "History")
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
@@ -308,9 +391,18 @@ fun HistoryScrubber(
     modifier: Modifier = Modifier,
 ) {
     val total = undoDepth + redoDepth
-    Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 4.dp, modifier = modifier.padding(12.dp).widthIn(max = 480.dp)) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("History $undoDepth / $total", style = MaterialTheme.typography.labelMedium)
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        shadowElevation = 6.dp,
+        modifier = modifier.padding(12.dp).widthIn(max = 480.dp),
+    ) {
+        Row(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "History $undoDepth / $total",
+                style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+            )
             Slider(
                 value = undoDepth.toFloat(),
                 onValueChange = { onStep(it.roundToInt()) },
@@ -360,11 +452,15 @@ fun VerticalSlider(
     label: String,
     height: Dp,
     modifier: Modifier = Modifier,
+    onDraggingChanged: (Boolean) -> Unit = {},
 ) {
     val latest by rememberUpdatedState(onValueChange)
-    val track = MaterialTheme.colorScheme.surfaceVariant
-    val fill = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+    val latestDrag by rememberUpdatedState(onDraggingChanged)
+    val track = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.78f)
+    val trackBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    val fill = MaterialTheme.colorScheme.primary.copy(alpha = 0.48f)
     val thumb = MaterialTheme.colorScheme.onSurface
+    val thumbRing = MaterialTheme.colorScheme.surface.copy(alpha = 0.75f)
     Canvas(
         modifier =
             modifier
@@ -378,7 +474,11 @@ fun VerticalSlider(
                         true
                     }
                 }.pointerInput(Unit) {
-                    detectVerticalDragGestures { change, _ ->
+                    detectVerticalDragGestures(
+                        onDragStart = { latestDrag(true) },
+                        onDragEnd = { latestDrag(false) },
+                        onDragCancel = { latestDrag(false) },
+                    ) { change, _ ->
                         change.consume()
                         latest((1f - change.position.y / size.height).coerceIn(0f, 1f))
                     }
@@ -388,10 +488,18 @@ fun VerticalSlider(
     ) {
         val radius = CornerRadius(size.width / 2f)
         drawRoundRect(track, cornerRadius = radius)
+        drawRoundRect(trackBorder, cornerRadius = radius, style = Stroke(width = 1.dp.toPx()))
         val travel = size.height - size.width
         val top = (1f - value.coerceIn(0f, 1f)) * travel
         drawRoundRect(fill, topLeft = Offset(0f, top), size = Size(size.width, size.height - top), cornerRadius = radius)
-        drawRoundRect(thumb, topLeft = Offset(2f, top + 2f), size = Size(size.width - 4f, size.width - 4f), cornerRadius = radius)
+        drawRoundRect(thumb, topLeft = Offset(2.5f, top + 2.5f), size = Size(size.width - 5f, size.width - 5f), cornerRadius = radius)
+        drawRoundRect(
+            thumbRing,
+            topLeft = Offset(2.5f, top + 2.5f),
+            size = Size(size.width - 5f, size.width - 5f),
+            cornerRadius = radius,
+            style = Stroke(width = 1.dp.toPx()),
+        )
     }
 }
 
@@ -796,13 +904,14 @@ private fun FloatingBar(
     content: @Composable RowScope.() -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 3.dp,
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        shadowElevation = 8.dp,
         modifier = modifier.padding(12.dp),
     ) {
         Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             content = content,

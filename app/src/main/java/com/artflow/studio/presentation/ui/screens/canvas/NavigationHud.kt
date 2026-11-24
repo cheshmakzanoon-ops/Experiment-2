@@ -1,5 +1,6 @@
 package com.artflow.studio.presentation.ui.screens.canvas
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -10,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.presentation.ui.components.canvas.NavigationReadout
@@ -33,14 +35,17 @@ internal fun NavigationHud(
     }
     if (current == null) return
     Surface(
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 4.dp,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        shadowElevation = 6.dp,
         modifier = modifier.padding(top = 12.dp),
     ) {
         Text(
             stringResource(R.string.canvasscreen_zoom_and_angle, current.zoomPercent, current.angleDegrees),
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium, fontFeatureSettings = "tnum"),
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
         )
     }
 }

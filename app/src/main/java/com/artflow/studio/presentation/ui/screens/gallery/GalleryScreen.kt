@@ -455,7 +455,19 @@ private fun ProjectCard(
             modifier
                 .fillMaxWidth()
                 .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        shape = RoundedCornerShape(16.dp),
+        border =
+            androidx.compose.foundation.BorderStroke(
+                width = if (selected == true) 1.5.dp else 0.75.dp,
+                color =
+                    if (selected == true) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    },
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
         Column {
             Box(
@@ -463,7 +475,7 @@ private fun ProjectCard(
                     Modifier
                         .fillMaxWidth()
                         .aspectRatio(1.35f)
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest),
                 contentAlignment = Alignment.Center,
             ) {
                 val thumbnail = project.thumbnailPath
@@ -479,34 +491,41 @@ private fun ProjectCard(
                         Icon(
                             Icons.Default.Image,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         )
+                        Spacer(Modifier.height(4.dp))
                         Text(
                             text = "${project.width}×${project.height}",
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 if (project.isFavorite) {
-                    Icon(
-                        Icons.Default.Star,
-                        contentDescription = stringResource(R.string.galleryscreen_favourite),
-                        tint = Color(0xFFF2C037),
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
                         modifier =
                             Modifier
                                 .align(Alignment.TopStart)
-                                .padding(6.dp),
-                    )
+                                .padding(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Star,
+                            contentDescription = stringResource(R.string.galleryscreen_favourite),
+                            tint = Color(0xFFF2C037),
+                            modifier = Modifier.padding(4.dp).size(16.dp),
+                        )
+                    }
                 }
                 selected?.let { SelectionMark(it, Modifier.align(Alignment.TopEnd)) }
             }
 
             Row(
-                modifier = Modifier.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                modifier = Modifier.padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = project.name,
                         style = MaterialTheme.typography.titleSmall,
@@ -515,7 +534,7 @@ private fun ProjectCard(
                     )
                     Text(
                         text = "${project.layerCount} layers · ${formatDate(project.modifiedAt)}",
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
@@ -567,7 +586,7 @@ private fun ProjectCard(
                                 menuVisible = false
                             },
                         )
-                        Divider()
+                        HorizontalDivider()
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
                             onClick = {
