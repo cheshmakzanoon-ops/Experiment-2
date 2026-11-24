@@ -6,17 +6,31 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * A canvas-sized image filled in tile by tile as areas are asked for, and reused while its key
+ * A sparse tile cache filled in tile by tile as areas are asked for, and reused while its key
  * stays the same. The live preview keeps the layers below the one being painted here, so each
  * frame of a stroke composites only that layer and those above it instead of the whole stack.
+ *
+ * Only tiles that have actually been requested are allocated, and least-recently-used tiles are
+ * evicted once [maxBytes] is exceeded so large canvases never pin a full-canvas buffer in RAM.
  */
 class TileCache(
     private val tileSize: Int = DEFAULT_TILE,
+    private val maxBytes: Long = DEFAULT_MAX_BYTES,
 ) {
     private var key: Any? = null
-    private var image: PixelBuffer? = null
-    private var filled = BooleanArray(0)
-    private var columns = 0
+    private var canvasWidth = 0
+    private var canvasHeight = 0
+
+    /** Access-ordered LRU map from packed `(row, column)` to tile pixels sized to that tile's bounds. */
+    private val tiles = LinkedHashMap<Long, IntArray>(INITIAL_MAP_CAPACITY, 0.75f, true)
+
+    /** Total pixel-array bytes currently retained by cached tiles. */
+    var allocatedBytes: Long = 0L
+        private set
+
+    /** Number of tiles currently retained in the cache. */
+    val cachedTileCount: Int
+        @Synchronized get() = tiles.size
 
     /** Tiles rendered since the cache was created; lets tests see what was reused. */
     var renderedTiles = 0
@@ -25,15 +39,16 @@ class TileCache(
     @Synchronized
     fun reset() {
         key = null
-        filled.fill(false)
+        tiles.clear()
+        allocatedBytes = 0L
     }
 
-    /** Drops the cached image itself, freeing its memory. */
+    /** Drops all cached tiles immediately, freeing their memory. */
     @Synchronized
     fun release() {
         reset()
-        image = null
-        filled = BooleanArray(0)
+        canvasWidth = 0
+        canvasHeight = 0
     }
 
     /**
@@ -49,47 +64,46 @@ class TileCache(
         area: IntBounds,
         render: (IntBounds) -> PixelBuffer,
     ): PixelBuffer {
-        val canvas = prepare(key, width, height)
+        prepare(key, width, height)
         val clipped = IntBounds(max(0, area.left), max(0, area.top), min(width - 1, area.right), min(height - 1, area.bottom))
         require(!clipped.isEmpty) { "The area is outside the canvas" }
-        fillMissing(canvas, clipped, render)
-        return canvas.crop(clipped)
+        val firstColumn = clipped.left / tileSize
+        val lastColumn = clipped.right / tileSize
+        val firstRow = clipped.top / tileSize
+        val lastRow = clipped.bottom / tileSize
+        fillMissing(firstColumn, lastColumn, firstRow, lastRow, render)
+        val result = assemble(clipped, firstColumn, lastColumn, firstRow, lastRow)
+        evictIfNeeded(firstColumn, lastColumn, firstRow, lastRow)
+        return result
     }
 
     private fun prepare(
         key: Any,
         width: Int,
         height: Int,
-    ): PixelBuffer {
-        val current = image
-        if (current == null || current.width != width || current.height != height) {
-            image = PixelBuffer(width, height)
-            columns = (width + tileSize - 1) / tileSize
-            filled = BooleanArray(columns * ((height + tileSize - 1) / tileSize))
-            this.key = null
-        }
-        if (this.key != key) {
-            filled.fill(false)
+    ) {
+        if (canvasWidth != width || canvasHeight != height || this.key != key) {
+            tiles.clear()
+            allocatedBytes = 0L
+            canvasWidth = width
+            canvasHeight = height
             this.key = key
         }
-        return requireNotNull(image)
     }
 
-    /** Renders the smallest tile-aligned rectangle holding every unfilled tile of [area], once. */
+    /** Renders the smallest tile-aligned rectangle holding every unfilled tile of the requested range, once. */
     private fun fillMissing(
-        canvas: PixelBuffer,
-        area: IntBounds,
+        firstColumn: Int,
+        lastColumn: Int,
+        firstRow: Int,
+        lastRow: Int,
         render: (IntBounds) -> PixelBuffer,
     ) {
-        val firstColumn = area.left / tileSize
-        val lastColumn = area.right / tileSize
-        val firstRow = area.top / tileSize
-        val lastRow = area.bottom / tileSize
         var missing: IntBounds? = null
         for (row in firstRow..lastRow) {
             for (column in firstColumn..lastColumn) {
-                if (filled[row * columns + column]) continue
-                val tile = tileBounds(column, row, canvas)
+                if (tiles.containsKey(tileKey(column, row))) continue
+                val tile = tileBounds(column, row)
                 missing =
                     missing?.let {
                         IntBounds(
@@ -105,30 +119,100 @@ class TileCache(
         val todo = missing ?: return
         val pixels = render(todo)
         require(pixels.width == todo.width && pixels.height == todo.height) { "Rendered tiles must match the requested area" }
-        for (y in 0 until todo.height) {
-            System.arraycopy(pixels.pixels, y * todo.width, canvas.pixels, (todo.top + y) * canvas.width + todo.left, todo.width)
-        }
+        val srcPixels = pixels.pixels
         for (row in todo.top / tileSize..todo.bottom / tileSize) {
             for (column in todo.left / tileSize..todo.right / tileSize) {
-                filled[row * columns + column] = true
+                val bounds = tileBounds(column, row)
+                val tileW = bounds.width
+                val tileH = bounds.height
+                val tileKey = tileKey(column, row)
+                val tileData = IntArray(tileW * tileH)
+                val srcOffsetX = bounds.left - todo.left
+                val srcOffsetY = bounds.top - todo.top
+                for (y in 0 until tileH) {
+                    System.arraycopy(srcPixels, (srcOffsetY + y) * todo.width + srcOffsetX, tileData, y * tileW, tileW)
+                }
+                val previous = tiles.put(tileKey, tileData)
+                if (previous != null) allocatedBytes -= previous.size.toLong() * Int.SIZE_BYTES
+                allocatedBytes += tileData.size.toLong() * Int.SIZE_BYTES
                 renderedTiles++
             }
+        }
+    }
+
+    private fun assemble(
+        clipped: IntBounds,
+        firstColumn: Int,
+        lastColumn: Int,
+        firstRow: Int,
+        lastRow: Int,
+    ): PixelBuffer {
+        val result = PixelBuffer(clipped.width, clipped.height)
+        val dstPixels = result.pixels
+        val dstWidth = result.width
+        for (row in firstRow..lastRow) {
+            for (column in firstColumn..lastColumn) {
+                val bounds = tileBounds(column, row)
+                val tileData = checkNotNull(tiles[tileKey(column, row)]) { "Missing cached tile ($column, $row)" }
+                val overlapLeft = max(clipped.left, bounds.left)
+                val overlapTop = max(clipped.top, bounds.top)
+                val overlapRight = min(clipped.right, bounds.right)
+                val overlapBottom = min(clipped.bottom, bounds.bottom)
+                val copyWidth = overlapRight - overlapLeft + 1
+                val tileWidth = bounds.width
+                val srcX = overlapLeft - bounds.left
+                val dstX = overlapLeft - clipped.left
+                for (y in overlapTop..overlapBottom) {
+                    val srcOffset = (y - bounds.top) * tileWidth + srcX
+                    val dstOffset = (y - clipped.top) * dstWidth + dstX
+                    System.arraycopy(tileData, srcOffset, dstPixels, dstOffset, copyWidth)
+                }
+            }
+        }
+        return result
+    }
+
+    private fun evictIfNeeded(
+        keepFirstColumn: Int,
+        keepLastColumn: Int,
+        keepFirstRow: Int,
+        keepLastRow: Int,
+    ) {
+        if (allocatedBytes <= maxBytes) return
+        val iterator = tiles.entries.iterator()
+        while (allocatedBytes > maxBytes && iterator.hasNext()) {
+            val entry = iterator.next()
+            val packed = entry.key
+            val row = (packed ushr 32).toInt()
+            val col = packed.toInt()
+            if (row in keepFirstRow..keepLastRow && col in keepFirstColumn..keepLastColumn) continue
+            allocatedBytes -= entry.value.size.toLong() * Int.SIZE_BYTES
+            iterator.remove()
         }
     }
 
     private fun tileBounds(
         column: Int,
         row: Int,
-        canvas: PixelBuffer,
     ): IntBounds =
         IntBounds(
             column * tileSize,
             row * tileSize,
-            min(canvas.width - 1, (column + 1) * tileSize - 1),
-            min(canvas.height - 1, (row + 1) * tileSize - 1),
+            min(canvasWidth - 1, (column + 1) * tileSize - 1),
+            min(canvasHeight - 1, (row + 1) * tileSize - 1),
         )
 
-    private companion object {
+    private fun tileKey(
+        column: Int,
+        row: Int,
+    ): Long = (row.toLong() shl 32) or (column.toLong() and 0xFFFFFFFFL)
+
+    companion object {
         const val DEFAULT_TILE = 128
+
+        /** 16 MiB default cap — plenty for active stroke tiles without pinning full 4K–8K canvases. */
+        const val DEFAULT_MAX_BYTES = 16L * 1024L * 1024L
+
+        private const val INITIAL_MAP_CAPACITY = 64
     }
 }

@@ -86,6 +86,15 @@ class OpenGLCanvasRenderer
         )
 
         private var dabProgram = 0
+        private var dabMatrixHandle = 0
+        private var dabColorHandle = 0
+        private var dabPositionHandle = 0
+        private var dabCornerHandle = 0
+        private var dabVertexArray = FloatArray(0)
+        private var dabVertexBuffer: FloatBuffer? = null
+        private val frameMatrix = FloatArray(16)
+        private val regionCopyPaint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
+        private var retainedCanvas: Canvas? = null
 
         // --- Programs ------------------------------------------------------------------------------
 
@@ -231,6 +240,10 @@ class OpenGLCanvasRenderer
             quadViewMatrixHandle = GLES20.glGetUniformLocation(quadProgram, "uViewMatrix")
             quadViewLevelsHandle = GLES20.glGetUniformLocation(quadProgram, "uViewLevels")
             dabProgram = createProgram(DAB_VERTEX_SHADER, DAB_FRAGMENT_SHADER)
+            dabMatrixHandle = GLES20.glGetUniformLocation(dabProgram, "uMatrix")
+            dabColorHandle = GLES20.glGetUniformLocation(dabProgram, "uColor")
+            dabPositionHandle = GLES20.glGetAttribLocation(dabProgram, "aPosition")
+            dabCornerHandle = GLES20.glGetAttribLocation(dabProgram, "aCorner")
 
             checkerTexture = createCheckerboardTexture()
             isInitialized = true
@@ -255,7 +268,7 @@ class OpenGLCanvasRenderer
             // GLSurfaceView has already scheduled this frame. A cleared framebuffer must always be
             // repainted, including pan/zoom, expose and redundant requestRender calls.
 
-            val matrix = projectionMatrix()
+            val matrix = fillProjectionMatrix(frameMatrix)
 
             // 1. Canvas background (checkerboard or a solid colour).
             GLES20.glUseProgram(quadProgram)
@@ -294,13 +307,14 @@ class OpenGLCanvasRenderer
             // 3. Upload changed artwork, but draw the retained texture on EVERY frame.
             val (incoming, regions) =
                 synchronized(pendingRegions) {
-                    val taken = pendingRegions.toList()
+                    val taken = if (pendingRegions.isEmpty()) emptyList() else pendingRegions.toList()
                     pendingRegions.clear()
                     pendingComposite.getAndSet(null) to taken
                 }
             if (incoming != null) {
                 retainedComposite?.recycle()
                 retainedComposite = incoming.bitmap
+                retainedCanvas = Canvas(incoming.bitmap)
                 retainedCompositeGeneration = incoming.generation
             }
             // Regions without a base image have nothing to patch; the view resends the whole canvas.
@@ -351,49 +365,62 @@ class OpenGLCanvasRenderer
             matrix: FloatArray,
         ) {
             val count = current.points.size / 2
+            val neededFloats = count * DAB_FLOATS
             // Two triangles per dab: canvas position plus a corner offset in -1..1.
-            val vertices = FloatArray(count * DAB_FLOATS)
-            val corners = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
+            var vertices = dabVertexArray
+            if (vertices.size < neededFloats) {
+                vertices = FloatArray(neededFloats)
+                dabVertexArray = vertices
+            }
+            var buffer = dabVertexBuffer
+            if (buffer == null || buffer.capacity() < neededFloats) {
+                buffer =
+                    ByteBuffer
+                        .allocateDirect(neededFloats * 4)
+                        .order(ByteOrder.nativeOrder())
+                        .asFloatBuffer()
+                dabVertexBuffer = buffer
+            }
+            val corners = DAB_CORNERS
+            val radius = current.radius
+            val points = current.points
             for (dab in 0 until count) {
+                val px = points[dab * 2]
+                val py = points[dab * 2 + 1]
+                val dabBase = dab * DAB_FLOATS
                 for (corner in 0 until 6) {
-                    val base = dab * DAB_FLOATS + corner * 4
-                    vertices[base] = current.points[dab * 2] + corners[corner * 2] * current.radius
-                    vertices[base + 1] = current.points[dab * 2 + 1] + corners[corner * 2 + 1] * current.radius
-                    vertices[base + 2] = corners[corner * 2]
-                    vertices[base + 3] = corners[corner * 2 + 1]
+                    val base = dabBase + corner * 4
+                    val cx = corners[corner * 2]
+                    val cy = corners[corner * 2 + 1]
+                    vertices[base] = px + cx * radius
+                    vertices[base + 1] = py + cy * radius
+                    vertices[base + 2] = cx
+                    vertices[base + 3] = cy
                 }
             }
-            val buffer =
-                java.nio.ByteBuffer
-                    .allocateDirect(vertices.size * 4)
-                    .order(java.nio.ByteOrder.nativeOrder())
-                    .asFloatBuffer()
-                    .apply {
-                        put(vertices)
-                        position(0)
-                    }
+            buffer.clear()
+            buffer.put(vertices, 0, neededFloats)
+            buffer.position(0)
             GLES20.glUseProgram(dabProgram)
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
-            GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(dabProgram, "uMatrix"), 1, false, matrix, 0)
+            GLES20.glUniformMatrix4fv(dabMatrixHandle, 1, false, matrix, 0)
             val alpha = ((current.color ushr 24) and 0xFF) / 255f * PREDICTION_ALPHA
             GLES20.glUniform4f(
-                GLES20.glGetUniformLocation(dabProgram, "uColor"),
+                dabColorHandle,
                 ((current.color shr 16) and 0xFF) / 255f * alpha,
                 ((current.color shr 8) and 0xFF) / 255f * alpha,
                 (current.color and 0xFF) / 255f * alpha,
                 alpha,
             )
-            val position = GLES20.glGetAttribLocation(dabProgram, "aPosition")
-            val corner = GLES20.glGetAttribLocation(dabProgram, "aCorner")
             buffer.position(0)
-            GLES20.glEnableVertexAttribArray(position)
-            GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 16, buffer)
+            GLES20.glEnableVertexAttribArray(dabPositionHandle)
+            GLES20.glVertexAttribPointer(dabPositionHandle, 2, GLES20.GL_FLOAT, false, 16, buffer)
             buffer.position(2)
-            GLES20.glEnableVertexAttribArray(corner)
-            GLES20.glVertexAttribPointer(corner, 2, GLES20.GL_FLOAT, false, 16, buffer)
+            GLES20.glEnableVertexAttribArray(dabCornerHandle)
+            GLES20.glVertexAttribPointer(dabCornerHandle, 2, GLES20.GL_FLOAT, false, 16, buffer)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, count * 6)
-            GLES20.glDisableVertexAttribArray(position)
-            GLES20.glDisableVertexAttribArray(corner)
+            GLES20.glDisableVertexAttribArray(dabPositionHandle)
+            GLES20.glDisableVertexAttribArray(dabCornerHandle)
         }
 
         private fun refreshOnionTextures() {
@@ -476,8 +503,7 @@ class OpenGLCanvasRenderer
             regions: List<RegionUpdate>,
         ): Boolean {
             if (regions.isEmpty()) return true
-            val canvas = Canvas(retained)
-            val copy = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
+            val canvas = retainedCanvas ?: Canvas(retained).also { retainedCanvas = it }
             var direct = compositeTexture != 0 && compositeTextureSize == CanvasTextureSize(retained.width, retained.height)
             if (direct) {
                 drainGlErrors("before canvas region binding")
@@ -485,7 +511,7 @@ class OpenGLCanvasRenderer
                 direct = drainGlErrors("canvas region binding") == GLES20.GL_NO_ERROR
             }
             regions.forEach { region ->
-                canvas.drawBitmap(region.bitmap, region.left.toFloat(), region.top.toFloat(), copy)
+                canvas.drawBitmap(region.bitmap, region.left.toFloat(), region.top.toFloat(), regionCopyPaint)
                 if (direct) {
                     direct = uploadRegion(region)
                 }
@@ -603,6 +629,9 @@ class OpenGLCanvasRenderer
             pendingOnionSkins.getAndSet(null)?.forEach { it.first.recycle() }
             retainedComposite?.recycle()
             retainedComposite = null
+            retainedCanvas = null
+            dabVertexArray = FloatArray(0)
+            dabVertexBuffer = null
             retainedOnions.forEach { it.first.recycle() }
             retainedOnions = emptyList()
             isInitialized = false
@@ -652,7 +681,9 @@ class OpenGLCanvasRenderer
          * Maps canvas pixel coordinates to clip space, honouring zoom, pan and rotation.
          * Rotation happens around the canvas centre so zooming and rotating feel natural.
          */
-        internal fun projectionMatrix(): FloatArray {
+        internal fun projectionMatrix(): FloatArray = fillProjectionMatrix(FloatArray(16))
+
+        private fun fillProjectionMatrix(m: FloatArray): FloatArray {
             val halfWidth = viewWidth / 2f
             val halfHeight = viewHeight / 2f
             val centreX = canvasWidth / 2f
@@ -668,7 +699,7 @@ class OpenGLCanvasRenderer
             //
             //   clip.x = ( cos*s*(px-cx) - sin*s*(py-cy) + offsetX) / halfWidth
             //   clip.y = -( sin*s*(px-cx) + cos*s*(py-cy) + offsetY) / halfHeight
-            val m = FloatArray(16)
+            m.fill(0f)
             m[0] = cosR * safeScale / halfWidth
             m[4] = -sinR * safeScale / halfWidth
             m[12] = (offsetX - (cosR * centreX - sinR * centreY) * safeScale) / halfWidth
@@ -864,6 +895,7 @@ class OpenGLCanvasRenderer
 
             private const val DAB_FLOATS = 24
             private const val PREDICTION_ALPHA = 0.85f
+            private val DAB_CORNERS = floatArrayOf(-1f, -1f, 1f, -1f, 1f, 1f, -1f, -1f, 1f, 1f, -1f, 1f)
 
             private const val DAB_VERTEX_SHADER = """
             uniform mat4 uMatrix;

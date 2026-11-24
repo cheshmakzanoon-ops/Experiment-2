@@ -94,23 +94,39 @@ object BlendModes {
         val clamped = opacity.coerceIn(0f, 1f)
         if (clamped <= 0f) return
 
-        // Normal source-over is by far the most common case and does not need the blend maths.
+        val dstPixels = dst.pixels
+        val srcPixels = src.pixels
         if (mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH) {
-            if (clamped >= 1f) {
-                for (i in dst.pixels.indices) {
-                    dst.pixels[i] = sourceOver(dst.pixels[i], src.pixels[i])
-                }
-            } else {
-                for (i in dst.pixels.indices) {
-                    dst.pixels[i] = sourceOver(dst.pixels[i], Channels.scaleAlpha(src.pixels[i], clamped))
-                }
-            }
+            compositeNormal(dstPixels, srcPixels, clamped)
             return
         }
 
         val scratch = FloatArray(3)
-        for (i in dst.pixels.indices) {
-            dst.pixels[i] = blendPixel(dst.pixels[i], src.pixels[i], mode, clamped, scratch)
+        for (i in dstPixels.indices) {
+            val sp = srcPixels[i]
+            if ((sp ushr 24) == 0) continue
+            dstPixels[i] = blendPixel(dstPixels[i], sp, mode, clamped, scratch)
+        }
+    }
+
+    private fun compositeNormal(
+        dstPixels: IntArray,
+        srcPixels: IntArray,
+        opacity: Float,
+    ) {
+        if (opacity >= 1f) {
+            for (i in dstPixels.indices) {
+                val sp = srcPixels[i]
+                val sa = sp ushr 24
+                if (sa == 0) continue
+                dstPixels[i] = if (sa == 255) sp else sourceOver(dstPixels[i], sp)
+            }
+            return
+        }
+        for (i in dstPixels.indices) {
+            val sp = srcPixels[i]
+            if ((sp ushr 24) == 0) continue
+            dstPixels[i] = sourceOver(dstPixels[i], Channels.scaleAlpha(sp, opacity))
         }
     }
 
@@ -121,6 +137,7 @@ object BlendModes {
     ): Int {
         val alpha = (backdrop ushr 24) and 0xFF
         if (alpha == 0) return backdrop
+        if ((source ushr 24) == 0) return backdrop
         return Channels.withAlpha(sourceOver(Channels.withAlpha(backdrop, 255), source), alpha)
     }
 
@@ -134,18 +151,24 @@ object BlendModes {
         require(dst.width == src.width && dst.height == src.height) { "Clipping requires matching buffer sizes" }
         val amount = opacity.coerceIn(0f, 1f)
         if (amount <= 0f) return
-        val scratch = FloatArray(3)
-        for (i in dst.pixels.indices) {
-            val alpha = (dst.pixels[i] ushr 24) and 0xFF
-            if (alpha == 0) continue
-            val opaque = Channels.withAlpha(dst.pixels[i], 255)
+        val dstPixels = dst.pixels
+        val srcPixels = src.pixels
+        val isNormal = mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH
+        val scratch = if (isNormal) null else FloatArray(3)
+        for (i in dstPixels.indices) {
+            val sp = srcPixels[i]
+            val dp = dstPixels[i]
+            val alpha = dp ushr 24
+            if ((sp ushr 24) == 0 || alpha == 0) continue
+            val opaque = Channels.withAlpha(dp, 255)
             val mixed =
-                if (mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH) {
-                    sourceOver(opaque, Channels.scaleAlpha(src.pixels[i], amount))
+                if (isNormal) {
+                    val scaled = if (amount >= 1f) sp else Channels.scaleAlpha(sp, amount)
+                    sourceOver(opaque, scaled)
                 } else {
-                    blendPixel(opaque, src.pixels[i], mode, amount, scratch)
+                    blendPixel(opaque, sp, mode, amount, checkNotNull(scratch))
                 }
-            dst.pixels[i] = Channels.withAlpha(mixed, alpha)
+            dstPixels[i] = Channels.withAlpha(mixed, alpha)
         }
     }
 
@@ -154,28 +177,33 @@ object BlendModes {
         backdrop: Int,
         source: Int,
     ): Int {
-        val asource = Channels.alpha(source) / 255f
-        if (asource >= 1f) return source
-        if (asource <= 0f) return backdrop
+        val srcAlpha = source ushr 24
+        if (srcAlpha == 0) return backdrop
+        if (srcAlpha == 255) return source
+        val dstAlpha = backdrop ushr 24
+        if (dstAlpha == 0) return source
+
+        val asource = srcAlpha / 255f
 
         // With an opaque backdrop and 8-bit source alpha, output alpha and its reciprocal
         // are exactly one. Keep the remaining Float operations and channel rounding unchanged.
-        if ((backdrop ushr 24) == 255) {
+        if (dstAlpha == 255) {
             val inverseSource = 1f - asource
-            val r = Channels.red(source) * asource + Channels.red(backdrop) * inverseSource
-            val g = Channels.green(source) * asource + Channels.green(backdrop) * inverseSource
-            val b = Channels.blue(source) * asource + Channels.blue(backdrop) * inverseSource
+            val r = ((source shr 16) and 0xFF) * asource + ((backdrop shr 16) and 0xFF) * inverseSource
+            val g = ((source shr 8) and 0xFF) * asource + ((backdrop shr 8) and 0xFF) * inverseSource
+            val b = (source and 0xFF) * asource + (backdrop and 0xFF) * inverseSource
             return Channels.fromFloats(255f, r, g, b)
         }
 
-        val abackdrop = Channels.alpha(backdrop) / 255f
-        val outAlpha = asource + abackdrop * (1f - asource)
+        val abackdrop = dstAlpha / 255f
+        val invSource = 1f - asource
+        val outAlpha = asource + abackdrop * invSource
         if (outAlpha <= 1e-6f) return 0
 
         val invOutAlpha = 1f / outAlpha
-        val r = (Channels.red(source) * asource + Channels.red(backdrop) * abackdrop * (1f - asource)) * invOutAlpha
-        val g = (Channels.green(source) * asource + Channels.green(backdrop) * abackdrop * (1f - asource)) * invOutAlpha
-        val b = (Channels.blue(source) * asource + Channels.blue(backdrop) * abackdrop * (1f - asource)) * invOutAlpha
+        val r = (((source shr 16) and 0xFF) * asource + ((backdrop shr 16) and 0xFF) * abackdrop * invSource) * invOutAlpha
+        val g = (((source shr 8) and 0xFF) * asource + ((backdrop shr 8) and 0xFF) * abackdrop * invSource) * invOutAlpha
+        val b = ((source and 0xFF) * asource + (backdrop and 0xFF) * abackdrop * invSource) * invOutAlpha
         return Channels.fromFloats(outAlpha * 255f, r, g, b)
     }
 
