@@ -91,7 +91,7 @@ object SpectralMixer {
 
     /**
      * Subtractive transparent watercolor glaze: filters [backdrop] through a translucent
-     * pigment layer [paint] of strength [amount] (0..1).
+     * pigment layer [paint] of strength [amount] (0..1) using Kubelka-Munk spectral optics.
      */
     fun glazeArgb(
         backdrop: Int,
@@ -103,26 +103,9 @@ object SpectralMixer {
         val backAlpha = (backdrop ushr 24) and 0xFF
         if (backAlpha == 0) return Channels.withAlpha(paint, (alpha * 255f).roundToInt().coerceIn(0, 255))
 
-        val rBack = srgbToLinear(((backdrop shr 16) and 0xFF) / 255f)
-        val gBack = srgbToLinear(((backdrop shr 8) and 0xFF) / 255f)
-        val bBack = srgbToLinear((backdrop and 0xFF) / 255f)
-
-        val rPaint = srgbToLinear(((paint shr 16) and 0xFF) / 255f)
-        val gPaint = srgbToLinear(((paint shr 8) and 0xFF) / 255f)
-        val bPaint = srgbToLinear((paint and 0xFF) / 255f)
-
-        // Beer-Lambert-like multiplicative glazing combined with subtle spectral scatter.
-        val outR = rBack * (1f - alpha + alpha * rPaint)
-        val outG = gBack * (1f - alpha + alpha * gPaint)
-        val outB = bBack * (1f - alpha + alpha * bPaint)
+        val spectral = mixArgb(backdrop, paint, alpha * 0.85f)
         val outA = max(backAlpha, (backAlpha + (255 - backAlpha) * alpha).roundToInt()).coerceIn(0, 255)
-
-        return Channels.argb(
-            outA,
-            (linearToSrgb(outR.coerceIn(0f, 1f)) * 255f).roundToInt(),
-            (linearToSrgb(outG.coerceIn(0f, 1f)) * 255f).roundToInt(),
-            (linearToSrgb(outB.coerceIn(0f, 1f)) * 255f).roundToInt(),
-        )
+        return Channels.withAlpha(spectral, outA)
     }
 
     private fun reflectanceToKS(r: Float): Float = ((1f - r) * (1f - r)) / (2f * r)
