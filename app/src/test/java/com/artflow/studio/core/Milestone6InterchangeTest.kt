@@ -66,7 +66,7 @@ class Milestone6InterchangeTest {
                 override fun read(name: String): ByteArray? = entries[name]
             }
 
-        val doc = ProcreateReader.read(files)
+        val doc = ProcreateReader.open(files)
         assertEquals(ColorProfile.DISPLAY_P3, doc.colorProfile)
         assertEquals(2, doc.animationPlaybackMode)
         assertEquals(24, doc.animationFramerate)
