@@ -84,7 +84,8 @@ class PhysicalPaintPlane(
         val w = wetness.coerceIn(0f, 1f)
         val h = impasto.coerceIn(-1f, 1f)
         val p = pigment.coerceIn(0f, 1f)
-        if (w == 0f && h == 0f && p == 0f && tiles[tileKey(x / TILE_SIZE, y / TILE_SIZE)] == null) return
+        val isZero = w == 0f && h == 0f && p == 0f
+        if (isZero && tiles[tileKey(x / TILE_SIZE, y / TILE_SIZE)] == null) return
         val tile = obtainTile(x / TILE_SIZE, y / TILE_SIZE)
         val idx = localIndex(x, y)
         tile.wetness[idx] = w
@@ -161,17 +162,25 @@ class PhysicalPaintPlane(
                 data.writeInt(height)
                 data.writeInt(tiles.size)
                 for ((key, tile) in tiles) {
-                    data.writeInt((key ushr 32).toInt())
-                    data.writeInt((key and 0xFFFFFFFFL).toInt())
-                    for (i in 0 until TILE_PIXELS) {
-                        data.writeByte((tile.wetness[i] * 255f + 0.5f).toInt().coerceIn(0, 255))
-                        data.writeByte(((tile.impastoHeight[i] * 0.5f + 0.5f) * 255f + 0.5f).toInt().coerceIn(0, 255))
-                        data.writeByte((tile.pigmentLoad[i] * 255f + 0.5f).toInt().coerceIn(0, 255))
-                    }
+                    writeTile(data, key, tile)
                 }
             }
         }
         return out.toByteArray()
+    }
+
+    private fun writeTile(
+        data: DataOutputStream,
+        key: Long,
+        tile: Tile,
+    ) {
+        data.writeInt((key ushr 32).toInt())
+        data.writeInt((key and 0xFFFFFFFFL).toInt())
+        for (i in 0 until TILE_PIXELS) {
+            data.writeByte((tile.wetness[i] * 255f + 0.5f).toInt().coerceIn(0, 255))
+            data.writeByte(((tile.impastoHeight[i] * 0.5f + 0.5f) * 255f + 0.5f).toInt().coerceIn(0, 255))
+            data.writeByte((tile.pigmentLoad[i] * 255f + 0.5f).toInt().coerceIn(0, 255))
+        }
     }
 
     companion object {
@@ -424,40 +433,59 @@ object PhysicalPaintEngine {
         val hx = lx / hLen
         val hy = ly / hLen
         val hz = (lz + 1f) / hLen
-        val slopeScale = impastoDepth.coerceIn(0f, 1f) * 3.2f
-        val specStrength = gloss.coerceIn(0f, 1f) * 0.38f
-
+        val params =
+            RakingLightParams(lx, ly, lz, hx, hy, hz, impastoDepth.coerceIn(0f, 1f) * 3.2f, gloss.coerceIn(0f, 1f) * 0.38f)
         for ((tx, ty) in plane.allocatedTileCoords()) {
             val x0 = max(1, tx * PhysicalPaintPlane.TILE_SIZE)
             val y0 = max(1, ty * PhysicalPaintPlane.TILE_SIZE)
             val x1 = min(w - 2, (tx + 1) * PhysicalPaintPlane.TILE_SIZE - 1)
             val y1 = min(h - 2, (ty + 1) * PhysicalPaintPlane.TILE_SIZE - 1)
-            for (y in y0..y1) {
-                val row = y * colorBuffer.width
-                for (x in x0..x1) {
-                    val pixel = colorBuffer.pixels[row + x]
-                    val alpha = pixel ushr 24
-                    if (alpha == 0) continue
-                    val dx = (plane.impastoAt(x + 1, y) - plane.impastoAt(x - 1, y)) * slopeScale
-                    val dy = (plane.impastoAt(x, y + 1) - plane.impastoAt(x, y - 1)) * slopeScale
-                    if (dx == 0f && dy == 0f) continue
-                    val invLen = 1f / sqrt(dx * dx + dy * dy + 1f)
-                    val nx = -dx * invLen
-                    val ny = -dy * invLen
-                    val nz = invLen
+            shadeRakingTile(colorBuffer, plane, x0, y0, x1, y1, params)
+        }
+    }
 
-                    val ndotl = (nx * lx + ny * ly + nz * lz).coerceIn(0f, 1f)
-                    val flatNdotL = lz
-                    // Relative diffuse modulation around flat lighting so unridged paint stays unchanged.
-                    val diffuseBoost = 1f + (ndotl - flatNdotL) * 0.65f
-                    val ndoth = (nx * hx + ny * hy + nz * hz).coerceIn(0f, 1f)
-                    val spec = ndoth.pow(24f) * specStrength * 255f
+    private class RakingLightParams(
+        val lx: Float,
+        val ly: Float,
+        val lz: Float,
+        val hx: Float,
+        val hy: Float,
+        val hz: Float,
+        val slopeScale: Float,
+        val specStrength: Float,
+    )
 
-                    val r = (((pixel shr 16) and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
-                    val g = (((pixel shr 8) and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
-                    val b = ((pixel and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
-                    colorBuffer.pixels[row + x] = (alpha shl 24) or (r shl 16) or (g shl 8) or b
-                }
+    private fun shadeRakingTile(
+        colorBuffer: PixelBuffer,
+        plane: PhysicalPaintPlane,
+        x0: Int,
+        y0: Int,
+        x1: Int,
+        y1: Int,
+        p: RakingLightParams,
+    ) {
+        for (y in y0..y1) {
+            val row = y * colorBuffer.width
+            for (x in x0..x1) {
+                val pixel = colorBuffer.pixels[row + x]
+                val alpha = pixel ushr 24
+                val dx = (plane.impastoAt(x + 1, y) - plane.impastoAt(x - 1, y)) * p.slopeScale
+                val dy = (plane.impastoAt(x, y + 1) - plane.impastoAt(x, y - 1)) * p.slopeScale
+                if (alpha == 0 || (dx == 0f && dy == 0f)) continue
+                val invLen = 1f / sqrt(dx * dx + dy * dy + 1f)
+                val nx = -dx * invLen
+                val ny = -dy * invLen
+                val nz = invLen
+
+                val ndotl = (nx * p.lx + ny * p.ly + nz * p.lz).coerceIn(0f, 1f)
+                val diffuseBoost = 1f + (ndotl - p.lz) * 0.65f
+                val ndoth = (nx * p.hx + ny * p.hy + nz * p.hz).coerceIn(0f, 1f)
+                val spec = ndoth.pow(24f) * p.specStrength * 255f
+
+                val r = (((pixel shr 16) and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
+                val g = (((pixel shr 8) and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
+                val b = ((pixel and 0xFF) * diffuseBoost + spec).roundToInt().coerceIn(0, 255)
+                colorBuffer.pixels[row + x] = (alpha shl 24) or (r shl 16) or (g shl 8) or b
             }
         }
     }

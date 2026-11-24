@@ -393,15 +393,9 @@ data class BrushParams(
         random: Random?,
     ): Int {
         val darkness = effectiveDarknessJitter
-        if (hueJitter <= 0f &&
-            saturationJitter <= 0f &&
-            brightnessJitter <= 0f &&
-            darkness <= 0f &&
-            !colorPressure &&
-            velocityToHue <= 0f
-        ) {
-            return baseColor
-        }
+        val hasJitter = hueJitter > 0f || saturationJitter > 0f || brightnessJitter > 0f || darkness > 0f
+        val hasDynamicColor = colorPressure || velocityToHue > 0f
+        if (!hasJitter && !hasDynamicColor) return baseColor
 
         val hsv =
             com.artflow.studio.domain.model.Color

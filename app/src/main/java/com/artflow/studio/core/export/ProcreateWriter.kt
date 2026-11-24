@@ -36,6 +36,7 @@ object ProcreateWriter {
      * A pixel layer: [pixels] (straight ARGB, the document's size) and its properties. [mask] is the layer's
      * coverage (255 reveals); null when it has none.
      */
+    @Suppress("LongParameterList")
     class Layer(
         val name: String,
         val pixels: PixelBuffer,

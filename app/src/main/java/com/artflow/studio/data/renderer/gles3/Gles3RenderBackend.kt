@@ -94,24 +94,31 @@ class Gles3RenderBackend(
         for (layer in layers) {
             temp.clear()
             layer.compositeToBuffer(temp, bounds)
-            for (y in 0 until temp.height) {
-                val row = y * temp.width
-                for (x in 0 until temp.width) {
-                    val p = temp.pixels[row + x]
-                    val a = ((p ushr 24) and 0xFF) / 255f
-                    if (a <= 0f) continue
-                    tile.accumulatePixel(
-                        x,
-                        y,
-                        ((p shr 16) and 0xFF) / 255f,
-                        ((p shr 8) and 0xFF) / 255f,
-                        (p and 0xFF) / 255f,
-                        a,
-                    )
-                }
-            }
+            accumulateBuffer(tile, temp)
         }
         tile.resolveTo8Bit(target, dither = true)
+    }
+
+    private fun accumulateBuffer(
+        tile: Float16AccumulationTile,
+        source: PixelBuffer,
+    ) {
+        for (y in 0 until source.height) {
+            val row = y * source.width
+            for (x in 0 until source.width) {
+                val p = source.pixels[row + x]
+                val a = ((p ushr 24) and 0xFF) / 255f
+                if (a <= 0f) continue
+                tile.accumulatePixel(
+                    x,
+                    y,
+                    ((p shr 16) and 0xFF) / 255f,
+                    ((p shr 8) and 0xFF) / 255f,
+                    (p and 0xFF) / 255f,
+                    a,
+                )
+            }
+        }
     }
 
     override fun present() {
