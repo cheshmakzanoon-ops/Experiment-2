@@ -5,7 +5,6 @@ import com.artflow.studio.core.canvas.KeyboardShortcuts
 import com.artflow.studio.core.canvas.SeamlessTileMode
 import com.artflow.studio.core.canvas.SeamlessTiling
 import com.artflow.studio.core.canvas.ShortcutAction
-import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.core.text.TextLayout

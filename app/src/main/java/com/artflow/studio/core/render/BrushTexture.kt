@@ -132,8 +132,7 @@ class BrushTexture private constructor(
         private const val HALFTONE_RADIUS = 2.2f
         private const val HALF = 0.5f
 
-        fun hasPressureCurves(params: BrushParams): Boolean =
-            GRAIN_PRESSURE_KEYS.any { it in params.importedAuxiliaryCurves }
+        fun hasPressureCurves(params: BrushParams): Boolean = GRAIN_PRESSURE_KEYS.any { it in params.importedAuxiliaryCurves }
 
         fun from(
             params: BrushParams,

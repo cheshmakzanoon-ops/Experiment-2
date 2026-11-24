@@ -171,8 +171,7 @@ object KeyboardShortcuts {
         overrides: Map<ShortcutAction, KeyChord>,
         action: ShortcutAction,
         newChord: KeyChord,
-    ): Map<ShortcutAction, KeyChord> =
-        overrides.filterValues { it != newChord } + (action to newChord)
+    ): Map<ShortcutAction, KeyChord> = overrides.filterValues { it != newChord } + (action to newChord)
 
     /** Serializes a [KeyChord] to a compact canonical string (e.g. `"primary+shift+z"`). */
     fun encodeChord(chord: KeyChord): String =

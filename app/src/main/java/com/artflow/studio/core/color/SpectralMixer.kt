@@ -112,9 +112,7 @@ object SpectralMixer {
 
     private fun ksToReflectance(ks: Float): Float = (1f + ks - sqrt(ks * ks + 2f * ks)).coerceIn(0f, 1f)
 
-    private fun srgbToLinear(c: Float): Float =
-        if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
+    private fun srgbToLinear(c: Float): Float = if (c <= 0.04045f) c / 12.92f else ((c + 0.055f) / 1.055f).pow(2.4f)
 
-    private fun linearToSrgb(c: Float): Float =
-        if (c <= 0.0031308f) c * 12.92f else 1.055f * c.pow(1f / 2.4f) - 0.055f
+    private fun linearToSrgb(c: Float): Float = if (c <= 0.0031308f) c * 12.92f else 1.055f * c.pow(1f / 2.4f) - 0.055f
 }

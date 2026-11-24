@@ -85,13 +85,7 @@ class Float16AccumulationTile(
     }
 
     companion object {
-        private val BAYER_4X4 =
-            floatArrayOf(
-                0f, 8f, 2f, 10f,
-                12f, 4f, 14f, 6f,
-                3f, 11f, 1f, 9f,
-                15f, 7f, 13f, 5f,
-            )
+        private val BAYER_4X4 = floatArrayOf(0f, 8f, 2f, 10f, 12f, 4f, 14f, 6f, 3f, 11f, 1f, 9f, 15f, 7f, 13f, 5f)
 
         private fun bayer4(
             x: Int,
