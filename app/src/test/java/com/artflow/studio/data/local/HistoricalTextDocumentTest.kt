@@ -83,7 +83,7 @@ class HistoricalTextDocumentTest {
         val encoded = CanvasDocumentCodec.encode(document)
         val encodedString = encoded.decodeToString()
 
-        assertTrue(encodedString.contains("\"version\":7"))
+        assertTrue(encodedString.contains("\"version\":${CanvasDocument.CURRENT_VERSION}"))
         assertTrue(encodedString.contains("\"rotationDegrees\":45.0"))
         assertTrue(encodedString.contains("\"scaleX\":1.5"))
         assertTrue(encodedString.contains("\"scaleY\":0.8"))

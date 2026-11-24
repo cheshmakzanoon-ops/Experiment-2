@@ -344,7 +344,7 @@ object ProcreateBrushWriter {
             } else {
                 decoded
             }
-        if (params.sourceImportVersion < SPLIT_DARKNESS_IMPORT_VERSION) {
+        if (params.darknessJitter == null && params.sourceImportVersion < COUNT_TRUNCATION_IMPORT_VERSION) {
             current =
                 current.copy(
                     brightnessJitter = maxOf(current.brightnessJitter, current.effectiveDarknessJitter),
@@ -522,6 +522,5 @@ object ProcreateBrushWriter {
     private const val MIN_ROUNDNESS = 0.05f
     private const val LEGACY_MIN_GRAIN_SCALE = 0.25f
     private const val COUNT_TRUNCATION_IMPORT_VERSION = 2
-    private const val SPLIT_DARKNESS_IMPORT_VERSION = 3
     private const val MAX_COUNT = 16
 }

@@ -466,8 +466,8 @@ data class BrushParams(
 const val MIN_BRUSH_SIZE = 1f
 const val MAX_BRUSH_SIZE = 512f
 
-/** Version one corrected channel aliases; version two matched native Count truncation; version three splits lightness/darkness jitter. */
-const val NATIVE_BRUSH_IMPORT_VERSION = 3
+/** Version one corrected channel aliases; version two also matches native Count truncation. */
+const val NATIVE_BRUSH_IMPORT_VERSION = 2
 
 /** The faintest opacity a brush slider offers. */
 const val MIN_BRUSH_OPACITY = 0.01f

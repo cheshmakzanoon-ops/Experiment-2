@@ -21,14 +21,14 @@ object SpectralMixer {
     private const val MAX_REFLECTANCE = 0.996f
 
     // Forward projection: linear RGB -> 6-band reflectance (row-normalized so white (1,1,1) -> 1.0 across all bands).
-    private val RGB_TO_SPEC_R = floatArrayOf(0.10f, 0.02f, 0.02f, 0.14f, 0.62f, 0.96f)
-    private val RGB_TO_SPEC_G = floatArrayOf(0.06f, 0.16f, 0.56f, 0.80f, 0.36f, 0.03f)
-    private val RGB_TO_SPEC_B = floatArrayOf(0.84f, 0.82f, 0.42f, 0.06f, 0.02f, 0.01f)
+    private val RGB_TO_SPEC_R = floatArrayOf(0.06f, 0.01f, 0.01f, 0.06f, 0.72f, 0.98f)
+    private val RGB_TO_SPEC_G = floatArrayOf(0.01f, 0.08f, 0.62f, 0.88f, 0.27f, 0.01f)
+    private val RGB_TO_SPEC_B = floatArrayOf(0.93f, 0.91f, 0.37f, 0.06f, 0.01f, 0.01f)
 
     // Inverse projection: 6-band reflectance -> linear RGB (rows sum to 1.0 so neutral grays round-trip cleanly).
-    private val SPEC_TO_R = floatArrayOf(0.08f, -0.06f, -0.10f, 0.04f, 0.44f, 0.60f)
-    private val SPEC_TO_G = floatArrayOf(-0.04f, 0.04f, 0.28f, 0.54f, 0.22f, -0.04f)
-    private val SPEC_TO_B = floatArrayOf(0.46f, 0.48f, 0.16f, -0.06f, -0.02f, -0.02f)
+    private val SPEC_TO_R = floatArrayOf(0.06f, -0.04f, -0.08f, 0.02f, 0.42f, 0.62f)
+    private val SPEC_TO_G = floatArrayOf(-0.04f, -0.02f, 0.38f, 0.58f, 0.14f, -0.04f)
+    private val SPEC_TO_B = floatArrayOf(0.46f, 0.56f, 0.04f, -0.02f, -0.02f, -0.02f)
 
     /**
      * Mixes two ARGB colors [a] and [b] by [t] (0 = all [a], 1 = all [b]) using Kubelka-Munk
