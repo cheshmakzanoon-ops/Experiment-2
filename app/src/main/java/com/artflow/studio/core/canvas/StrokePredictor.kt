@@ -52,13 +52,42 @@ class StrokePredictor(
 
     /** Up to [steps] points from the last sample towards the predicted position; empty until moving. */
     fun predict(steps: Int = DEFAULT_STEPS): List<Pair<Float, Float>> {
-        if (samples < MIN_SAMPLES) return emptyList()
+        if (samples < MIN_SAMPLES || steps <= 0) return emptyList()
         val speed = hypot(vx, vy)
         if (speed < MIN_SPEED) return emptyList()
-        return (1..steps).map { step ->
+        val out = FloatArray(steps * 2)
+        val count = predictInto(out, steps)
+        return List(count / 2) { index -> out[index * 2] to out[index * 2 + 1] }
+    }
+
+    /**
+     * Zero-allocation prediction writing `(x, y)` pairs into [out] (must hold at least `steps * 2`
+     * floats). Returns the number of floats written (`0` when idle or stationary).
+     */
+    fun predictInto(
+        out: FloatArray,
+        steps: Int = DEFAULT_STEPS,
+    ): Int {
+        if (samples < MIN_SAMPLES || steps <= 0 || out.size < steps * 2) return 0
+        val speed = hypot(vx, vy)
+        if (speed < MIN_SPEED) return 0
+        val dampedAx = ax * ACCEL_DAMPING
+        val dampedAy = ay * ACCEL_DAMPING
+        var written = 0
+        for (step in 1..steps) {
             val t = horizonMs * step / steps
-            (lastX + vx * t + 0.5f * ax * t * t) to (lastY + vy * t + 0.5f * ay * t * t)
+            var dx = vx * t + 0.5f * dampedAx * t * t
+            var dy = vy * t + 0.5f * dampedAy * t * t
+            val dist = hypot(dx, dy)
+            if (dist > MAX_PREDICTION_PX) {
+                val scale = MAX_PREDICTION_PX / dist
+                dx *= scale
+                dy *= scale
+            }
+            out[written++] = lastX + dx
+            out[written++] = lastY + dy
         }
+        return written
     }
 
     private fun smooth(
@@ -66,11 +95,13 @@ class StrokePredictor(
         next: Float,
     ): Float = previous + (next - previous) * SMOOTHING
 
-    private companion object {
+    companion object {
         const val DEFAULT_HORIZON_MS = 16f
         const val DEFAULT_STEPS = 4
-        const val MIN_SAMPLES = 3
-        const val MIN_SPEED = 0.02f
-        const val SMOOTHING = 0.6f
+        const val MAX_PREDICTION_PX = 48f
+        private const val MIN_SAMPLES = 3
+        private const val MIN_SPEED = 0.02f
+        private const val SMOOTHING = 0.6f
+        private const val ACCEL_DAMPING = 0.5f
     }
 }

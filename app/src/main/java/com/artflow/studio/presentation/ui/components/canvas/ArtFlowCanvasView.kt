@@ -28,6 +28,7 @@ import com.artflow.studio.core.canvas.PressureSmoother
 import com.artflow.studio.core.canvas.QuickShape
 import com.artflow.studio.core.canvas.RotationSnap
 import com.artflow.studio.core.canvas.StrokePredictor
+import com.artflow.studio.core.canvas.StrokeSplineInterpolator
 import com.artflow.studio.core.canvas.StrokeStabilizer
 import com.artflow.studio.core.canvas.StylusAction
 import com.artflow.studio.core.canvas.StylusButtonMapper
@@ -429,6 +430,11 @@ class ArtFlowCanvasView
         private var motionFilter: MotionFilter? = null
         private var pressureSmoother: PressureSmoother? = null
         private val predictor = StrokePredictor()
+        private val splineInterpolator = StrokeSplineInterpolator()
+        private val predictionScratch = FloatArray(StrokePredictor.DEFAULT_STEPS * 2)
+        private var navVelX = 0f
+        private var navVelY = 0f
+        private var navLastTimeMs = 0L
         private val strokeRawPoints = mutableListOf<Pair<Float, Float>>()
         private var strokePressureSum = 0f
         private var strokeLastPressure = 1f
@@ -1586,6 +1592,9 @@ class ArtFlowCanvasView
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
             if (!acceptPreviewInput(event)) return true
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                requestUnbufferedDispatch(event)
+            }
             val action =
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> PointerGestureRouter.Event.DOWN
@@ -1988,27 +1997,7 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    if (drawing && quickShapeApplied) {
-                        adjustQuickShape(canvasX, canvasY)
-                    } else if (drawing) {
-                        trackQuickShapeHold(x, y, canvasX, canvasY, pressure)
-                        val time = if (history >= 0) event.getHistoricalEventTime(history) else event.eventTime
-                        // Prefs > Pressure and Smoothing first, then the brush's own steadying.
-                        val (filteredX, filteredY) = motionFilter?.add(canvasX, canvasY, time) ?: (canvasX to canvasY)
-                        val strokePressure = pressureSmoother?.add(pressure) ?: pressure
-                        val (smoothX, smoothY) = stabilizer?.add(filteredX, filteredY) ?: (filteredX to filteredY)
-                        canvasRepository.continueStroke(
-                            strokeId = currentStrokeId,
-                            x = smoothX,
-                            y = smoothY,
-                            pressure = strokePressure,
-                            tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history),
-                            tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history),
-                            timestamp = StrokeClock.wallTime(time, SystemClock.uptimeMillis(), System.currentTimeMillis()),
-                        )
-                        predict(tool, smoothX, smoothY, strokePressure, time)
-                        updateLiveStroke()
-                    }
+                    continueBrushSample(tool, event, index, history, canvasX, canvasY)
                 }
 
                 ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING,
@@ -2200,10 +2189,14 @@ class ArtFlowCanvasView
         private fun resetNavigation() {
             navAnchor = null
             navPrevDistance = 0f
+            navVelX = 0f
+            navVelY = 0f
+            navLastTimeMs = 0L
         }
 
         private fun rebaseNavigation(pointers: List<PointerGestureRouter.Pointer>) {
-            resetNavigation()
+            navAnchor = null
+            navPrevDistance = 0f
             if (pointers.size < 2) return
             viewAnimator?.cancel()
             if (pinchStartScale == 0f) {
@@ -2229,6 +2222,9 @@ class ArtFlowCanvasView
             tapFingers: Int,
             timeMillis: Long,
         ) {
+            val vx = navVelX
+            val vy = navVelY
+            val fresh = navLastTimeMs > 0L && (SystemClock.uptimeMillis() - navLastTimeMs) <= NAV_FLING_STALE_MS
             resetNavigation()
             val quickPinch = pointerRouter.quickPinchRecognised(pinchStartScale, scale, timeMillis - pinchStartTime)
             pinchStartScale = 0f
@@ -2237,7 +2233,34 @@ class ArtFlowCanvasView
                 tapFingers == 3 -> onRedoRequested?.invoke()
                 tapFingers == 4 -> onFullscreenRequested?.invoke()
                 quickPinch -> animateFitToView()
+                fresh -> startPanInertia(vx, vy)
             }
+        }
+
+        private fun startPanInertia(
+            vx: Float,
+            vy: Float,
+        ) {
+            val speed = kotlin.math.hypot(vx, vy)
+            if (speed < NAV_FLING_MIN_SPEED) return
+            val clampedScale = (NAV_FLING_MAX_SPEED / speed).coerceAtMost(1f)
+            val startX = offsetX
+            val startY = offsetY
+            val deltaX = vx * clampedScale * NAV_FLING_DURATION_MS * NAV_FLING_TRAVEL_FACTOR
+            val deltaY = vy * clampedScale * NAV_FLING_DURATION_MS * NAV_FLING_TRAVEL_FACTOR
+            viewAnimator?.cancel()
+            viewAnimator =
+                ValueAnimator.ofFloat(0f, 1f).apply {
+                    duration = NAV_FLING_DURATION_MS
+                    interpolator = DecelerateInterpolator(NAV_FLING_DECELERATION)
+                    addUpdateListener { anim ->
+                        val t = anim.animatedValue as Float
+                        offsetX = startX + deltaX * t
+                        offsetY = startY + deltaY * t
+                        pushTransform()
+                    }
+                    start()
+                }
         }
 
         private fun navigate(pointers: List<PointerGestureRouter.Pointer>) {
@@ -2248,6 +2271,8 @@ class ArtFlowCanvasView
                     rebaseNavigation(ordered)
                     return
                 }
+            val prevOffsetX = offsetX
+            val prevOffsetY = offsetY
             val distance = spacing(ordered)
             val eventAngle = angle(ordered)
             val midX = ordered.map { it.x }.average().toFloat()
@@ -2270,6 +2295,15 @@ class ArtFlowCanvasView
                 offsetX += midX - navPrevMidX
                 offsetY += midY - navPrevMidY
             }
+            val now = SystemClock.uptimeMillis()
+            val dt = now - navLastTimeMs
+            if (navLastTimeMs > 0L && dt in 1L..NAV_FLING_STALE_MS) {
+                val instantVx = (offsetX - prevOffsetX) / dt.toFloat()
+                val instantVy = (offsetY - prevOffsetY) / dt.toFloat()
+                navVelX = navVelX * (1f - NAV_VEL_SMOOTHING) + instantVx * NAV_VEL_SMOOTHING
+                navVelY = navVelY * (1f - NAV_VEL_SMOOTHING) + instantVy * NAV_VEL_SMOOTHING
+            }
+            navLastTimeMs = now
             pushTransform()
             emitNavigationReadout()
             rebaseNavigation(ordered)
@@ -2330,6 +2364,48 @@ class ArtFlowCanvasView
         /** True while the current gesture is a finger, so brushes use their Touch taper. */
         private var strokeFromTouch = false
 
+        private fun continueBrushSample(
+            tool: ToolType,
+            event: MotionEvent,
+            index: Int,
+            history: Int,
+            canvasX: Float,
+            canvasY: Float,
+        ) {
+            if (!drawing) return
+            if (quickShapeApplied) {
+                adjustQuickShape(canvasX, canvasY)
+                return
+            }
+            val pressure = pressureOf(event, index, history)
+            trackQuickShapeHold(lastPointerX, lastPointerY, canvasX, canvasY, pressure)
+            val time = if (history >= 0) event.getHistoricalEventTime(history) else event.eventTime
+            // Prefs > Pressure and Smoothing first, then the brush's own steadying.
+            val (filteredX, filteredY) = motionFilter?.add(canvasX, canvasY, time) ?: (canvasX to canvasY)
+            val strokePressure = pressureSmoother?.add(pressure) ?: pressure
+            val (smoothX, smoothY) = stabilizer?.add(filteredX, filteredY) ?: (filteredX to filteredY)
+            val tiltX = axisOf(event, index, MotionEvent.AXIS_TILT, history)
+            val tiltY = axisOf(event, index, MotionEvent.AXIS_ORIENTATION, history)
+            val wallTime = StrokeClock.wallTime(time, SystemClock.uptimeMillis(), System.currentTimeMillis())
+            splineInterpolator.add(smoothX, smoothY, strokePressure, tiltX, tiltY, wallTime) { sx, sy, spr, stx, sty, st ->
+                canvasRepository.continueStroke(
+                    strokeId = currentStrokeId,
+                    x = sx,
+                    y = sy,
+                    pressure = spr,
+                    tiltX = stx,
+                    tiltY = sty,
+                    timestamp = st,
+                )
+            }
+            val shouldPredict = tool == ToolType.BRUSH && stabilizer == null
+            if (shouldPredict) predictor.add(smoothX, smoothY, time)
+            if (history < 0) {
+                if (shouldPredict) pushPrediction(strokePressure)
+                updateLiveStroke()
+            }
+        }
+
         private fun startStroke(
             x: Float,
             y: Float,
@@ -2381,6 +2457,7 @@ class ArtFlowCanvasView
                     ?.also { it.start(x, y, SystemClock.uptimeMillis()) }
             pressureSmoother =
                 PressureSmoother(input.pressureSmoothing).takeIf { input.pressureSmoothing > 0f }?.also { it.start(pressure) }
+            splineInterpolator.start(x, y, pressure, 0f, 0f, time)
             strokeRawPoints.clear()
             strokeRawPoints.add(x to y)
             strokePressureSum = pressure
@@ -2446,25 +2523,16 @@ class ArtFlowCanvasView
          * Draws where the pen is heading as a light overlay ahead of the brush stroke, so the line keeps
          * up with the pen. Stabilized strokes lag on purpose and get no prediction; nothing is painted.
          */
-        private fun predict(
-            tool: ToolType,
-            x: Float,
-            y: Float,
-            pressure: Float,
-            timeMs: Long,
-        ) {
-            if (tool != ToolType.BRUSH || stabilizer != null) return
-            predictor.add(x, y, timeMs)
-            val ahead = predictor.predict()
-            val points = FloatArray(ahead.size * 2)
-            ahead.forEachIndexed { index, (px, py) ->
-                points[index * 2] = px
-                points[index * 2 + 1] = py
+        private fun pushPrediction(pressure: Float) {
+            val written = predictor.predictInto(predictionScratch)
+            if (written < 2) {
+                renderer.setPrediction(null, 0f, 0)
+                return
             }
             val radius = input.brushParams.size * 0.5f * pressure.coerceIn(MIN_PREDICTED_PRESSURE, 1f)
             val alpha = (input.brushParams.opacity.coerceIn(0f, 1f) * 255f).toInt()
             val predicted = canvasRepository.documentColor(input.brushColor)
-            renderer.setPrediction(points, radius, (predicted and 0x00FFFFFF) or (alpha shl 24))
+            renderer.setPrediction(predictionScratch.copyOf(written), radius, (predicted and 0x00FFFFFF) or (alpha shl 24))
             requestRender()
         }
 
@@ -2484,13 +2552,27 @@ class ArtFlowCanvasView
         ) {
             clearPrediction()
             if (cancelled) {
+                splineInterpolator.reset()
                 canvasRepository.cancelStroke(currentStrokeId)
                 return
             }
             if (!quickShapeApplied) {
+                splineInterpolator.finish { sx, sy, spr, stx, sty, st ->
+                    canvasRepository.continueStroke(
+                        strokeId = currentStrokeId,
+                        x = sx,
+                        y = sy,
+                        pressure = spr,
+                        tiltX = stx,
+                        tiltY = sty,
+                        timestamp = st,
+                    )
+                }
                 stabilizer?.finish(x, y)?.forEach { (px, py) ->
                     canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
                 }
+            } else {
+                splineInterpolator.reset()
             }
             val markBefore = canvasRepository.historyMark
             val paintedText = activeLayerHasText()
@@ -3727,5 +3809,12 @@ class ArtFlowCanvasView
             private const val LIQUIFY_PREVIEW_INTERVAL_MS = 140L
             private const val LIQUIFY_PREVIEW_MAX_PIXELS = 4_000_000
             private const val MAX_PENDING_SAMPLES = 512
+            private const val NAV_FLING_STALE_MS = 80L
+            private const val NAV_FLING_MIN_SPEED = 0.35f
+            private const val NAV_FLING_MAX_SPEED = 4.5f
+            private const val NAV_FLING_DURATION_MS = 220L
+            private const val NAV_FLING_TRAVEL_FACTOR = 0.45f
+            private const val NAV_FLING_DECELERATION = 2.2f
+            private const val NAV_VEL_SMOOTHING = 0.55f
         }
     }
