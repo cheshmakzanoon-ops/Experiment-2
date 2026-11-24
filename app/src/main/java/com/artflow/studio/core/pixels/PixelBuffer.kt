@@ -514,12 +514,20 @@ data class IntBounds(
 class PixelBufferPool(
     /** Maximum number of idle buffers retained for reuse; releases past this are discarded. */
     private val maxCapacity: Int = DEFAULT_CAPACITY,
+    /** Maximum total pixel-array bytes retained across idle buffers. */
+    private val maxBytes: Long = DEFAULT_MAX_BYTES,
 ) {
     init {
         require(maxCapacity > 0) { "Pool capacity must be positive (got $maxCapacity)" }
+        require(maxBytes > 0L) { "Pool byte budget must be positive (got $maxBytes)" }
     }
 
     private val pool = ArrayBlockingQueue<PixelBuffer>(maxCapacity)
+    private var retainedBytes = 0L
+
+    /** Total pixel-array bytes currently held idle in this pool. */
+    val pooledBytes: Long
+        get() = synchronized(pool) { retainedBytes }
 
     /**
      * Takes a buffer from the pool, or allocates a fresh one when the pool is empty.
@@ -532,35 +540,60 @@ class PixelBufferPool(
     fun obtain(
         width: Int,
         height: Int,
+        clear: Boolean = true,
     ): PixelBuffer {
         val safeWidth = max(1, width)
         val safeHeight = max(1, height)
-        while (true) {
-            val recycled = pool.poll() ?: return PixelBuffer(safeWidth, safeHeight)
-            if (recycled.width == safeWidth && recycled.height == safeHeight) {
-                recycled.clear()
-                return recycled
+        val recycled =
+            synchronized(pool) {
+                var match: PixelBuffer? = null
+                while (match == null) {
+                    val candidate = pool.poll() ?: break
+                    retainedBytes = (retainedBytes - candidate.size.toLong() * Int.SIZE_BYTES).coerceAtLeast(0L)
+                    if (candidate.width == safeWidth && candidate.height == safeHeight) {
+                        match = candidate
+                    }
+                }
+                match
             }
-            // Wrong size for this canvas: drop it and try the next candidate.
+        if (recycled != null) {
+            if (clear) recycled.clear()
+            return recycled
         }
+        return PixelBuffer(safeWidth, safeHeight)
     }
 
     /**
-     * Returns [buffer] to the pool for reuse, or discards it when the pool is full.
+     * Returns [buffer] to the pool for reuse, or discards it when the pool is full or its byte
+     * budget would be exceeded.
      *
      * Returns `true` when the buffer was pooled and `false` when it was discarded; either way the
      * caller must stop using the buffer afterwards — a later [obtain] hands it to another owner.
      */
-    fun release(buffer: PixelBuffer): Boolean = pool.offer(buffer)
+    fun release(buffer: PixelBuffer): Boolean {
+        val bytes = buffer.size.toLong() * Int.SIZE_BYTES
+        return synchronized(pool) {
+            if (retainedBytes + bytes > maxBytes) return@synchronized false
+            val accepted = pool.offer(buffer)
+            if (accepted) retainedBytes += bytes
+            accepted
+        }
+    }
 
-    /** Drops every pooled buffer immediately (called when the compositor is disposed). */
+    /** Drops every pooled buffer immediately (called when the compositor is disposed or memory is trimmed). */
     fun clear() {
-        pool.clear()
+        synchronized(pool) {
+            pool.clear()
+            retainedBytes = 0L
+        }
     }
 
     companion object {
         /** Enough buffers for a typical multi-layer composite pass to stay allocation-free. */
         const val DEFAULT_CAPACITY: Int = 8
+
+        /** 32 MiB idle cap so 4K/8K canvases do not pin hundreds of megabytes between frames. */
+        const val DEFAULT_MAX_BYTES: Long = 32L * 1024L * 1024L
     }
 }
 

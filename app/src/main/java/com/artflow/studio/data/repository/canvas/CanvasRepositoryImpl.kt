@@ -3250,8 +3250,15 @@ class CanvasRepositoryImpl
         /** First-point identity also excludes old preview snapshots after a document reuses an id. */
         private val cacheableStrokes = ConcurrentHashMap<Long, StrokePoint>()
 
-        /** The layers below the one being painted, composited once per area while a stroke goes on. */
-        private val belowCache = TileCache()
+        /** The layers below the one being painted, composited once per tile while a stroke goes on. */
+        private val belowCache =
+            TileCache(
+                maxBytes =
+                    minOf(
+                        TileCache.DEFAULT_MAX_BYTES,
+                        (Runtime.getRuntime().maxMemory() / BELOW_CACHE_HEAP_SHARE).coerceAtLeast(1L),
+                    ),
+            )
 
         private class PreviewRequest(
             val snapshot: PreviewSnapshot,
@@ -3278,9 +3285,6 @@ class CanvasRepositoryImpl
         }
 
         private fun belowKeyFor(layerId: Long): List<Any?>? {
-            // The cache is a canvas-sized image; skip it where that would crowd the heap.
-            val cacheBytes = canvasWidth.toLong() * canvasHeight * BYTES_PER_PIXEL
-            if (cacheBytes > Runtime.getRuntime().maxMemory() / BELOW_CACHE_HEAP_SHARE) return null
             val layers = currentLayers()
             val index = layers.indexOfFirst { it.id == layerId }
             val layer = layers.getOrNull(index) ?: return null
@@ -4246,6 +4250,18 @@ class CanvasRepositoryImpl
 
         private fun emitAsync(event: CanvasInvalidationEvent) {
             coroutineScope.launch { invalidationFlow.emit(event) }
+        }
+
+        override fun trimMemory() {
+            belowCache.release()
+            compositor.release()
+            if (previewMutex.tryLock()) {
+                try {
+                    previewCache.invalidate()
+                } finally {
+                    previewMutex.unlock()
+                }
+            }
         }
 
         override fun dispose() {

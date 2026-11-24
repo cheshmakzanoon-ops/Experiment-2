@@ -5,6 +5,7 @@ import com.artflow.studio.core.pixels.Channels
 import com.artflow.studio.core.pixels.ImageFilters
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.PixelBufferPool
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.Stamping
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -45,16 +46,11 @@ class StrokeRasterizer(
     private val originY: Int = 0,
 ) {
     /**
-     * Scratch buffer reused across strokes (transparent; allocated on demand).
-     *
-     * The rasteriser runs on the GL thread while the repository composites on worker dispatchers,
-     * so the scratch must be per-thread: a single shared field once handed one thread a buffer
-     * another thread had already cleared or sized for a different canvas.
+     * Bounded pool of scratch buffers reused across strokes. Unlike a [ThreadLocal], a shared
+     * bounded pool never leaks permanent full-canvas buffers on worker threads and [release]
+     * immediately frees memory allocated by every thread.
      */
-    private val scratch: ThreadLocal<PixelBuffer?> = ThreadLocal.withInitial { null }
-
-    /** Second scratch for a dual brush's other brush, also per thread. */
-    private val dualScratch: ThreadLocal<PixelBuffer?> = ThreadLocal.withInitial { null }
+    private val scratchPool = PixelBufferPool(maxCapacity = SCRATCH_POOL_CAPACITY, maxBytes = SCRATCH_POOL_MAX_BYTES)
 
     /** Statistics from the last rasterisation, for the performance panel. */
     @Volatile
@@ -95,13 +91,20 @@ class StrokeRasterizer(
             return
         }
 
-        val buffer = scratchFor(scratch, target.width, target.height)
         val reach = StrokeReach.bounds(points, params, target.width, target.height)
-        clear(buffer, reach)
-        drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
-        val dual = params.dual?.let { drawDual(target, stroke, it, reach) }
-        depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)), dual)
-        lastDabCount = dabCount.get()
+        if (reach.isEmpty) return
+        val buffer = scratchPool.obtain(target.width, target.height, clear = false)
+        var dual: DualMarks? = null
+        try {
+            clear(buffer, reach)
+            drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
+            dual = params.dual?.let { drawDual(target, stroke, it, reach) }
+            depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)), dual)
+            lastDabCount = dabCount.get()
+        } finally {
+            dual?.let { scratchPool.release(it.marks) }
+            scratchPool.release(buffer)
+        }
     }
 
     /** How a stroke's coverage becomes paint on its layer. */
@@ -124,19 +127,92 @@ class StrokeRasterizer(
         reach: IntBounds,
         how: Deposit,
         dual: DualMarks? = null,
+        srcOffsetX: Int = 0,
+        srcOffsetY: Int = 0,
     ) {
+        val targetPixels = target.pixels
+        val bufferPixels = buffer.pixels
+        val targetWidth = target.width
+        val bufferWidth = buffer.width
+        val mode = how.params.blendMode
+        val isNormal = mode == BlendMode.NORMAL || mode == BlendMode.PASS_THROUGH
+        val isSimple =
+            dual == null &&
+                how.mask == null &&
+                how.texture == null &&
+                how.wetEdges <= 0f &&
+                how.burntEdges <= 0f &&
+                isNormal
+
+        if (isSimple) {
+            depositSimpleCoverage(target, buffer, reach, how, srcOffsetX, srcOffsetY)
+            return
+        }
+
         val grainX = how.grain.first
         val grainY = how.grain.second
+        val texture = how.texture
+        val mask = how.mask
+        val maskMatches = mask != null && mask.width == targetWidth && mask.height == target.height
+        val wetEdges = how.wetEdges
+        val burntEdges = how.burntEdges
+        val strokeAlpha = how.strokeAlpha
+        val params = how.params
+        val alphaLock = how.alphaLock
         for (y in reach.top..reach.bottom) {
-            for (i in y * target.width + reach.left..y * target.width + reach.right) {
-                val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
+            val dstRow = y * targetWidth
+            val srcRow = (y + srcOffsetY) * bufferWidth + srcOffsetX
+            val canvasY = originY + y
+            for (x in reach.left..reach.right) {
+                val dstIndex = dstRow + x
+                val srcIndex = srcRow + x
+                val canvasX = originX + x
+                val source = dual?.combine(bufferPixels[srcIndex], srcIndex, canvasX, canvasY) ?: bufferPixels[srcIndex]
                 if ((source ushr 24) == 0) continue
-                val coverage = selectionCoverage(how.mask, target, i)
-                val grain = how.texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val effective = how.strokeAlpha * coverage * grainFactor(source, grain, how.params) * wetEdgeFactor(source, how.wetEdges)
+                val coverage =
+                    when {
+                        mask == null -> 1f
+                        maskMatches -> mask.alphaAt(dstIndex)
+                        else -> mask.coverageAt(x, y) / 255f
+                    }
+                val grain = texture?.coverage(canvasX - grainX, canvasY - grainY) ?: 1f
+                val effective = strokeAlpha * coverage * grainFactor(source, grain, params) * wetEdgeFactor(source, wetEdges)
                 if (effective <= 0f) continue
-                val paint = Channels.scaleAlpha(burnt(source, how.burntEdges), effective)
-                target.pixels[i] = deposit(target.pixels[i], paint, how.params, how.alphaLock)
+                val paint = Channels.scaleAlpha(burnt(source, burntEdges), effective)
+                targetPixels[dstIndex] = deposit(targetPixels[dstIndex], paint, params, alphaLock)
+            }
+        }
+    }
+
+    private fun depositSimpleCoverage(
+        target: PixelBuffer,
+        buffer: PixelBuffer,
+        reach: IntBounds,
+        how: Deposit,
+        srcOffsetX: Int,
+        srcOffsetY: Int,
+    ) {
+        val targetPixels = target.pixels
+        val targetWidth = target.width
+        val bufferPixels = buffer.pixels
+        val bufferWidth = buffer.width
+        val fullAlpha = how.strokeAlpha >= 1f
+        val alphaLock = how.alphaLock
+        val strokeAlpha = how.strokeAlpha
+        for (y in reach.top..reach.bottom) {
+            val dstRow = y * targetWidth
+            val srcRow = (y + srcOffsetY) * bufferWidth + srcOffsetX
+            for (x in reach.left..reach.right) {
+                val source = bufferPixels[srcRow + x]
+                if ((source ushr 24) == 0) continue
+                val paint = if (fullAlpha) source else Channels.scaleAlpha(source, strokeAlpha)
+                val dstIndex = dstRow + x
+                targetPixels[dstIndex] =
+                    if (alphaLock) {
+                        BlendModes.sourceAtop(targetPixels[dstIndex], paint)
+                    } else {
+                        BlendModes.sourceOver(targetPixels[dstIndex], paint)
+                    }
             }
         }
     }
@@ -194,35 +270,30 @@ class StrokeRasterizer(
         val bottom = min(covered.bottom, originY + target.height - 1)
         if (right < left || bottom < top) return
         // The closing dab belongs to this frame only: it is stamped where a full redraw stamps it,
-        // with a copy of the random, and the pixels it covered are put back afterwards.
+        // with a copy of the random, deposited directly from [coverage], and restored afterwards.
         val end = StrokeReach.bounds(listOf(points.last()), params, coverage.width, coverage.height)
         // A closing dab far off the canvas reaches no pixels, and then there is nothing to keep.
         val kept = if (end.isEmpty) null else coverage.crop(end)
         val carried = live.walk.carried
-        stampEnd(DabContext(coverage, stroke, params, 0f, false, null, live.random.copy(), tip, canvas), points.takeLast(2), live.walk)
-        live.walk.carried = carried
-        val reach = IntBounds(left - originX, top - originY, right - originX, bottom - originY)
-        val buffer = scratchFor(scratch, target.width, target.height)
-        for (y in top..bottom) {
-            System.arraycopy(
-                coverage.pixels,
-                y * coverage.width + left,
-                buffer.pixels,
-                (y - originY) * target.width + reach.left,
-                reach.width,
+        try {
+            stampEnd(DabContext(coverage, stroke, params, 0f, false, null, live.random.copy(), tip, canvas), points.takeLast(2), live.walk)
+            val reach = IntBounds(left - originX, top - originY, right - originX, bottom - originY)
+            depositCoverage(
+                target = target,
+                buffer = coverage,
+                reach = reach,
+                how = Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points, canvasCoordinates = true)),
+                srcOffsetX = originX,
+                srcOffsetY = originY,
             )
-        }
-        if (kept != null) {
-            for (y in end.top..end.bottom) {
-                System.arraycopy(kept.pixels, (y - end.top) * kept.width, coverage.pixels, y * coverage.width + end.left, kept.width)
+        } finally {
+            live.walk.carried = carried
+            if (kept != null) {
+                for (y in end.top..end.bottom) {
+                    System.arraycopy(kept.pixels, (y - end.top) * kept.width, coverage.pixels, y * coverage.width + end.left, kept.width)
+                }
             }
         }
-        depositCoverage(
-            target,
-            buffer,
-            reach,
-            Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points, canvasCoordinates = true)),
-        )
     }
 
     /** Merges [paint] into [backdrop] with the brush's blend mode; alpha lock keeps the backdrop's alpha. */
@@ -283,38 +354,65 @@ class StrokeRasterizer(
         mask: SelectionMask?,
         random: Random,
     ) {
-        val buffer = scratchFor(scratch, target.width, target.height)
         val reach = StrokeReach.bounds(points, params, target.width, target.height)
-        clear(buffer, reach)
-        // Erasing depends on brush coverage, never on the selected ink color's alpha.
-        val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
-        drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
-        val dual = params.dual?.let { drawDual(target, eraseShape, it, reach) }
-        val texture = BrushTexture.from(params)
-        val (grainX, grainY) = grainOrigin(params, points)
+        if (reach.isEmpty) return
+        val buffer = scratchPool.obtain(target.width, target.height, clear = false)
+        var dual: DualMarks? = null
+        try {
+            clear(buffer, reach)
+            // Erasing depends on brush coverage, never on the selected ink color's alpha.
+            val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
+            drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
+            dual = params.dual?.let { drawDual(target, eraseShape, it, reach) }
+            val how = Deposit(params, strokeAlpha, mask, alphaLock = false, grain = grainOrigin(params, points))
+            applyEraseCoverage(target, buffer, reach, how, dual)
+            lastDabCount = dabCount.get()
+        } finally {
+            dual?.let { scratchPool.release(it.marks) }
+            scratchPool.release(buffer)
+        }
+    }
+
+    private fun applyEraseCoverage(
+        target: PixelBuffer,
+        buffer: PixelBuffer,
+        reach: IntBounds,
+        how: Deposit,
+        dual: DualMarks?,
+    ) {
+        val texture = how.texture
+        val grainX = how.grain.first
+        val grainY = how.grain.second
+        val targetPixels = target.pixels
+        val bufferPixels = buffer.pixels
+        val targetWidth = target.width
+        val mask = how.mask
+        val maskMatches = mask != null && mask.width == targetWidth && mask.height == target.height
         for (y in reach.top..reach.bottom) {
-            for (i in y * target.width + reach.left..y * target.width + reach.right) {
-                val source = dual?.combine(buffer.pixels[i], i, originX + i % target.width, originY + i / target.width) ?: buffer.pixels[i]
-                val sourceCoverage = ((source ushr 24) and 0xFF) / 255f
-                if (sourceCoverage <= 0f) continue
-                val selectionCoverage = selectionCoverage(mask, target, i)
+            val row = y * targetWidth
+            val canvasY = originY + y
+            for (x in reach.left..reach.right) {
+                val i = row + x
+                val canvasX = originX + x
+                val source = dual?.combine(bufferPixels[i], i, canvasX, canvasY) ?: bufferPixels[i]
+                val sourceAlpha = source ushr 24
+                val destination = targetPixels[i]
+                val destinationAlpha = destination ushr 24
+                if (sourceAlpha == 0 || destinationAlpha == 0) continue
+                val selectionCoverage =
+                    when {
+                        mask == null -> 1f
+                        maskMatches -> mask.alphaAt(i)
+                        else -> mask.coverageAt(x, y) / 255f
+                    }
                 if (selectionCoverage <= 0f) continue
-                val grain = texture?.coverage(originX + i % target.width - grainX, originY + i / target.width - grainY) ?: 1f
-                val erase = (strokeAlpha * sourceCoverage * selectionCoverage * grainFactor(source, grain, params)).coerceIn(0f, 1f)
-                val destination = target.pixels[i]
-                val destinationAlpha = (destination ushr 24) and 0xFF
-                if (destinationAlpha == 0) continue
+                val sourceCoverage = sourceAlpha / 255f
+                val grain = texture?.coverage(canvasX - grainX, canvasY - grainY) ?: 1f
+                val erase = (how.strokeAlpha * sourceCoverage * selectionCoverage * grainFactor(source, grain, how.params)).coerceIn(0f, 1f)
                 val outAlpha = (destinationAlpha * (1f - erase)).roundToInt().coerceIn(0, 255)
-                target.pixels[i] =
-                    Channels.argb(
-                        outAlpha,
-                        (destination shr 16) and 0xFF,
-                        (destination shr 8) and 0xFF,
-                        destination and 0xFF,
-                    )
+                targetPixels[i] = (outAlpha shl 24) or (destination and 0x00FFFFFF)
             }
         }
-        lastDabCount = dabCount.get()
     }
 
     private fun drawStrokeInto(
@@ -828,31 +926,6 @@ class StrokeRasterizer(
         }
     }
 
-    private fun selectionCoverage(
-        mask: SelectionMask?,
-        target: PixelBuffer,
-        index: Int,
-    ): Float =
-        if (mask == null) {
-            1f
-        } else if (mask.width == target.width && mask.height == target.height) {
-            mask.alphaAt(index)
-        } else {
-            mask.coverageAt(index % target.width, index / target.width) / 255f
-        }
-
-    private fun scratchFor(
-        slot: ThreadLocal<PixelBuffer?>,
-        width: Int,
-        height: Int,
-    ): PixelBuffer {
-        val existing = slot.get()
-        if (existing != null && existing.width == width && existing.height == height) return existing
-        val created = PixelBuffer(width, height)
-        slot.set(created)
-        return created
-    }
-
     /** Draws a dual brush's second brush along the same path, with its own seed, size and grain. */
     private fun drawDual(
         target: PixelBuffer,
@@ -861,18 +934,26 @@ class StrokeRasterizer(
         reach: IntBounds,
     ): DualMarks {
         val params = dual.params.copy(opacity = 1f, dual = null, wetMix = 0f)
-        val marks = scratchFor(dualScratch, target.width, target.height)
-        // [reach] already covers the second brush; marks are read only inside it.
-        clear(marks, reach)
-        drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
-        return DualMarks(
-            dual.mode,
-            marks,
-            BrushTexture.from(params),
-            dual.params.opacity,
-            grainOrigin(params, stroke.points),
-            params.grainBlend,
-        )
+        val marks = scratchPool.obtain(target.width, target.height, clear = false)
+        var completed = false
+        try {
+            // [reach] already covers the second brush; marks are read only inside it.
+            clear(marks, reach)
+            drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
+            val result =
+                DualMarks(
+                    dual.mode,
+                    marks,
+                    BrushTexture.from(params),
+                    dual.params.opacity,
+                    grainOrigin(params, stroke.points),
+                    params.grainBlend,
+                )
+            completed = true
+            return result
+        } finally {
+            if (!completed) scratchPool.release(marks)
+        }
     }
 
     /** The second brush's marks, combined with the main brush's coverage pixel by pixel. */
@@ -916,13 +997,15 @@ class StrokeRasterizer(
         }
     }
 
-    /** Releases this thread's scratch buffers (called when the canvas is disposed). */
+    /** Releases all pooled scratch buffers across all threads (called on dispose or memory trim). */
     fun release() {
-        scratch.remove()
-        dualScratch.remove()
+        scratchPool.clear()
     }
 
     companion object {
+        private const val SCRATCH_POOL_CAPACITY = 2
+        private const val SCRATCH_POOL_MAX_BYTES = 16L * 1024L * 1024L
+
         /**
          * Whether [stroke] can be drawn live: dabs that never change once stamped. Taper depends on
          * the finished length, a second brush and the eraser keep their own buffers, and a zero

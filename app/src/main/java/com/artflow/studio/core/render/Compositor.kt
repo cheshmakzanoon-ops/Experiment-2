@@ -532,6 +532,27 @@ class Compositor(
                 )
         }
 
+        val layer = input.layer
+        val directRaster =
+            raster != null &&
+                input.strokes.isEmpty() &&
+                layer.filterType == null &&
+                !(layer.maskEnabled && input.mask != null) &&
+                layer.effects == null
+        if (directRaster) {
+            val scale =
+                min(
+                    size.toFloat() / raster.width.coerceAtLeast(1),
+                    size.toFloat() / raster.height.coerceAtLeast(1),
+                ).coerceAtMost(1f)
+            if (scale < 1f) {
+                return raster.scaled(
+                    (raster.width * scale).roundToInt().coerceAtLeast(1),
+                    (raster.height * scale).roundToInt().coerceAtLeast(1),
+                )
+            }
+        }
+
         val content = renderLayerContent(target, contentWidth, contentHeight) ?: return null
 
         val scale =
@@ -539,13 +560,14 @@ class Compositor(
                 size.toFloat() / content.width.coerceAtLeast(1),
                 size.toFloat() / content.height.coerceAtLeast(1),
             ).coerceAtMost(1f)
-        return if (scale >= 1f) {
-            content
-        } else {
+        if (scale >= 1f) return content
+        return try {
             content.scaled(
                 (content.width * scale).roundToInt().coerceAtLeast(1),
                 (content.height * scale).roundToInt().coerceAtLeast(1),
             )
+        } finally {
+            bufferPool.release(content)
         }
     }
 

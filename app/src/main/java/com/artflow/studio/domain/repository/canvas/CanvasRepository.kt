@@ -781,6 +781,9 @@ interface CanvasRepository {
     /** Redo the most recently undone operation. */
     fun redo(): Boolean
 
+    /** Releases transient render/tile caches under OS memory pressure without altering document state. */
+    fun trimMemory() = Unit
+
     /** Releases caches. The repository is a singleton, so this only frees memory. */
     fun dispose()
 }
