@@ -32,8 +32,8 @@ object GltfPbrExport {
             val row = y * width
             for (x in 0 until width) {
                 val idx = row + x
-                val m = if (metallic != null && x < metallic.width && y < metallic.height) metallic.get(x, y) and 0xFF else defaultM
-                val r = if (roughness != null && x < roughness.width && y < roughness.height) roughness.get(x, y) and 0xFF else defaultR
+                val m = if (metallic != null && x < metallic.width && y < metallic.height) metallic.getSafe(x, y) and 0xFF else defaultM
+                val r = if (roughness != null && x < roughness.width && y < roughness.height) roughness.getSafe(x, y) and 0xFF else defaultR
                 out.pixels[idx] = Channels.argb(255, 0, r, m)
             }
         }

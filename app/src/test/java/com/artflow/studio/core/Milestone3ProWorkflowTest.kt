@@ -45,15 +45,15 @@ class Milestone3ProWorkflowTest {
         val rasterizer = StrokeRasterizer()
         val canvas = rasterizer.rasterize(wrapped, 64, 64)
         // Painted at top-left (2, 2) must seamlessly appear at bottom-right (63, 63).
-        assertNotEquals(0, canvas.get(2, 2) ushr 24)
-        assertNotEquals(0, canvas.get(63, 63) ushr 24)
-        assertNotEquals(0, canvas.get(63, 2) ushr 24)
-        assertNotEquals(0, canvas.get(2, 63) ushr 24)
+        assertNotEquals(0, canvas.getSafe(2, 2) ushr 24)
+        assertNotEquals(0, canvas.getSafe(63, 63) ushr 24)
+        assertNotEquals(0, canvas.getSafe(63, 2) ushr 24)
+        assertNotEquals(0, canvas.getSafe(2, 63) ushr 24)
 
         val preview = SeamlessTiling.renderTiledPreview(canvas, SeamlessTileMode.BOTH, tilesX = 3, tilesY = 3)
         assertEquals(192, preview.width)
         assertEquals(192, preview.height)
-        assertEquals(canvas.get(2, 2), preview.get(66, 66))
+        assertEquals(canvas.getSafe(2, 2), preview.getSafe(66, 66))
 
         // Coordinate wrap helper
         val (wx, wy) = SeamlessTiling.wrapPoint(-4f, 70f, 64, 64, SeamlessTileMode.BOTH)
@@ -104,7 +104,10 @@ class Milestone3ProWorkflowTest {
         val overrides = KeyboardShortcuts.withOverride(emptyMap(), ShortcutAction.TOOL_BRUSH, customChord)
 
         assertEquals(ShortcutAction.TOOL_BRUSH, KeyboardShortcuts.actionFor(customChord, overrides))
-        assertNull("Old default 'b' should no longer trigger TOOL_BRUSH when overridden", KeyboardShortcuts.actionFor(KeyChord("b"), overrides))
+        assertNull(
+            "Old default 'b' should no longer trigger TOOL_BRUSH when overridden",
+            KeyboardShortcuts.actionFor(KeyChord("b"), overrides),
+        )
         assertEquals(listOf(customChord), KeyboardShortcuts.chordsFor(ShortcutAction.TOOL_BRUSH, overrides))
 
         // Reassigning the same chord to TOOL_ERASER evicts TOOL_BRUSH cleanly.

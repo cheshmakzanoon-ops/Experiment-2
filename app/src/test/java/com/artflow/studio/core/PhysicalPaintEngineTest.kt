@@ -85,11 +85,11 @@ class PhysicalPaintEngineTest {
         val plane = PhysicalPaintPlane(48, 48)
         for (y in 12 until 36) {
             for (x in 12 until 24) {
-                buffer.set(x, y, blue)
+                buffer.setSafe(x, y, blue)
                 plane.setCell(x, y, wetness = 0.95f, impasto = 0f, pigment = 0.8f)
             }
             for (x in 24 until 36) {
-                buffer.set(x, y, yellow)
+                buffer.setSafe(x, y, yellow)
                 plane.setCell(x, y, wetness = 0.95f, impasto = 0f, pigment = 0.8f)
             }
         }
@@ -106,7 +106,7 @@ class PhysicalPaintEngineTest {
             gravityY = 0.2f,
             iterations = 3,
         )
-        val boundary = buffer.get(24, 24)
+        val boundary = buffer.getSafe(24, 24)
         assertNotEquals("Expected wet boundary pixel to diffuse", yellow, boundary)
         assertTrue("Wetness should evaporate gradually during diffusion", plane.wetnessAt(24, 24) < 0.95f)
     }

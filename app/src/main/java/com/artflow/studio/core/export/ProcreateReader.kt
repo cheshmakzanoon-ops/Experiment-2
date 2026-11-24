@@ -76,6 +76,7 @@ object ProcreateReader {
         val animationFrameHold: Int = 1,
         val animationIsBackground: Boolean = false,
         val animationIsForeground: Boolean = false,
+        val textPayload: String? = null,
     ) : Node
 
     class Group(
@@ -298,6 +299,7 @@ object ProcreateReader {
             animationFrameHold = frameHold,
             animationIsBackground = isAnimBg,
             animationIsForeground = isAnimFg,
+            textPayload = archive.string(item["artflowTextPayload"]),
         )
     }
 

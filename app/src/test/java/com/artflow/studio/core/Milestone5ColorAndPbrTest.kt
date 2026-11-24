@@ -30,7 +30,7 @@ class Milestone5ColorAndPbrTest {
                 IccColorManager.WorkingSpace.SRGB,
                 IccColorManager.WorkingSpace.CMYK_SWOP_V2,
             )
-        assertNotEquals("CMYK conversion must actually alter out-of-gamut pixels", brightCyan, converted.get(4, 4))
+        assertNotEquals("CMYK conversion must actually alter out-of-gamut pixels", brightCyan, converted.getSafe(4, 4))
 
         val warning =
             IccColorManager.gamutWarningMask(
@@ -39,7 +39,7 @@ class Milestone5ColorAndPbrTest {
                 IccColorManager.WorkingSpace.CMYK_SWOP_V2,
                 threshold = 10,
             )
-        assertNotEquals("Out-of-gamut neon cyan should trigger gamut warning", 0, warning.get(4, 4) ushr 24)
+        assertNotEquals("Out-of-gamut neon cyan should trigger gamut warning", 0, warning.getSafe(4, 4) ushr 24)
     }
 
     @Test
@@ -85,10 +85,10 @@ class Milestone5ColorAndPbrTest {
             radius = 8f,
             dab = PbrLighting.MultiChannelDab(0xFFCC8822.toInt(), metallic = 0.9f, roughness = 0.2f, normalBumpStrength = 0.8f),
         )
-        assertNotEquals(0, color.get(16, 16) ushr 24)
-        assertTrue((metallic.get(16, 16) and 0xFF) > 180)
-        assertTrue((roughness.get(16, 16) and 0xFF) < 90)
-        assertNotEquals(PbrLighting.encodeNormal(Vec3(0f, 0f, 1f)), normalMap.get(20, 16))
+        assertNotEquals(0, color.getSafe(16, 16) ushr 24)
+        assertTrue((metallic.getSafe(16, 16) and 0xFF) > 180)
+        assertTrue((roughness.getSafe(16, 16) and 0xFF) < 90)
+        assertNotEquals(PbrLighting.encodeNormal(Vec3(0f, 0f, 1f)), normalMap.getSafe(20, 16))
     }
 
     @Test

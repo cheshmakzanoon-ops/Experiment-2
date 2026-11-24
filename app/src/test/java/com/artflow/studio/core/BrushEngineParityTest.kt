@@ -84,8 +84,19 @@ class BrushEngineParityTest {
                 brightnessJitter = 0.15f,
                 darknessJitter = 0.72f,
             )
-        val archive = ProcreateBrushWriter.writeBrush("Asymmetric Jitter", original)
-        val imported = ProcreateBrush.read(archive).parameters
+        val zipBytes = ProcreateBrushWriter.brush(ProcreateBrushWriter.Brush("Asymmetric Jitter", original))
+        var archiveBytes: ByteArray? = null
+        java.util.zip.ZipInputStream(java.io.ByteArrayInputStream(zipBytes)).use { zin ->
+            var entry = zin.nextEntry
+            while (entry != null) {
+                if (entry.name.endsWith("Brush.archive")) {
+                    archiveBytes = zin.readBytes()
+                    break
+                }
+                entry = zin.nextEntry
+            }
+        }
+        val imported = ProcreateBrush.read(requireNotNull(archiveBytes)).parameters
         assertEquals(0.15f, imported.brightnessJitter, 0.01f)
         assertEquals(0.72f, imported.effectiveDarknessJitter, 0.01f)
     }
@@ -117,7 +128,7 @@ class BrushEngineParityTest {
         val canvas = PixelBuffer(32, 32)
         for (y in 0 until 32) {
             for (x in 0 until 32) {
-                canvas.set(x, y, if (x < 16) blue else 0xFF22CC44.toInt())
+                canvas.setSafe(x, y, if (x < 16) blue else 0xFF22CC44.toInt())
             }
         }
         val sample = WetBrushPickup.Sample(16f, 16f, 1f, 0f, 10f, 0.8f)
@@ -154,7 +165,7 @@ class BrushEngineParityTest {
         fun runSmudge(curve: PressureMapping): PixelBuffer {
             val buf = PixelBuffer(40, 20)
             for (y in 0 until 20) {
-                for (x in 0 until 15) buf.set(x, y, midRed)
+                for (x in 0 until 15) buf.setSafe(x, y, midRed)
             }
             val brush =
                 BrushParams(
@@ -176,8 +187,8 @@ class BrushEngineParityTest {
 
         val withPull = runSmudge(flatOne)
         val noPull = runSmudge(flatZero)
-        assertNotEquals(0, withPull.get(22, 10) ushr 24)
-        assertEquals(0, noPull.get(22, 10) ushr 24)
+        assertNotEquals(0, withPull.getSafe(22, 10) ushr 24)
+        assertEquals(0, noPull.getSafe(22, 10) ushr 24)
     }
 
     @Test

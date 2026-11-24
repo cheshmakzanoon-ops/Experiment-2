@@ -36,7 +36,7 @@ class Milestone4Gles3PipelineTest {
         }
         val out = PixelBuffer(16, 16)
         tile.resolveTo8Bit(out, dither = false)
-        val alpha = (out.get(8, 8) ushr 24) and 0xFF
+        val alpha = (out.getSafe(8, 8) ushr 24) and 0xFF
         // Expected analytical alpha: 1 - (1 - 0.015)^30 ≈ 0.3646 -> ~93/255
         assertTrue("Expected smooth float buildup (~93), got $alpha", alpha in 88..98)
 
@@ -67,7 +67,7 @@ class Milestone4Gles3PipelineTest {
         gles3Backend.uploadDirtyTiles(layer, listOf(0))
         val target = PixelBuffer(32, 32)
         gles3Backend.compositeLayers(listOf(layer), target)
-        assertTrue((target.get(16, 16) ushr 24) in 120..136)
+        assertTrue((target.getSafe(16, 16) ushr 24) in 120..136)
         gles3Backend.release()
         assertFalse(gles3Backend.isContextInitialized)
     }
