@@ -155,30 +155,15 @@ fun StudioBrushLibrary(
     val scope = rememberCoroutineScope()
     val matches =
         remember(query, category, saved, favourites, sets, recent) {
-            // Recent, Favourites and the artist's own sets gather brushes from every category.
-            val chosen =
-                when (category) {
-                    RECENT -> recent.toSet()
-                    FAVOURITES -> favourites
-                    else -> sets[category]?.toSet()
-                }
-            val originals = StudioBrushes.search(query, if (chosen != null) "All" else category)
-            val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-            val own =
-                saved
-                    .filter { brush ->
-                        val shown = category == "All" || category == "Saved" || chosen != null
-                        shown && words.all { brush.name.contains(it, ignoreCase = true) }
-                    }.map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
-            val found = (own + originals).filter { chosen == null || it.id in chosen }
-            // Recent lists the brush used last first.
-            if (category == RECENT) found.sortedBy { recent.indexOf(it.id) } else found
+            filterStudioBrushes(query, category, saved, favourites, sets, recent)
         }
     val categories =
         if (library == null) {
-            StudioBrushes.categories
+            listOf("All", "Physical Paint") + StudioBrushes.categories.drop(1)
         } else {
-            listOf("All", RECENT, FAVOURITES, "Saved") + sets.keys + StudioBrushes.categories.drop(1).filter { it !in sets }
+            listOf("All", RECENT, FAVOURITES, "Saved", "Physical Paint") +
+                sets.keys +
+                StudioBrushes.categories.drop(1).filter { it !in sets }
         }
     Column(
         modifier.focusRequester(focusSink).focusable().padding(horizontal = 16.dp),
@@ -348,6 +333,45 @@ private fun NewSetDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+private fun filterStudioBrushes(
+    query: String,
+    category: String,
+    saved: List<SavedBrush>,
+    favourites: Set<String>,
+    sets: Map<String, List<String>>,
+    recent: List<String>,
+): List<StudioBrushes.Preset> {
+    val chosen =
+        when (category) {
+            RECENT -> recent.toSet()
+            FAVOURITES -> favourites
+            else -> sets[category]?.toSet()
+        }
+    val originals = StudioBrushes.search(query, if (chosen != null || category == "Physical Paint") "All" else category)
+    val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    val showPhysical = category == "All" || category == "Physical Paint" || chosen != null
+    val physical =
+        if (!showPhysical) {
+            emptyList()
+        } else {
+            StudioBrushes.physicalPresets.filter { preset ->
+                words.all { preset.name.contains(it, ignoreCase = true) || preset.description.contains(it, ignoreCase = true) }
+            }
+        }
+    val showSaved = category == "All" || category == "Saved" || chosen != null
+    val own =
+        if (!showSaved) {
+            emptyList()
+        } else {
+            saved
+                .filter { brush -> words.all { brush.name.contains(it, ignoreCase = true) } }
+                .map { StudioBrushes.Preset("saved-${it.id}", it.name, "Saved", "Your saved brush", it.parameters) }
+        }
+    val combined = if (category == "Physical Paint") physical else (own + physical + originals)
+    val found = combined.filter { chosen == null || it.id in chosen }
+    return if (category == RECENT) found.sortedBy { recent.indexOf(it.id) } else found
 }
 
 private const val FAVOURITES = "Favourites"

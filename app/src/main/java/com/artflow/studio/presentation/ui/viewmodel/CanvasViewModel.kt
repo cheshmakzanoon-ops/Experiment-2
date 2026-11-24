@@ -1610,12 +1610,15 @@ class CanvasViewModel
             }
         }
 
+        val physicalStudio = PhysicalStudioController(canvasRepository, viewModelScope, editorErrors, ::refreshLayers)
+
         override fun onCleared() {
             super.onCleared()
             imports.cancel()
             loadJob?.cancel()
             observationJob?.cancel()
             autosaveJob?.cancel()
+            physicalStudio.cancelDiffusion()
             stopPlayback()
             canvasRepository.dispose()
         }

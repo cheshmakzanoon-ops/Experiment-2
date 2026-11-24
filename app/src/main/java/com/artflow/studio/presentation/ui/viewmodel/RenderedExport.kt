@@ -30,7 +30,7 @@ internal suspend fun renderedExport(
             resolved.format.needsLayers,
             preserveLayerMasks = resolved.format == ExportFormat.PSD || resolved.format == ExportFormat.PROCREATE,
             animationPlayback = allFrames && resolved.format.requiresAnimation,
-            includeMaterials = resolved.format == ExportFormat.MODEL_OBJ,
+            includeMaterials = resolved.format == ExportFormat.MODEL_OBJ || resolved.format == ExportFormat.MODEL_GLB,
         )
     val order = snapshot.frameOrder
     require(order.isNotEmpty()) { "No visible animated frames in the playback range" }
@@ -76,7 +76,8 @@ internal suspend fun renderedExport(
                 snapshot.materialMaps,
             )
         }
-    return if (snapshot.hasMaterialLayers && resolved.format != ExportFormat.MODEL_OBJ) {
+    val is3dExport = resolved.format == ExportFormat.MODEL_OBJ || resolved.format == ExportFormat.MODEL_GLB
+    return if (snapshot.hasMaterialLayers && !is3dExport) {
         result.map { exported ->
             exported.copy(
                 warning =

@@ -29,6 +29,7 @@ enum class ExportFormat(
     ARTFLOW("ArtFlow artwork (all layers and frames)", "artflow", "application/octet-stream"),
     PROCREATE("Procreate document (.procreate)", "procreate", "application/octet-stream"),
     MODEL_OBJ("3D model (OBJ, material and texture)", "zip", "application/zip"),
+    MODEL_GLB("3D model (glTF 2.0 PBR .glb)", "glb", "model/gltf-binary"),
     GIF("Animated GIF", "gif", "image/gif", requiresAnimation = true),
     MP4("MP4 video", "mp4", "video/mp4", requiresAnimation = true),
     APNG("Animated PNG", "png", "image/png", requiresAnimation = true),

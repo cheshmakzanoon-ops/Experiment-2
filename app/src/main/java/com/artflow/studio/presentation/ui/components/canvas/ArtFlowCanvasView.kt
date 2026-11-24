@@ -842,6 +842,11 @@ class ArtFlowCanvasView
             requestRender()
         }
 
+        fun setSeamlessTileMode(mode: com.artflow.studio.core.canvas.SeamlessTileMode) {
+            renderer.setSeamlessTileMode(mode)
+            requestRender()
+        }
+
         fun setOnionSkinEnabled(enabled: Boolean) {
             if (enabled == onionEnabled) return
             onionEnabled = enabled

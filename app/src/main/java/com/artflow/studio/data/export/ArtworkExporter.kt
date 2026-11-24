@@ -207,6 +207,15 @@ class ArtworkExporter
                                 buildModelZip(requireNotNull(model), flatten(prepared, options), options, materialMaps)
                             }
 
+                            ExportFormat.MODEL_GLB -> {
+                                com.artflow.studio.core.three.GltfPbrExport.exportGlb(
+                                    name = projectName,
+                                    baseColor = flatten(prepared, options),
+                                    metallic = materialMaps[com.artflow.studio.core.three.MaterialChannel.METALLIC],
+                                    roughness = materialMaps[com.artflow.studio.core.three.MaterialChannel.ROUGHNESS],
+                                )
+                            }
+
                             else -> {
                                 return@withContext Result.failure(
                                     ExportFailure(ExportError.UnsupportedFormat(options.format).message),

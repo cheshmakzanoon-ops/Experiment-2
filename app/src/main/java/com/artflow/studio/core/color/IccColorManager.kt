@@ -177,6 +177,19 @@ object IccColorManager {
         return out
     }
 
+    /** True when [argb] shifts by at least [threshold] RGB code values under CMYK [targetSpace]. */
+    fun isOutOfCmykGamut(
+        argb: Int,
+        targetSpace: WorkingSpace = WorkingSpace.CMYK_SWOP_V2,
+        threshold: Int = 24,
+    ): Boolean {
+        val converted = convertColor(argb, WorkingSpace.SRGB, targetSpace)
+        val dr = abs(((argb shr 16) and 0xFF) - ((converted shr 16) and 0xFF))
+        val dg = abs(((argb shr 8) and 0xFF) - ((converted shr 8) and 0xFF))
+        val db = abs((argb and 0xFF) - (converted and 0xFF))
+        return max(dr, max(dg, db)) >= threshold
+    }
+
     private fun blendArgb(
         a: Int,
         b: Int,

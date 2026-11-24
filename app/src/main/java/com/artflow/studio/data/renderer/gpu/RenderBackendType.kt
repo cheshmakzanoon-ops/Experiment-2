@@ -16,6 +16,12 @@ enum class RenderBackendType {
     GLES2,
 
     /**
+     * Hybrid OpenGL ES 3.0+ backend with Float16 tile accumulation and GLSL ES 3.00 shaders,
+     * falling back cleanly to [GLES2] when hardware extensions are unavailable.
+     */
+    GLES3,
+
+    /**
      * Experimental Vulkan preview backend identifier.
      * Non-shipping preview implementation backed by CPU [VirtualTileCanvas] compositing.
      */

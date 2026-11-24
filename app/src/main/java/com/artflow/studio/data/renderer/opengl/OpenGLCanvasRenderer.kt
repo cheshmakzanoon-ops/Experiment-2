@@ -93,6 +93,22 @@ class OpenGLCanvasRenderer
         private var dabVertexArray = FloatArray(0)
         private var dabVertexBuffer: FloatBuffer? = null
         private val frameMatrix = FloatArray(16)
+        private val tileMatrix = FloatArray(16)
+
+        @Volatile
+        private var seamlessTileMode: com.artflow.studio.core.canvas.SeamlessTileMode =
+            com.artflow.studio.core.canvas.SeamlessTileMode.NONE
+
+        @Volatile
+        var gles3Capabilities: com.artflow.studio.data.renderer.gles3.Gles3Capabilities =
+            com.artflow.studio.data.renderer.gles3
+                .Gles3Capabilities()
+            private set
+
+        fun setSeamlessTileMode(mode: com.artflow.studio.core.canvas.SeamlessTileMode) {
+            seamlessTileMode = mode
+        }
+
         private val regionCopyPaint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC) }
         private var retainedCanvas: Canvas? = null
 
@@ -341,6 +357,11 @@ class OpenGLCanvasRenderer
             var displayed = false
             if (compositeTextureSize != null) {
                 GLES20.glUniform4f(quadTintHandle, 1f, 1f, 1f, 1f)
+                val mode = seamlessTileMode
+                if (mode != com.artflow.studio.core.canvas.SeamlessTileMode.NONE) {
+                    drawSeamlessNeighbors(mode)
+                    GLES20.glUniformMatrix4fv(quadMatrixHandle, 1, false, frameMatrix, 0)
+                }
                 GLES20.glUniform1f(quadAlphaHandle, primaryAlpha)
                 drawQuad(compositeTexture, textureRepeat = false)
                 GLES20.glUniform1f(quadAlphaHandle, 1f)
@@ -349,6 +370,30 @@ class OpenGLCanvasRenderer
             previewState.presented(retainedCompositeGeneration, displayed)
             if (displayed && previewAvailability == CanvasPreviewAvailability.AVAILABLE) reportedUploadFailure = false
             if (!displayed) reportUploadFailure()
+        }
+
+        private fun drawSeamlessNeighbors(mode: com.artflow.studio.core.canvas.SeamlessTileMode) {
+            val wrapX =
+                mode == com.artflow.studio.core.canvas.SeamlessTileMode.HORIZONTAL ||
+                    mode == com.artflow.studio.core.canvas.SeamlessTileMode.BOTH
+            val wrapY =
+                mode == com.artflow.studio.core.canvas.SeamlessTileMode.VERTICAL ||
+                    mode == com.artflow.studio.core.canvas.SeamlessTileMode.BOTH
+            val xRange = if (wrapX) -1..1 else 0..0
+            val yRange = if (wrapY) -1..1 else 0..0
+            GLES20.glUniform1f(quadAlphaHandle, primaryAlpha * 0.72f)
+            for (dy in yRange) {
+                for (dx in xRange) {
+                    if (dx == 0 && dy == 0) continue
+                    val sx = dx * canvasWidth.toFloat()
+                    val sy = dy * canvasHeight.toFloat()
+                    frameMatrix.copyInto(tileMatrix)
+                    tileMatrix[12] = frameMatrix[12] + frameMatrix[0] * sx + frameMatrix[4] * sy
+                    tileMatrix[13] = frameMatrix[13] + frameMatrix[1] * sx + frameMatrix[5] * sy
+                    GLES20.glUniformMatrix4fv(quadMatrixHandle, 1, false, tileMatrix, 0)
+                    drawQuad(compositeTexture, textureRepeat = false)
+                }
+            }
         }
 
         /** Shows soft dabs where the pen is predicted to be; [points] are canvas x, y pairs. */

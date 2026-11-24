@@ -14,6 +14,7 @@ add_library(
     SHARED
     brush/native_brush_engine.cpp
     brush/brush_algorithms.cpp
+    brush/physical_paint_native.cpp
     renderer/gl_renderer_native.cpp
     filters/blur_filter.cpp
     filters/sharpen_filter.cpp

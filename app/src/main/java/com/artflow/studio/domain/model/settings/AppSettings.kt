@@ -152,9 +152,25 @@ data class AppSettings(
     val customPalettes: List<Palette> = emptyList(),
     /** Runtime diagnostic, not a preference: unreadable palette data is retained until backed up. */
     val paletteRecoveryRequired: Boolean = false,
+    /** Custom hardware keyboard shortcut overrides: ShortcutAction.name -> encoded KeyChord. */
+    val customShortcuts: Map<String, String> = emptyMap(),
 ) {
     /** True when a finger may paint. */
     val fingerPainting: Boolean get() = !stylusOnly
+
+    /** Decoded custom shortcut overrides ready for [com.artflow.studio.core.canvas.KeyboardShortcuts]. */
+    fun decodedShortcutOverrides(): Map<com.artflow.studio.core.canvas.ShortcutAction, com.artflow.studio.core.canvas.KeyChord> =
+        buildMap {
+            customShortcuts.forEach { (actionName, encoded) ->
+                val action =
+                    com.artflow.studio.core.canvas.ShortcutAction.entries
+                        .firstOrNull { it.name == actionName }
+                val chord =
+                    com.artflow.studio.core.canvas.KeyboardShortcuts
+                        .decodeChord(encoded)
+                if (action != null && chord != null) put(action, chord)
+            }
+        }
 }
 
 /** Prefs > Pressure and Smoothing, as one value the panel edits and the settings store. */
