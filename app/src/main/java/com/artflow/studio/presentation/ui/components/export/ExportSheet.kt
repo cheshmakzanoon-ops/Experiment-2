@@ -5,6 +5,8 @@
 
 package com.artflow.studio.presentation.ui.components.export
 
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -21,6 +23,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +55,13 @@ fun ExportSheet(
     val onClearTimelapse = actions.clearTimelapse
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+    val dismissKeyboard = {
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
+        val imm = view.context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(view.windowToken, 0)
+    }
     var options by remember {
         mutableStateOf(ExportOptions(format = availableFormats.firstOrNull() ?: ExportFormat.PNG, dpi = canvasDpi, gifLoop = animationLoop))
     }
@@ -153,8 +163,7 @@ fun ExportSheet(
         Button(
             onClick = {
                 // End filename editing before export changes the sheet's contents and scroll bounds.
-                focusManager.clearFocus()
-                keyboardController?.hide()
+                dismissKeyboard()
                 onExport(options.copy(fileName = options.fileName?.ifBlank { null }))
             },
             enabled = !running && safe && validArea && (!options.format.requiresAnimation || frameCount > 1),
@@ -184,8 +193,7 @@ fun ExportSheet(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
+                        dismissKeyboard()
                         onExportTimelapse()
                     },
                     enabled = !running,
