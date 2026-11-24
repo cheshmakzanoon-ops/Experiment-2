@@ -73,6 +73,9 @@ data class Layer(
     /** Omitted on ordinary layers so every historical signed document keeps its exact encoding. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val materialChannel: MaterialChannel = MaterialChannel.COLOR,
+    /** Optional sparse physical paint plane file (.afpp) for watercolor wetness & 3D impasto heightmap (v8+). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val physicalPaintFile: String? = null,
 ) {
     /**
      * Check if this layer can be edited
@@ -159,6 +162,7 @@ data class Layer(
             hasInMemoryMask = hasInMemoryMask,
             blendContract = if (blendMode == this.blendMode) this.blendContract else LayerBlendContract.STANDARD,
             materialChannel = this.materialChannel,
+            physicalPaintFile = this.physicalPaintFile,
         )
 }
 

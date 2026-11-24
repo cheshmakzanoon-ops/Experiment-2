@@ -288,7 +288,8 @@ object ProcreateBrushWriter {
         retain(params.tiltToRotation == imported.tiltToRotation, "shapeAzimuth", "oriented")
         retain(params.hueJitter == imported.hueJitter, "dynamicsJitterHue")
         retain(params.saturationJitter == imported.saturationJitter, "dynamicsJitterSaturation")
-        retain(params.brightnessJitter == imported.brightnessJitter, "dynamicsJitterLightness", "dynamicsJitterDarkness")
+        retain(params.brightnessJitter == imported.brightnessJitter, "dynamicsJitterLightness")
+        retain(params.effectiveDarknessJitter == imported.effectiveDarknessJitter, "dynamicsJitterDarkness")
         retain(params.sizeJitter == imported.sizeJitter, "dynamicsJitterSize")
         retain(params.opacityJitter == imported.opacityJitter, "dynamicsJitterOpacity")
         retain(params.secondaryPressure == imported.secondaryPressure, "dynamicsPressureSecondaryColor")
@@ -334,15 +335,22 @@ object ProcreateBrushWriter {
         source: Map<String, Any>,
     ): BrushParams {
         val decoded = ProcreateBrush.parameters(source)
-        // Versions zero and one rounded Count. Keep that historical interpretation only when
-        // deciding whether the artist edited a saved setting; never migrate existing stroke data.
-        val current =
+        // Versions zero and one rounded Count; versions zero through two collapsed lightness and darkness jitter.
+        // Keep those historical interpretations only when deciding whether the artist edited a saved setting.
+        var current =
             if (params.sourceImportVersion < COUNT_TRUNCATION_IMPORT_VERSION) {
                 val normalized = (source["shapeCount"] as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
                 decoded.copy(count = 1 + (normalized * (MAX_COUNT - 1)).roundToInt())
             } else {
                 decoded
             }
+        if (params.darknessJitter == null && params.sourceImportVersion < COUNT_TRUNCATION_IMPORT_VERSION) {
+            current =
+                current.copy(
+                    brightnessJitter = maxOf(current.brightnessJitter, current.effectiveDarknessJitter),
+                    darknessJitter = null,
+                )
+        }
         if (!isLegacySource(params)) return current
         return current.copy(
             pressureToOpacity = current.pressureToFlow,
@@ -426,6 +434,7 @@ object ProcreateBrushWriter {
             "dynamicsJitterHue" to unit(p.hueJitter),
             "dynamicsJitterSaturation" to unit(p.saturationJitter),
             "dynamicsJitterLightness" to unit(p.brightnessJitter),
+            "dynamicsJitterDarkness" to unit(p.effectiveDarknessJitter),
             "dynamicsJitterSize" to unit(p.sizeJitter),
             "dynamicsJitterOpacity" to unit(p.opacityJitter),
             "plotSmoothing" to unit(p.smoothing),

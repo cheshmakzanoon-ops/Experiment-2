@@ -20,6 +20,8 @@ object BrushLibraryCodec {
 
     /** Grains imported from photos; their tiles live beside the library. */
     private val IMPORTED_GRAIN = Regex("custom-[0-9a-f]{1,32}")
+    private val SOURCE_GRAIN = Regex("source-grain-[a-z0-9-]{1,40}")
+    private val SOURCE_SHAPE = Regex("source-shape-[a-z0-9-]{1,40}")
     private val AUXILIARY_CURVE_KEY = Regex("dynamicsPressure[A-Za-z0-9]{1,60}")
 
     // Native archives have 39 channels; four use ImportedPressure's dedicated fields.
@@ -111,10 +113,18 @@ object BrushLibraryCodec {
         require(params.count in 1..32 && params.scatter in 0f..4f) { "Unsupported brush scatter or dab count" }
         require(params.rotation in 0f..360f && params.textureRotation in 0f..360f) { "Unsupported brush rotation" }
         require(params.textureScale in 0.05f..8f) { "Unsupported grain scale" }
-        require(params.textureId in GRAIN_IDS || params.textureId?.matches(IMPORTED_GRAIN) == true) { "Unsupported grain source" }
+        require(
+            params.textureId in GRAIN_IDS ||
+                params.textureId?.matches(IMPORTED_GRAIN) == true ||
+                params.textureId?.matches(SOURCE_GRAIN) == true,
+        ) { "Unsupported grain source" }
         require(params.roundness in 0.05f..1f) { "Unsupported tip roundness" }
         require(params.wetEdges in 0f..1f) { "Unsupported wet edges" }
-        require(params.shapeId == null || params.shapeId.matches(IMPORTED_GRAIN)) { "Unsupported shape source" }
+        require(
+            params.shapeId == null ||
+                params.shapeId.matches(IMPORTED_GRAIN) ||
+                params.shapeId.matches(SOURCE_SHAPE),
+        ) { "Unsupported shape source" }
         params.dual?.let { dual ->
             require(dual.params.dual == null) { "A dual brush combines exactly two brushes" }
             validateParameters(dual.params)
@@ -129,6 +139,7 @@ object BrushLibraryCodec {
                 params.hueJitter,
                 params.saturationJitter,
                 params.brightnessJitter,
+                params.darknessJitter ?: 0f,
                 params.sizeJitter,
                 params.opacityJitter,
                 params.smoothing,
@@ -156,6 +167,9 @@ object BrushLibraryCodec {
                 params.secondaryJitter,
                 params.burntEdges,
                 params.grainDepth,
+                params.impastoThickness,
+                params.waterAmount,
+                params.granulation,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
         require(params.importedSourceScalars.size <= SourceBrushScalar.MAX_FIELDS) {

@@ -146,8 +146,66 @@ object KeyboardShortcuts {
     private val byChord: Map<KeyChord, ShortcutAction> = bindings.associate { it.chord to it.action }
 
     /** The action [chord] is bound to, or null when it is not a shortcut. */
-    fun actionFor(chord: KeyChord): ShortcutAction? = byChord[chord]
+    fun actionFor(
+        chord: KeyChord,
+        overrides: Map<ShortcutAction, KeyChord> = emptyMap(),
+    ): ShortcutAction? {
+        if (overrides.isEmpty()) return byChord[chord]
+        overrides.entries.firstOrNull { it.value == chord }?.let { return it.key }
+        val defaultAction = byChord[chord] ?: return null
+        return if (defaultAction in overrides) null else defaultAction
+    }
 
-    /** Every chord bound to [action], in table order. */
-    fun chordsFor(action: ShortcutAction): List<KeyChord> = bindings.filter { it.action == action }.map { it.chord }
+    /** Every chord bound to [action], in table order, respecting any custom [overrides]. */
+    fun chordsFor(
+        action: ShortcutAction,
+        overrides: Map<ShortcutAction, KeyChord> = emptyMap(),
+    ): List<KeyChord> {
+        overrides[action]?.let { return listOf(it) }
+        val taken = overrides.values.toSet()
+        return bindings.filter { it.action == action && it.chord !in taken }.map { it.chord }
+    }
+
+    /** Returns a conflict-free override map with [action] bound to [newChord]. */
+    fun withOverride(
+        overrides: Map<ShortcutAction, KeyChord>,
+        action: ShortcutAction,
+        newChord: KeyChord,
+    ): Map<ShortcutAction, KeyChord> = overrides.filterValues { it != newChord } + (action to newChord)
+
+    /** Serializes a [KeyChord] to a compact canonical string (e.g. `"primary+shift+z"`). */
+    fun encodeChord(chord: KeyChord): String =
+        buildList {
+            if (chord.primary) add("primary")
+            if (chord.shift) add("shift")
+            if (chord.alt) add("alt")
+            add(chord.key.lowercase())
+        }.joinToString("+")
+
+    /** Decodes a canonical string written by [encodeChord], or returns null if malformed. */
+    fun decodeChord(encoded: String): KeyChord? {
+        val parts = encoded.split('+').map { it.trim().lowercase() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return null
+        var primary = false
+        var shift = false
+        var alt = false
+        for (i in 0 until parts.lastIndex) {
+            when (parts[i]) {
+                "primary" -> primary = true
+                "shift" -> shift = true
+                "alt" -> alt = true
+                else -> return null
+            }
+        }
+        return KeyChord(key = parts.last(), primary = primary, shift = shift, alt = alt)
+    }
+
+    /** Formats [chord] for display in the Shortcuts settings panel (e.g. `"Ctrl+Shift+Z"`). */
+    fun formatChord(chord: KeyChord): String =
+        buildList {
+            if (chord.primary) add("Ctrl")
+            if (chord.alt) add("Alt")
+            if (chord.shift) add("Shift")
+            add(chord.key.uppercase())
+        }.joinToString("+")
 }

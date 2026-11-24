@@ -29,6 +29,12 @@ data class TextLayerContent(
     val kerning: Float = 0f,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val tracking: Float = 0f,
+    /** -1..1: curves text baseline along an arc non-destructively (0 = straight baseline). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val curveAmount: Float = 0f,
+    /** Extra spacing in pixels inserted between words (non-destructive). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val wordSpacing: Float = 0f,
 ) {
     /**
      * Returns true if any non-default vector typography transformation is present.
@@ -39,7 +45,9 @@ data class TextLayerContent(
             scaleY != 1f ||
             baselineShift != 0f ||
             kerning != 0f ||
-            tracking != 0f
+            tracking != 0f ||
+            curveAmount != 0f ||
+            wordSpacing != 0f
 
     /**
      * Non-destructively transforms the vector text parameters without baking to pixels.

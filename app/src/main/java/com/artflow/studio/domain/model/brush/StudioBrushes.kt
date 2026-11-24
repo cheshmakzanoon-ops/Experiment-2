@@ -12,6 +12,12 @@ object StudioBrushes {
 
     val presets: List<Preset> by lazy { corePresets + StudioBrushesMore.presets + StudioBrushesExtra.presets }
 
+    /** Curated Spectral & Physical Paint presets (watercolor, gouache, pastel, 3D impasto oil). */
+    val physicalPresets: List<Preset> by lazy { StudioBrushesPhysical.presets }
+
+    /** Full brush catalogue including both the 200 core presets and the Physical Paint collection. */
+    val allPresets: List<Preset> by lazy { presets + physicalPresets }
+
     private val corePresets: List<Preset> =
         listOf(
             Preset(

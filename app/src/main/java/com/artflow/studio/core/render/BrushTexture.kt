@@ -132,22 +132,47 @@ class BrushTexture private constructor(
         private const val HALFTONE_RADIUS = 2.2f
         private const val HALF = 0.5f
 
-        fun from(params: BrushParams): BrushTexture? {
+        fun hasPressureCurves(params: BrushParams): Boolean = GRAIN_PRESSURE_KEYS.any { it in params.importedAuxiliaryCurves }
+
+        fun from(
+            params: BrushParams,
+            pressure: Float = 1f,
+            random: java.util.Random? = null,
+        ): BrushTexture? {
             if (!params.blendTexture) return null
             val kind = Kind.entries.firstOrNull { it.id == params.textureId }
-            val tile = if (kind == null) CustomGrains.get(params.textureId) ?: return null else null
+            val tile = if (kind == null) BrushSourceLibrary.resolveGrain(params.textureId) ?: return null else null
             require(params.textureScale.isFinite() && params.textureRotation.isFinite()) { "Texture settings must be finite" }
-            val depth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
+            val baseDepth = if (params.grainDepth.isFinite()) params.grainDepth.coerceIn(0f, 1f) else 1f
+            val depthCurve = params.optionalChannelPressure(pressure, "dynamicsPressureGrainDepthCurve")
+            var depth = (baseDepth * depthCurve).coerceIn(0f, 1f)
+            if ("dynamicsPressureGrainDepthJitterCurve" in params.importedAuxiliaryCurves) {
+                val depthJitter = params.optionalChannelPressure(pressure, "dynamicsPressureGrainDepthJitterCurve")
+                val delta = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * depthJitter * 0.5f
+                depth = (depth + delta).coerceIn(0f, 1f)
+            }
+            val scaleCurve = params.optionalChannelPressure(pressure, "dynamicsPressureGrainScaleCurve")
+            val zoomCurve = params.optionalChannelPressure(pressure, "dynamicsPressureGrainZoomCurve")
+            val effectiveScale = (params.textureScale * scaleCurve * zoomCurve).coerceIn(0.05f, 8f)
             return BrushTexture(
                 kind,
                 tile,
-                params.textureScale.coerceIn(0.05f, 8f),
+                effectiveScale,
                 params.textureRotation % 360f,
                 depth,
                 signedUnit(params.grainBrightness),
                 signedUnit(params.grainContrast),
             )
         }
+
+        private val GRAIN_PRESSURE_KEYS =
+            setOf(
+                "dynamicsPressureGrainDepthCurve",
+                "dynamicsPressureGrainDepthJitterCurve",
+                "dynamicsPressureGrainScaleCurve",
+                "dynamicsPressureGrainZoomCurve",
+                "dynamicsPressureGrainMovementCurve",
+            )
 
         private fun signedUnit(value: Float): Float = if (value.isFinite()) value.coerceIn(-1f, 1f) else 0f
     }

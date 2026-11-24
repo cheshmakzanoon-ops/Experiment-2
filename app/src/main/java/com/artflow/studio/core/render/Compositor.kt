@@ -48,6 +48,8 @@ class Compositor(
         val strokes: List<Stroke> = emptyList(),
         /** Grayscale mask image; its value multiplies the layer's alpha. */
         val mask: PixelBuffer? = null,
+        /** Optional sparse physical paint plane for 3D impasto raking-light shading. */
+        val physicalPlane: PhysicalPaintPlane? = null,
     )
 
     /** Options shared by every compositing entry point. */
@@ -61,6 +63,12 @@ class Compositor(
         val applyAdjustments: Boolean = true,
         /** Scalar material layers never enter the ordinary artwork, thumbnails or color exports. */
         val materialChannel: MaterialChannel = MaterialChannel.COLOR,
+        /** Dynamic raking-light azimuth (degrees) for 3D impasto oil layers. */
+        val physicalLightAngle: Float = 45f,
+        /** Dynamic raking-light elevation (degrees) for 3D impasto oil layers. */
+        val physicalLightElevation: Float = 35f,
+        /** 0..1 impasto relief shading intensity. */
+        val physicalImpastoDepth: Float = 0.5f,
     )
 
     private val bufferPool = PixelBufferPool()
@@ -198,7 +206,7 @@ class Compositor(
         height: Int,
         options: Options,
     ): PixelBuffer? {
-        entry.input?.let { return renderLayerContent(it, width, height, bufferPool) }
+        entry.input?.let { return renderLayerContent(it, width, height, bufferPool, options) }
         if (entry.members.isEmpty()) return null
         val merged = bufferPool.obtain(width, height)
         var completed = false
@@ -269,6 +277,7 @@ class Compositor(
         width: Int,
         height: Int,
         bufferPool: PixelBufferPool? = null,
+        options: Options = Options(),
     ): PixelBuffer? {
         val layer = input.layer
         val hasRaster = input.raster != null
@@ -292,7 +301,7 @@ class Compositor(
                 if (input.strokes.isNotEmpty()) {
                     // Strokes paint on top of the raster base exactly as they appear on screen.
                     input.strokes.forEach { stroke ->
-                        strokeRasterizer.draw(aligned, stroke, alphaLock = layer.isAlphaLocked)
+                        strokeRasterizer.draw(aligned, stroke, alphaLock = layer.isAlphaLocked, physicalPlane = input.physicalPlane)
                     }
                 }
                 aligned
@@ -304,6 +313,16 @@ class Compositor(
                     alphaLock = layer.isAlphaLocked,
                 )
             }
+
+        input.physicalPlane?.takeIf { !it.isEmpty() }?.let { plane ->
+            PhysicalPaintEngine.applyRakingLight(
+                colorBuffer = content,
+                plane = plane,
+                lightAngleDeg = options.physicalLightAngle,
+                lightElevationDeg = options.physicalLightElevation,
+                impastoDepth = options.physicalImpastoDepth,
+            )
+        }
 
         layer.filterType?.let { filter ->
             applyFilter(content, filter, layer.filterAmount)

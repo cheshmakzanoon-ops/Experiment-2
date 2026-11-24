@@ -43,7 +43,8 @@ object WetBrushPickup {
         // Preserve the older Dilution control's pickup equation for saved brushes.
         val legacyPickup = wetness + (1f - wetness) * DILUTION_PICKUP * brush.dilution.coerceIn(0f, 1f)
         val bleed = brush.bleed.coerceIn(0f, 1f) * brush.channelPressure(sample.pressure, "dynamicsPressureBleedCurve")
-        val pickup = (legacyPickup + bleed).coerceIn(0f, 1f) * PICKUP_STRENGTH * attack(brush, sample)
+        val gradeCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureGradeCurve")
+        val pickup = (legacyPickup + bleed).coerceIn(0f, 1f) * PICKUP_STRENGTH * gradeCurve * attack(brush, sample)
         val chargeCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureCharge")
         val rawCharge = (brush.wetCharge.coerceIn(0f, 1f) * chargeCurve).coerceIn(0f, 1f)
         val charge =
@@ -62,7 +63,13 @@ object WetBrushPickup {
         val under = canvasUnder(brush, canvas, sample, random)
         val effective = amount * ((under ushr 24) / 255f)
         if (effective <= 0f) return thinned
-        val mixed = ImageFilters.lerpArgb(color or OPAQUE, under or OPAQUE, effective)
+        val mixed =
+            if (brush.spectralMixing) {
+                com.artflow.studio.core.color.SpectralMixer
+                    .mixArgb(color or OPAQUE, under or OPAQUE, effective)
+            } else {
+                ImageFilters.lerpArgb(color or OPAQUE, under or OPAQUE, effective)
+            }
         return (thinned and OPAQUE) or (mixed and RGB)
     }
 
@@ -88,7 +95,8 @@ object WetBrushPickup {
         val pull = (size * StrokeReach.PULL_SIZES * brush.wetPull.coerceIn(0f, 1f) * pullCurve).coerceAtMost(sample.travelled)
         val x = sample.x - sample.directionX * pull
         val y = sample.y - sample.directionY * pull
-        val blur = size * StrokeReach.BLUR_SIZES * brush.wetBlur.coerceIn(0f, 1f)
+        val blurCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureBlurCurve")
+        val blur = size * StrokeReach.BLUR_SIZES * brush.wetBlur.coerceIn(0f, 1f) * blurCurve
         val blurJitterCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureBlurJitterCurve")
         val jitter = (brush.wetBlurJitter.coerceIn(0f, 1f) * blurJitterCurve).coerceIn(0f, 1f)
         val reach = if (blur > 0f && jitter > 0f) blur * (1f + (random.nextFloat() * 2f - 1f) * jitter) else blur

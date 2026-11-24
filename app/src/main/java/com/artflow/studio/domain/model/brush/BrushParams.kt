@@ -113,7 +113,32 @@ data class BrushParams(
     /** Import interpretation used when comparing edited settings with retained source archive values. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val sourceImportVersion: Int = 0,
+    /**
+     * Independent downward brightness jitter (Procreate's Darkness jitter).
+     * When null, [brightnessJitter] acts symmetrically for both lightening and darkening.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val darknessJitter: Float? = null,
+    /** Enable 6-band Kubelka-Munk spectral pigment mixing (RYB-like subtractive blending). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val spectralMixing: Boolean = false,
+    /** Physical traditional-media simulation mode (NONE allocates zero physical buffers). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val physicalMode: PhysicalPaintMode = PhysicalPaintMode.NONE,
+    /** 0..1: height of 3D impasto oil bristle ridges deposited along each stroke. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val impastoThickness: Float = 0f,
+    /** 0..1: wetness deposited into the layer's sparse physical paint plane for watercolor diffusion. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val waterAmount: Float = 0f,
+    /** 0..1: how strongly pigment settles into paper tooth valleys during watercolor diffusion. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val granulation: Float = 0f,
 ) {
+    /** Effective downward brightness jitter: independent when set, otherwise symmetric with [brightnessJitter]. */
+    val effectiveDarknessJitter: Float
+        get() = (darknessJitter ?: brightnessJitter).coerceIn(0f, 1f)
+
     /** Flow at [pressure], after Pressure → Flow thins it for lighter presses. */
     fun flowAt(pressure: Float): Float {
         val overall = pressureResponse(pressure)
@@ -346,10 +371,11 @@ data class BrushParams(
         random: Random?,
     ): Int {
         if (secondary == null || (secondaryPressure <= 0f && secondaryJitter <= 0f)) return baseColor
+        val jitterScale = optionalChannelPressure(pressure, "dynamicsPressureSecondaryColorJitterCurve")
         val amount =
             (
                 secondaryPressure.coerceIn(0f, 1f) * channelPressure(pressure, "dynamicsPressureSecondaryColorCurve") +
-                    secondaryJitter.coerceIn(0f, 1f) * (random?.nextFloat() ?: 0.5f)
+                    secondaryJitter.coerceIn(0f, 1f) * jitterScale * (random?.nextFloat() ?: 0.5f)
             ).coerceIn(0f, 1f)
 
         fun channel(shift: Int): Int {
@@ -366,22 +392,19 @@ data class BrushParams(
         velocity: Float,
         random: Random?,
     ): Int {
-        if (hueJitter <= 0f &&
-            saturationJitter <= 0f &&
-            brightnessJitter <= 0f &&
-            !colorPressure &&
-            velocityToHue <= 0f
-        ) {
-            return baseColor
-        }
+        val darkness = effectiveDarknessJitter
+        val hasJitter = hueJitter > 0f || saturationJitter > 0f || brightnessJitter > 0f || darkness > 0f
+        val hasDynamicColor = colorPressure || velocityToHue > 0f
+        if (!hasJitter && !hasDynamicColor) return baseColor
 
         val hsv =
             com.artflow.studio.domain.model.Color
                 .rgbToHsv(baseColor)
 
         // Apply hue jitter
-        if (hueJitter > 0f) {
-            val hueShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * hueJitter * 360f
+        val effectiveHueJitter = (hueJitter * optionalChannelPressure(pressure, "dynamicsPressureHueJitterCurve")).coerceIn(0f, 1f)
+        if (effectiveHueJitter > 0f) {
+            val hueShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * effectiveHueJitter * 360f
             hsv[0] = (hsv[0] + hueShift) % 360f
             if (hsv[0] < 0f) hsv[0] += 360f
         }
@@ -394,14 +417,28 @@ data class BrushParams(
         }
 
         // Apply saturation jitter
-        if (saturationJitter > 0f) {
-            val satShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * saturationJitter
+        val effectiveSatJitter =
+            (saturationJitter * optionalChannelPressure(pressure, "dynamicsPressureSaturationJitterCurve")).coerceIn(0f, 1f)
+        if (effectiveSatJitter > 0f) {
+            val satShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * effectiveSatJitter
             hsv[1] = (hsv[1] + satShift).coerceIn(0f, 1f)
         }
 
-        // Apply brightness jitter
-        if (brightnessJitter > 0f) {
-            val brightShift = ((random?.nextFloat() ?: 0.5f) * 2f - 1f) * brightnessJitter
+        // Apply independent lightness and darkness jitter (symmetric when equal)
+        val effectiveLightness =
+            (brightnessJitter.coerceIn(0f, 1f) * optionalChannelPressure(pressure, "dynamicsPressureLightnessJitterCurve")).coerceIn(0f, 1f)
+        val effectiveDarkness =
+            (darkness * optionalChannelPressure(pressure, "dynamicsPressureDarknessJitterCurve")).coerceIn(0f, 1f)
+        if (effectiveLightness > 0f || effectiveDarkness > 0f) {
+            val sample = random?.nextFloat() ?: 0.5f
+            val brightShift =
+                if (effectiveLightness == effectiveDarkness) {
+                    (sample * 2f - 1f) * effectiveLightness
+                } else if (sample >= 0.5f) {
+                    (sample - 0.5f) * 2f * effectiveLightness
+                } else {
+                    -((0.5f - sample) * 2f * effectiveDarkness)
+                }
             hsv[2] = (hsv[2] + brightShift).coerceIn(0f, 1f)
         }
 

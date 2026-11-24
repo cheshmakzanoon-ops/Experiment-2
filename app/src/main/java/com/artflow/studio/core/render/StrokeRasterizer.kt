@@ -71,6 +71,7 @@ class StrokeRasterizer(
         stroke: Stroke,
         alphaLock: Boolean = false,
         mask: SelectionMask? = null,
+        physicalPlane: PhysicalPaintPlane? = null,
     ) {
         val points = stroke.points
         if (points.isEmpty()) return
@@ -97,9 +98,25 @@ class StrokeRasterizer(
         var dual: DualMarks? = null
         try {
             clear(buffer, reach)
-            drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
+            drawStrokeInto(
+                buffer,
+                stroke,
+                params,
+                points,
+                alphaLock = false,
+                mask = null,
+                random = random,
+                canvas = target,
+                physicalPlane = physicalPlane,
+            )
             dual = params.dual?.let { drawDual(target, stroke, it, reach) }
-            depositCoverage(target, buffer, reach, Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points)), dual)
+            depositCoverage(
+                target,
+                buffer,
+                reach,
+                Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points), grainPressure(params, points), random),
+                dual,
+            )
             lastDabCount = dabCount.get()
         } finally {
             dual?.let { scratchPool.release(it.marks) }
@@ -114,8 +131,15 @@ class StrokeRasterizer(
         val mask: SelectionMask?,
         val alphaLock: Boolean,
         val grain: Pair<Int, Int>,
+        strokePressure: Float = 1f,
+        grainRandom: Random? = null,
     ) {
-        val texture = BrushTexture.from(params)
+        val texture =
+            if (BrushTexture.hasPressureCurves(params)) {
+                BrushTexture.from(params, strokePressure, grainRandom)
+            } else {
+                BrushTexture.from(params)
+            }
         val wetEdges = params.wetEdges.coerceIn(0f, 1f)
         val burntEdges = params.burntEdges.coerceIn(0f, 1f)
     }
@@ -424,8 +448,9 @@ class StrokeRasterizer(
         mask: SelectionMask?,
         random: Random,
         canvas: PixelBuffer? = null,
+        physicalPlane: PhysicalPaintPlane? = null,
     ) {
-        if (canUseCapsule(params, points)) {
+        if (canUseCapsule(params, points) && physicalPlane == null) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
             return
         }
@@ -434,7 +459,8 @@ class StrokeRasterizer(
         val totalLength =
             if (params.taperStart > 0f || params.taperEnd > 0f) stroke.calculateLength() else 0f
 
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas)
+        val context =
+            DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas, physicalPlane)
         val walk = DabWalk()
         walkSegments(context, points, 1, walk)
         stampEnd(context, points, walk)
@@ -445,7 +471,7 @@ class StrokeRasterizer(
         params: BrushParams,
         random: Random,
     ): Stamping.TipShape {
-        val shape = CustomGrains.get(params.shapeId)
+        val shape = BrushSourceLibrary.resolveShape(params.shapeId)
         // Randomized starts each stroke at its own angle; the stroke's seeded random keeps it repeatable.
         val angle = params.rotation + if (params.tipRandomized) random.nextFloat() * FULL_TURN else 0f
         return Stamping.TipShape(
@@ -541,8 +567,10 @@ class StrokeRasterizer(
         val tiltEffect = params.tiltInfluence.coerceIn(0f, 1f) * tilt
         val taper = taperFactor(params, accumulatedDistance, context.totalLength)
         val diameter = params.calculateEffectiveSize(pressure, velocity) * (1f + TILT_SIZE_GAIN * tiltEffect) * taper
+        val spacingCurve = params.optionalChannelPressure(pressure, "dynamicsPressurePlotSpacingJitter")
+        val spacingScale = if ("dynamicsPressurePlotSpacingJitter" in params.importedAuxiliaryCurves) (0.25f + 0.75f * spacingCurve) else 1f
         // A minimum of one pixel keeps single-point taps visible and stops a fully tapered end from stalling.
-        return max(1f, diameter * params.spacing.coerceIn(0.01f, 4f))
+        return max(1f, diameter * params.spacing.coerceIn(0.01f, 4f) * spacingScale)
     }
 
     /**
@@ -579,6 +607,8 @@ class StrokeRasterizer(
         val tip: Stamping.TipShape,
         /** The layer being painted, sampled by wet mix; null when there is nothing to pick up. */
         val canvas: PixelBuffer?,
+        /** Optional sparse physical paint plane for watercolor wetness & 3D impasto ridges. */
+        val physicalPlane: PhysicalPaintPlane? = null,
     )
 
     private fun drawDabAt(
@@ -652,14 +682,27 @@ class StrokeRasterizer(
         val removable = (jitter * most).toInt().coerceAtMost(most - 1)
         val dabs = if (jitter > 0f && most > 1) most - (random.nextFloat() * (removable + 1)).toInt() else most
         val azimuth = if (params.tiltToRotation) interpolatedAzimuth(previous.tiltY, current.tiltY, t) else 0f
+        val dirX = if (distance > 0f) (current.x - previous.x) / distance else 0f
+        val dirY = if (distance > 0f) (current.y - previous.y) / distance else 0f
+        val perpX = -dirY
+        val perpY = dirX
+        val plotJitterCurve = params.optionalChannelPressure(pressure, "dynamicsPressurePlotJitterCurve")
+        val longJitterCurve = params.optionalChannelPressure(pressure, "dynamicsPressurePlotJitterLongitudinalCurve")
+        val hasLongitudinalCurve = "dynamicsPressurePlotJitterLongitudinalCurve" in params.importedAuxiliaryCurves
         repeat(dabs) { index ->
             val scatterCurve = params.optionalChannelPressure(pressure, "dynamicsPressureShapeScatterCurve")
-            val scatter = params.scatter.coerceIn(0f, 4f) * params.size * scatterCurve
+            val scatter = params.scatter.coerceIn(0f, 4f) * params.size * scatterCurve * plotJitterCurve
             val jitterX = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
             val jitterY = if (scatter > 0f) ((random.nextFloat() * 2f - 1f) * scatter / 2f) else 0f
+            val longJitter =
+                if (hasLongitudinalCurve && params.scatter > 0f) {
+                    (random.nextFloat() * 2f - 1f) * params.scatter.coerceIn(0f, 4f) * params.size * longJitterCurve * 0.5f
+                } else {
+                    0f
+                }
             val offsetScale = if (dabs == 1) 0f else (index / (dabs - 1f) - 0.5f) * params.size * 0.5f
-            val offsetX = jitterX + offsetScale * (if (distance > 0f) -(current.y - previous.y) / distance else 0f)
-            val offsetY = jitterY + offsetScale * (if (distance > 0f) (current.x - previous.x) / distance else 0f)
+            val offsetX = jitterX + offsetScale * perpX + longJitter * dirX
+            val offsetY = jitterY + offsetScale * perpY + longJitter * dirY
 
             Stamping.dab(
                 target = target,
@@ -677,8 +720,31 @@ class StrokeRasterizer(
                 mode = if (rendering.blending) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = tipFor(context.tip, params, azimuth, random),
+                tip = tipFor(context.tip, params, pressure, azimuth, random),
             )
+            context.physicalPlane?.let { plane ->
+                if (params.waterAmount > 0f) {
+                    PhysicalPaintEngine.depositWetness(
+                        plane = plane,
+                        centerX = x + offsetX,
+                        centerY = y + offsetY,
+                        radius = radius,
+                        waterAmount = params.waterAmount,
+                        pigmentLoad = dabOpacity,
+                    )
+                }
+                if (params.impastoThickness > 0f) {
+                    PhysicalPaintEngine.depositImpasto(
+                        plane = plane,
+                        centerX = x + offsetX,
+                        centerY = y + offsetY,
+                        radius = radius,
+                        thickness = params.impastoThickness * pressure.coerceIn(0.2f, 1f),
+                        dirX = dirX,
+                        dirY = dirY,
+                    )
+                }
+            }
             dabCount.incrementAndGet()
         }
     }
@@ -687,14 +753,29 @@ class StrokeRasterizer(
     private fun tipFor(
         tip: Stamping.TipShape,
         params: BrushParams,
+        pressure: Float,
         azimuth: Float,
         random: Random,
     ): Stamping.TipShape {
+        var effectiveRoundness = tip.roundness
+        if ("dynamicsPressureShapeRoundnessCurve" in params.importedAuxiliaryCurves) {
+            val roundCurve = params.optionalChannelPressure(pressure, "dynamicsPressureShapeRoundnessCurve")
+            effectiveRoundness = (effectiveRoundness * roundCurve).coerceIn(0.05f, 1f)
+        }
+        val hasH = "dynamicsPressureShapeRoundessHorizontalJitterCurve" in params.importedAuxiliaryCurves
+        val hasV = "dynamicsPressureShapeRoundessVerticalJitterCurve" in params.importedAuxiliaryCurves
+        if (hasH || hasV) {
+            val hScale = if (hasH) params.optionalChannelPressure(pressure, "dynamicsPressureShapeRoundessHorizontalJitterCurve") else 0f
+            val vScale = if (hasV) params.optionalChannelPressure(pressure, "dynamicsPressureShapeRoundessVerticalJitterCurve") else 0f
+            val delta = ((random.nextFloat() * 2f - 1f) * max(hScale, vScale) * 0.45f)
+            effectiveRoundness = (effectiveRoundness + delta).coerceIn(0.05f, 1f)
+        }
+        val shaped = if (effectiveRoundness != tip.roundness) tip.copy(roundness = effectiveRoundness) else tip
         val turned =
             if (params.tiltToRotation) {
-                tip.copy(angleDegrees = tip.angleDegrees + Math.toDegrees(azimuth.toDouble()).toFloat())
+                shaped.copy(angleDegrees = shaped.angleDegrees + Math.toDegrees(azimuth.toDouble()).toFloat())
             } else {
-                tip
+                shaped
             }
         val flipX = params.tipFlipXJitter && random.nextBoolean()
         val flipY = params.tipFlipYJitter && random.nextBoolean()
@@ -725,7 +806,13 @@ class StrokeRasterizer(
         val pull = params.pull.coerceIn(0f, 1f)
         if (pull <= 0f) return fresh
         val amount = pull.toDouble().pow(params.spacing.coerceIn(MIN_PULL_STEP, 1f).toDouble()).toFloat()
-        val mixed = ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+        val mixed =
+            if (params.spectralMixing) {
+                com.artflow.studio.core.color.SpectralMixer
+                    .mixArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+            } else {
+                ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+            }
         return (fresh and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
     }
 
@@ -756,7 +843,10 @@ class StrokeRasterizer(
             params.pull <= 0f &&
             params.tiltInfluence <= 0f &&
             (params.tiltOpacityInfluence ?: 0f) <= 0f &&
-            CustomGrains.get(params.shapeId) == null &&
+            BrushSourceLibrary.resolveShape(params.shapeId) == null &&
+            "dynamicsPressureShapeRoundnessCurve" !in params.importedAuxiliaryCurves &&
+            "dynamicsPressureShapeRoundessHorizontalJitterCurve" !in params.importedAuxiliaryCurves &&
+            "dynamicsPressureShapeRoundessVerticalJitterCurve" !in params.importedAuxiliaryCurves &&
             points.size <= 2 &&
             params.count == 1 &&
             points.first().pressure == points.last().pressure &&
@@ -770,6 +860,7 @@ class StrokeRasterizer(
                 params.hueJitter,
                 params.saturationJitter,
                 params.brightnessJitter,
+                params.effectiveDarknessJitter,
                 params.velocityToSize,
                 params.velocityToOpacity,
                 params.velocityToHue,
@@ -891,10 +982,30 @@ class StrokeRasterizer(
         points: List<StrokePoint>,
         canvasCoordinates: Boolean = false,
     ): Pair<Int, Int> {
-        if (!params.grainMoving) return 0 to 0
+        val movementCurve =
+            if ("dynamicsPressureGrainMovementCurve" in params.importedAuxiliaryCurves) {
+                params.optionalChannelPressure(grainPressure(params, points), "dynamicsPressureGrainMovementCurve")
+            } else {
+                1f
+            }
+        if (!params.grainMoving && movementCurve == 1f) return 0 to 0
         val offsetX = if (canvasCoordinates) 0 else originX
         val offsetY = if (canvasCoordinates) 0 else originY
-        return floor(points.first().x + offsetX).toInt() to floor(points.first().y + offsetY).toInt()
+        val baseX = points.first().x + offsetX
+        val baseY = points.first().y + offsetY
+        val factor = if (params.grainMoving) movementCurve else (1f - movementCurve)
+        return floor(baseX * factor).toInt() to floor(baseY * factor).toInt()
+    }
+
+    /** Mean pressure of [points], evaluated only when grain pressure curves are present. */
+    private fun grainPressure(
+        params: BrushParams,
+        points: List<StrokePoint>,
+    ): Float {
+        if (!BrushTexture.hasPressureCurves(params) || points.isEmpty()) return 1f
+        var sum = 0f
+        for (point in points) sum += point.pressure
+        return (sum / points.size).coerceIn(0f, 1f)
     }
 
     /** Fall off: the stroke fades to nothing over one brush size at 1, and over 40 sizes near 0. */

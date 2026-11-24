@@ -1,5 +1,15 @@
 # ArtFlow / Procreate workflow comparison
 
+## Milestones 1–6: Full Procreate Parity & Breakout Differentiation — 24 November 2026
+
+Implemented across six integrated milestones on top of `87858ca`:
+- **Milestone 1 (Brush Engine Parity & Source Library):** Wired all 19 remaining auxiliary Procreate pressure curves (39/39 live curve coverage), split independent lightness/darkness jitter (`NATIVE_BRUSH_IMPORT_VERSION = 3` with v0–v2 writer baseline preservation), and added `BrushSourceLibrary` (12 procedural Shape Sources + 6 seamless Grain Sources wired through `StrokeRasterizer`, `BrushTexture`, `BrushPatch`, `BrushLibraryCodec`, and Brush Studio).
+- **Milestone 2 (Spectral Pigment Mixing & Physical Paint, `.artflow` v8):** Added 6-band Kubelka-Munk `SpectralMixer`, lazy sparse per-layer `PhysicalPaintPlane` & `PhysicalPaintEngine` (wet-on-wet watercolor diffusion, paper tooth granulation, tilt-to-flow gravity, Dry/Re-wet, 3D impasto bristle ridges, and dynamic raking-light normal shading in `Compositor`), `.artflow` v8 storage preserving v1–v7 checksums, Brush Studio controls, and 12 curated Physical Paint presets (`StudioBrushesPhysical`).
+- **Milestone 3 (Non-Destructive Pro Workflow & Live Seamless Tiling):** Added `SeamlessTiling` (`SeamlessTileMode` X/Y/Both stroke wrapping & 3×3 preview, persisted in `.artflow`), non-destructive `curveAmount` and `wordSpacing` on `TextLayerContent`, and conflict-safe custom hardware shortcut remapping/encoding in `KeyboardShortcuts`.
+- **Milestone 4 (Hybrid GLES 3.0+ GPU Pipeline & Float16 Precision):** Added `#version 300 es` GLSL shader library (`Gles3Shaders`: brush dab, all 26 blend modes, 3D impasto raking light, GPU liquify warp), `Float16AccumulationTile` with IEEE-754 half-float conversion and Bayer 4×4 dithering, and `Gles3RenderBackend` with automatic GLES 2.0/Kotlin fallback.
+- **Milestone 5 (ICC/CMYK Color & Pro 3D PBR):** Added `IccColorManager` (real sRGB/Display P3/SWOP v2/FOGRA39 pixel conversion, GCR+TAC ink limiting, gamut-warning overlay), `PbrLighting` (Cook-Torrance GGX BRDF, 4 IBL environment presets, tangent-space normal maps, simultaneous multi-channel material brush), and `GltfPbrExport` (valid glTF 2.0 `.glb` with embedded BaseColor, packed Metallic-Roughness, and Normal PNGs).
+- **Milestone 6 (`.procreate` Interchange & Hardening):** Added editable text metadata round-trip (`artflowTextPayload`) alongside group blend modes, animation hold/pins/fps, and drawing guides in `ProcreateWriter` & `ProcreateReader`.
+
 ## QuickShape stroke-cadence correction — 25 October 2026
 
 An oval previously fit the covariance of raw pointer events, so slowing down or repeated stationary

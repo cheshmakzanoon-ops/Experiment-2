@@ -36,6 +36,7 @@ object ProcreateWriter {
      * A pixel layer: [pixels] (straight ARGB, the document's size) and its properties. [mask] is the layer's
      * coverage (255 reveals); null when it has none.
      */
+    @Suppress("LongParameterList")
     class Layer(
         val name: String,
         val pixels: PixelBuffer,
@@ -50,6 +51,7 @@ object ProcreateWriter {
         val animationFrameHold: Int = 1,
         val animationIsBackground: Boolean = false,
         val animationIsForeground: Boolean = false,
+        val textPayload: String? = null,
     ) : Node
 
     /** A group of layers; [children] are top first, as Procreate lists them. */
@@ -281,6 +283,9 @@ object ProcreateWriter {
             }
             if (layer.animationIsForeground) {
                 fields["animationIsForeground"] = true
+            }
+            layer.textPayload?.let { payload ->
+                fields["artflowTextPayload"] = archive.add(payload)
             }
             return archive.instance(LAYER, fields).also { pixelLayers += it }
         }

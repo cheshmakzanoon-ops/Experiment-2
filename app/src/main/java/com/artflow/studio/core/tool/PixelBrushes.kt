@@ -138,7 +138,9 @@ object PixelBrushes {
                 } else {
                     val tilt = (sample.tilt / HALF_PI).coerceIn(0f, 1f)
                     val tiltAmount = (brush.tiltOpacityInfluence ?: brush.tiltInfluence).coerceIn(0f, 1f) * tilt
-                    brush.calculateEffectiveOpacity(sample.pressure) * brush.flowAt(sample.pressure) * (1f - 0.6f * tiltAmount)
+                    val pullCurve = brush.optionalChannelPressure(sample.pressure, "dynamicsPressureSmudgePullCurve")
+                    brush.calculateEffectiveOpacity(sample.pressure) * brush.flowAt(sample.pressure) *
+                        (1f - 0.6f * tiltAmount) * pullCurve
                 }
             return (settings.strength * dynamic * if (settings.fingerMode) 0.6f else 1f).coerceIn(0f, 1f)
         }
