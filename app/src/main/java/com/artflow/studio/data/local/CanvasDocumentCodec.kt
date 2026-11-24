@@ -32,9 +32,12 @@ import java.security.MessageDigest
  * - **v7** adds non-destructive vector typography transformation (rotation, scale, tracking,
  *   kerning, baseline shift) to editable text layers. Older documents retain their standard
  *   untransformed text; older readers reject v7 if vector typography is present.
+ * - **v8** adds sparse per-layer physical paint planes ([Layer.physicalPaintFile]) for watercolor
+ *   wetness/diffusion and 3D impasto oil heightmaps plus canvas raking-light settings.
  *
  * Kept in the data layer because it is purely a storage concern.
  */
+@OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
 @Serializable
 data class CanvasDocument(
     val version: Int = CURRENT_VERSION,
@@ -67,6 +70,12 @@ data class CanvasDocument(
      * Null in documents written before the checksum existed; decoded documents always have it null.
      */
     val checksum: String? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val physicalLightAngle: Float = 45f,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val physicalLightElevation: Float = 35f,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val physicalImpastoDepth: Float = 0.5f,
 ) {
     /**
      * Frames in a canonical form. Documents written before animation existed have no [frames], so
@@ -88,7 +97,7 @@ data class CanvasDocument(
 
     companion object {
         /** Bump when storage or replay semantics require migration code. */
-        const val CURRENT_VERSION = 7
+        const val CURRENT_VERSION = 8
     }
 }
 
@@ -195,6 +204,10 @@ object CanvasDocumentCodec {
             }
             if (layer.textContent?.hasTransform() == true) {
                 require(document.version >= 7) { "Vector text transforms require project version 7" }
+            }
+            if (layer.physicalPaintFile != null) {
+                require(document.version >= 8) { "Physical paint planes require project version 8" }
+                require(!layer.isGroup) { "A group cannot carry a physical paint plane" }
             }
         }
     }

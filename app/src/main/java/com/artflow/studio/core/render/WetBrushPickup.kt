@@ -63,7 +63,13 @@ object WetBrushPickup {
         val under = canvasUnder(brush, canvas, sample, random)
         val effective = amount * ((under ushr 24) / 255f)
         if (effective <= 0f) return thinned
-        val mixed = ImageFilters.lerpArgb(color or OPAQUE, under or OPAQUE, effective)
+        val mixed =
+            if (brush.spectralMixing) {
+                com.artflow.studio.core.color.SpectralMixer
+                    .mixArgb(color or OPAQUE, under or OPAQUE, effective)
+            } else {
+                ImageFilters.lerpArgb(color or OPAQUE, under or OPAQUE, effective)
+            }
         return (thinned and OPAQUE) or (mixed and RGB)
     }
 

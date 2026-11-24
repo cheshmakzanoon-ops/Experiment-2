@@ -119,6 +119,21 @@ data class BrushParams(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val darknessJitter: Float? = null,
+    /** Enable 6-band Kubelka-Munk spectral pigment mixing (RYB-like subtractive blending). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val spectralMixing: Boolean = false,
+    /** Physical traditional-media simulation mode (NONE allocates zero physical buffers). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val physicalMode: PhysicalPaintMode = PhysicalPaintMode.NONE,
+    /** 0..1: height of 3D impasto oil bristle ridges deposited along each stroke. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val impastoThickness: Float = 0f,
+    /** 0..1: wetness deposited into the layer's sparse physical paint plane for watercolor diffusion. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val waterAmount: Float = 0f,
+    /** 0..1: how strongly pigment settles into paper tooth valleys during watercolor diffusion. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val granulation: Float = 0f,
 ) {
     /** Effective downward brightness jitter: independent when set, otherwise symmetric with [brightnessJitter]. */
     val effectiveDarknessJitter: Float

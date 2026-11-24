@@ -71,6 +71,7 @@ class StrokeRasterizer(
         stroke: Stroke,
         alphaLock: Boolean = false,
         mask: SelectionMask? = null,
+        physicalPlane: PhysicalPaintPlane? = null,
     ) {
         val points = stroke.points
         if (points.isEmpty()) return
@@ -97,7 +98,17 @@ class StrokeRasterizer(
         var dual: DualMarks? = null
         try {
             clear(buffer, reach)
-            drawStrokeInto(buffer, stroke, params, points, alphaLock = false, mask = null, random = random, canvas = target)
+            drawStrokeInto(
+                buffer,
+                stroke,
+                params,
+                points,
+                alphaLock = false,
+                mask = null,
+                random = random,
+                canvas = target,
+                physicalPlane = physicalPlane,
+            )
             dual = params.dual?.let { drawDual(target, stroke, it, reach) }
             depositCoverage(
                 target,
@@ -437,8 +448,9 @@ class StrokeRasterizer(
         mask: SelectionMask?,
         random: Random,
         canvas: PixelBuffer? = null,
+        physicalPlane: PhysicalPaintPlane? = null,
     ) {
-        if (canUseCapsule(params, points)) {
+        if (canUseCapsule(params, points) && physicalPlane == null) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
             return
         }
@@ -447,7 +459,8 @@ class StrokeRasterizer(
         val totalLength =
             if (params.taperStart > 0f || params.taperEnd > 0f) stroke.calculateLength() else 0f
 
-        val context = DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas)
+        val context =
+            DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas, physicalPlane)
         val walk = DabWalk()
         walkSegments(context, points, 1, walk)
         stampEnd(context, points, walk)
@@ -594,6 +607,8 @@ class StrokeRasterizer(
         val tip: Stamping.TipShape,
         /** The layer being painted, sampled by wet mix; null when there is nothing to pick up. */
         val canvas: PixelBuffer?,
+        /** Optional sparse physical paint plane for watercolor wetness & 3D impasto ridges. */
+        val physicalPlane: PhysicalPaintPlane? = null,
     )
 
     private fun drawDabAt(
@@ -707,6 +722,29 @@ class StrokeRasterizer(
                 mask = mask,
                 tip = tipFor(context.tip, params, pressure, azimuth, random),
             )
+            context.physicalPlane?.let { plane ->
+                if (params.waterAmount > 0f) {
+                    PhysicalPaintEngine.depositWetness(
+                        plane = plane,
+                        centerX = x + offsetX,
+                        centerY = y + offsetY,
+                        radius = radius,
+                        waterAmount = params.waterAmount,
+                        pigmentLoad = dabOpacity,
+                    )
+                }
+                if (params.impastoThickness > 0f) {
+                    PhysicalPaintEngine.depositImpasto(
+                        plane = plane,
+                        centerX = x + offsetX,
+                        centerY = y + offsetY,
+                        radius = radius,
+                        thickness = params.impastoThickness * pressure.coerceIn(0.2f, 1f),
+                        dirX = dirX,
+                        dirY = dirY,
+                    )
+                }
+            }
             dabCount.incrementAndGet()
         }
     }
@@ -768,7 +806,13 @@ class StrokeRasterizer(
         val pull = params.pull.coerceIn(0f, 1f)
         if (pull <= 0f) return fresh
         val amount = pull.toDouble().pow(params.spacing.coerceIn(MIN_PULL_STEP, 1f).toDouble()).toFloat()
-        val mixed = ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+        val mixed =
+            if (params.spectralMixing) {
+                com.artflow.studio.core.color.SpectralMixer
+                    .mixArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+            } else {
+                ImageFilters.lerpArgb(fresh or 0xFF000000.toInt(), carried or 0xFF000000.toInt(), amount)
+            }
         return (fresh and 0xFF000000.toInt()) or (mixed and 0x00FFFFFF)
     }
 

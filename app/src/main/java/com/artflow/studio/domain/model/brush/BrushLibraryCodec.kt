@@ -167,6 +167,9 @@ object BrushLibraryCodec {
                 params.secondaryJitter,
                 params.burntEdges,
                 params.grainDepth,
+                params.impastoThickness,
+                params.waterAmount,
+                params.granulation,
             )
         require(unitValues.all { it in 0f..1f }) { "Brush dynamics must be finite values between zero and one" }
         require(params.importedSourceScalars.size <= SourceBrushScalar.MAX_FIELDS) {

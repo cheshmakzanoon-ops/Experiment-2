@@ -10,7 +10,9 @@ object StudioBrushes {
         val parameters: BrushParams,
     )
 
-    val presets: List<Preset> by lazy { corePresets + StudioBrushesMore.presets + StudioBrushesExtra.presets }
+    val presets: List<Preset> by lazy {
+        corePresets + StudioBrushesMore.presets + StudioBrushesExtra.presets + StudioBrushesPhysical.presets
+    }
 
     private val corePresets: List<Preset> =
         listOf(

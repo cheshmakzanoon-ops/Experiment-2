@@ -693,6 +693,42 @@ private fun BrushWetSettings(
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.burntEdges * 100),
         )
+        ShapeSwitch("Spectral pigment mixing (Kubelka-Munk)", brushParams.spectralMixing) {
+            onBrushParamsChanged(brushParams.copy(spectralMixing = it))
+        }
+        Text("Physical paint mode", style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.artflow.studio.domain.model.brush.PhysicalPaintMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = brushParams.physicalMode == mode,
+                    onClick = { onBrushParamsChanged(brushParams.copy(physicalMode = mode)) },
+                    label = { Text(mode.displayName, style = MaterialTheme.typography.labelSmall) },
+                )
+            }
+        }
+        if (brushParams.physicalMode != com.artflow.studio.domain.model.brush.PhysicalPaintMode.NONE) {
+            BrushParameterSlider(
+                label = "Water amount",
+                value = brushParams.waterAmount,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(waterAmount = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.waterAmount * 100),
+            )
+            BrushParameterSlider(
+                label = "Paper granulation",
+                value = brushParams.granulation,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(granulation = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.granulation * 100),
+            )
+            BrushParameterSlider(
+                label = "3D Impasto thickness",
+                value = brushParams.impastoThickness,
+                onValueChange = { onBrushParamsChanged(brushParams.copy(impastoThickness = it.coerceIn(0f, 1f))) },
+                valueRange = 0f..1f,
+                valueDisplay = "%.0f%%".format(brushParams.impastoThickness * 100),
+            )
+        }
         Text("Rendering", style = MaterialTheme.typography.labelMedium)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             RenderingMode.entries.forEach { mode ->
