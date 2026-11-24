@@ -24,15 +24,54 @@ object LayerStrokeRenderer {
         region: IntBounds? = null,
         ownedBase: Boolean = false,
     ): PixelBuffer {
-        if (region != null && historicalStrokes.isEmpty() && fitsRegion(base, selection, width, height, region)) {
-            return renderRegion(base, incomingStrokes, width, height, alphaLock, selection, region, ownedBase)
+        if (canUseRegion(base, historicalStrokes, selection, width, height, region)) {
+            return renderRegion(base, incomingStrokes, width, height, alphaLock, selection, checkNotNull(region), ownedBase)
         }
-        val result = PixelBuffer(width, height)
-        if (base != null) result.drawInto(base, 0, 0)
+        return renderFull(base, historicalStrokes, incomingStrokes, width, height, alphaLock, selection, originX, originY, ownedBase, null)
+    }
+
+    fun renderWithPhysical(
+        base: PixelBuffer?,
+        historicalStrokes: List<Stroke>,
+        incomingStrokes: List<Stroke>,
+        width: Int,
+        height: Int,
+        alphaLock: Boolean,
+        selection: SelectionMask?,
+        physicalPlane: PhysicalPaintPlane,
+        ownedBase: Boolean = false,
+    ): PixelBuffer =
+        renderFull(base, historicalStrokes, incomingStrokes, width, height, alphaLock, selection, 0, 0, ownedBase, physicalPlane)
+
+    private fun canUseRegion(
+        base: PixelBuffer?,
+        historicalStrokes: List<Stroke>,
+        selection: SelectionMask?,
+        width: Int,
+        height: Int,
+        region: IntBounds?,
+    ): Boolean = region != null && historicalStrokes.isEmpty() && fitsRegion(base, selection, width, height, region)
+
+    private fun renderFull(
+        base: PixelBuffer?,
+        historicalStrokes: List<Stroke>,
+        incomingStrokes: List<Stroke>,
+        width: Int,
+        height: Int,
+        alphaLock: Boolean,
+        selection: SelectionMask?,
+        originX: Int,
+        originY: Int,
+        ownedBase: Boolean,
+        physicalPlane: PhysicalPaintPlane?,
+    ): PixelBuffer {
+        val result = if (ownedBase && base != null) base else PixelBuffer(width, height).also { if (base != null) it.drawInto(base, 0, 0) }
         val renderer = StrokeRasterizer(originX, originY)
         try {
             historicalStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock) }
-            incomingStrokes.forEach { renderer.draw(result, it, alphaLock = alphaLock, mask = selection) }
+            incomingStrokes.forEach {
+                renderer.draw(result, it, alphaLock = alphaLock, mask = selection, physicalPlane = physicalPlane)
+            }
         } finally {
             renderer.release()
         }

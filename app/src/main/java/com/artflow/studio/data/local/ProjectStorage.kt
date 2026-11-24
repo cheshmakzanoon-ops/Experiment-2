@@ -304,13 +304,24 @@ class ProjectStorage
             kind: String,
             version: Int,
             pngBytes: ByteArray,
+        ): String = writeAuxiliaryBinary(projectId, layerId, kind, version, "png", pngBytes)
+
+        /** Writes an immutable content-addressed auxiliary binary file (e.g. `.png` mask or `.phys` paint plane). */
+        suspend fun writeAuxiliaryBinary(
+            projectId: Long,
+            layerId: Long,
+            kind: String,
+            version: Int,
+            extension: String,
+            bytes: ByteArray,
         ): String =
             withContext(ioDispatcher) {
-                require(kind.matches(Regex("[a-zA-Z0-9_-]+"))) { "Invalid auxiliary image kind" }
-                val relative = "$LAYERS_DIR/$layerId/$kind$version-${digest(pngBytes)}.png"
+                require(kind.matches(Regex("[a-zA-Z0-9_-]+"))) { "Invalid auxiliary file kind" }
+                require(extension.matches(Regex("[a-zA-Z0-9]+"))) { "Invalid auxiliary file extension" }
+                val relative = "$LAYERS_DIR/$layerId/$kind$version-${digest(bytes)}.$extension"
                 val file = resolve(projectId, relative)
                 file.parentFile?.mkdirs()
-                writeAtomically(file) { out -> out.write(pngBytes) }
+                writeAtomically(file) { out -> out.write(bytes) }
                 relative
             }
 
@@ -383,7 +394,7 @@ class ProjectStorage
                     pinnedRasters[projectId]?.let { retained.addAll(it.keys) }
                     listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
                         document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
-                            listOfNotNull(layer.rasterFile, layer.maskFile).forEach {
+                            listOfNotNull(layer.rasterFile, layer.maskFile, layer.physicalPaintFile).forEach {
                                 retained.add(normalizeRelativePath(it))
                             }
                         }
@@ -391,7 +402,7 @@ class ProjectStorage
                     val deleted =
                         StorageFileTree.prune(layersDir, context.filesDir) { file ->
                             val relative = normalizeRelativePath(file.relativeTo(projectDir(projectId)).path)
-                            file.extension == "png" && relative !in retained
+                            (file.extension == "png" || file.extension == "phys") && relative !in retained
                         }
                     if (deleted > 0) Timber.d("Pruned $deleted stale raster versions for project $projectId")
                     deleted

@@ -164,6 +164,16 @@ private fun LightingPanel(
                     )
                 }
             }
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                com.artflow.studio.core.three.PbrLighting.IblEnvironment.entries.forEach { env ->
+                    FilterChip(
+                        selected = lighting.iblEnvironment == env,
+                        onClick = { onChange(lighting.copy(iblEnvironment = env)) },
+                        label = { Text(env.displayName) },
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                }
+            }
             LightSlider("Angle", lighting.azimuth, -180f..180f) { onChange(lighting.copy(azimuth = it)) }
             LightSlider("Height", lighting.elevation, -ModelLighting.MAX_ELEVATION..ModelLighting.MAX_ELEVATION) {
                 onChange(lighting.copy(elevation = it))

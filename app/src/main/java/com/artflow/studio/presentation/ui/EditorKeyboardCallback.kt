@@ -22,7 +22,7 @@ internal class EditorKeyboardCallback(
     private fun consumesAsShortcut(event: KeyEvent): Boolean {
         val handler = shortcutHandler() ?: return false
         if (textEditorFocused()) return false
-        val action = AndroidKeys.chord(event)?.let(KeyboardShortcuts::actionFor) ?: return false
+        val action = AndroidKeys.chord(event)?.let { KeyboardShortcuts.actionFor(it, ShortcutHost.overrides) } ?: return false
         // A held key repeats only the actions made for it; the rest still consume their own repeats.
         return if (event.repeatCount > 0 && !action.repeats) true else handler(action)
     }

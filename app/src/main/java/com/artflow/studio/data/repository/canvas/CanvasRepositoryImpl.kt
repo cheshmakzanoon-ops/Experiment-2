@@ -5,6 +5,8 @@ import com.artflow.studio.core.animation.AnimationTimeline
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.canvas.LayerLinks
 import com.artflow.studio.core.canvas.LayerTransform
+import com.artflow.studio.core.canvas.SeamlessTileMode
+import com.artflow.studio.core.canvas.SeamlessTiling
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.export.LayerMaskExport
@@ -19,6 +21,8 @@ import com.artflow.studio.core.pixels.SelectionMaskCodec
 import com.artflow.studio.core.render.Compositor
 import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.render.LayerStrokeRenderer
+import com.artflow.studio.core.render.PhysicalPaintEngine
+import com.artflow.studio.core.render.PhysicalPaintPlane
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.render.TileCache
 import com.artflow.studio.core.symmetry.SymmetryEngine
@@ -35,6 +39,7 @@ import com.artflow.studio.domain.model.animation.AnimationFrame
 import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.ColorDynamics
+import com.artflow.studio.domain.model.brush.PhysicalPaintMode
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokeDestination
 import com.artflow.studio.domain.model.brush.StrokePoint
@@ -126,6 +131,10 @@ class CanvasRepositoryImpl
         private var colorProfile = ColorProfile.SRGB
         private val trackedMs = AtomicLong()
         private var backgroundColor = 0xFFFFFFFF.toInt()
+        private var physicalLightAngle = 45f
+        private var physicalLightElevation = 35f
+        private var physicalImpastoDepth = 0.5f
+        private var seamlessTileMode = SeamlessTileMode.NONE
 
         private var frameList: MutableList<FrameData> = mutableListOf()
 
@@ -423,6 +432,10 @@ class CanvasRepositoryImpl
             colorProfile = ColorProfile.from(document.colorProfile)
             trackedMs.set(document.trackedMs)
             backgroundColor = document.backgroundColor
+            physicalLightAngle = document.physicalLightAngle
+            physicalLightElevation = document.physicalLightElevation
+            physicalImpastoDepth = document.physicalImpastoDepth
+            seamlessTileMode = document.tileMode
             animationSettings = document.animation
             nextLayerId = max(document.nextLayerId, frames.flatMap { it.layers }.maxOfOrNull { it.id }?.plus(1) ?: 1L)
             nextFrameId = (frames.maxOfOrNull { it.id } ?: 0L) + 1
@@ -509,9 +522,21 @@ class CanvasRepositoryImpl
             data.raster = loadRaster(projectId, layer.rasterFile)
             data.text = layer.textContent
             data.mask = loadRaster(projectId, layer.maskFile)
+            data.physicalPlane = loadPhysicalPlane(projectId, layer.physicalPaintFile)
             data.rasterFile = layer.rasterFile
             data.maskFile = layer.maskFile
+            data.physicalPaintFile = layer.physicalPaintFile
             return data
+        }
+
+        private suspend fun loadPhysicalPlane(
+            projectId: Long,
+            path: String?,
+        ): PhysicalPaintPlane? {
+            val bytes = storage.readRaster(projectId, path) ?: return null
+            return withContext(Dispatchers.Default) {
+                PhysicalPaintPlane.decodeBinary(bytes)
+            }
         }
 
         private suspend fun loadRaster(
@@ -538,7 +563,7 @@ class CanvasRepositoryImpl
                 SaveSnapshot(projectId, editRevision, canvasSnapshot(), frozen.frames)
             }
 
-        /** Writes all frames, including masks, then builds metadata from the paths actually written. */
+        /** Writes all frames, including masks and physical paint planes, then builds metadata from the paths actually written. */
         private suspend fun persistRasters(snapshot: SaveSnapshot): CanvasDocument {
             val savedFrames =
                 snapshot.frames.map { frame ->
@@ -554,7 +579,23 @@ class CanvasRepositoryImpl
                                     val bytes = withContext(Dispatchers.Default) { BitmapPixelBridge.toPngBytes(buffer) }
                                     storage.writeAuxiliaryImage(snapshot.projectId, layer.id, MASK_PREFIX, RASTER_VERSION, bytes)
                                 }
-                            layer.toDomain(index).copy(rasterFile = rasterFile, maskFile = maskFile)
+                            val physicalPaintFile =
+                                layer.physicalPlane?.takeIf { !it.isEmpty() }?.let { plane ->
+                                    val bytes = withContext(Dispatchers.Default) { plane.encodeBinary() }
+                                    storage.writeAuxiliaryBinary(
+                                        snapshot.projectId,
+                                        layer.id,
+                                        PHYSICAL_PREFIX,
+                                        RASTER_VERSION,
+                                        "phys",
+                                        bytes,
+                                    )
+                                }
+                            layer.toDomain(index).copy(
+                                rasterFile = rasterFile,
+                                maskFile = maskFile,
+                                physicalPaintFile = physicalPaintFile,
+                            )
                         }
                     AnimationFrame(frame.id, frame.name, layers, frame.durationMs, frame.isKeyframe)
                 }
@@ -596,9 +637,10 @@ class CanvasRepositoryImpl
                         allLayers().forEach { live ->
                             val saved = savedLayers[live.id]
                             val frozen = frozenLayers[live.id]
-                            if (frozen != null && live.raster === frozen.raster && live.mask === frozen.mask) {
+                            if (matchesFrozenPlanes(live, frozen)) {
                                 live.rasterFile = saved?.rasterFile
                                 live.maskFile = saved?.maskFile
+                                live.physicalPaintFile = saved?.physicalPaintFile
                                 dirtyRasters.remove(live.id)
                             }
                         }
@@ -643,7 +685,7 @@ class CanvasRepositoryImpl
                 val activeRasters =
                     withState {
                         if (currentProjectId == projectId) {
-                            allLayers().flatMap { listOfNotNull(it.rasterFile, it.maskFile) }.toSet()
+                            allLayers().flatMap { listOfNotNull(it.rasterFile, it.maskFile, it.physicalPaintFile) }.toSet()
                         } else {
                             emptySet()
                         }
@@ -817,19 +859,89 @@ class CanvasRepositoryImpl
             }
             // Preview and commit share this exact raw-pixel operation. Compute first so a failed
             // allocation or render cannot add an undo entry or modify the committed document.
-            val incoming = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetryFor(layer, symmetrySettings))
+            val incoming = expandIncomingStrokes(stroke, layer)
             val reach = incoming.map { PreviewCache.boundsOf(it, 0) }.reduce { a, b -> PreviewCache.union(a, b) }
             val area =
                 IntBounds(max(0, reach.left), max(0, reach.top), min(canvasWidth - 1, reach.right), min(canvasHeight - 1, reach.bottom))
+            val isPhysicalStroke = !destination.isMask && !isEraser && brushParams.physicalMode != PhysicalPaintMode.NONE
+            val targetPhysicalPlane =
+                if (isPhysicalStroke) {
+                    layer.physicalPlane?.copy() ?: PhysicalPaintPlane(canvasWidth, canvasHeight)
+                } else {
+                    null
+                }
             // A live stroke already holds its dabs: the commit lays them down instead of redrawing.
             val lives = synchronized(liveLock) { liveStrokes.remove(strokeId) }
-            val live = lives?.takeIf { destination == StrokeDestination.LAYER && it.size == incoming.size && layer.strokes.isEmpty() }
+            val live =
+                lives?.takeIf {
+                    !isPhysicalStroke &&
+                        seamlessTileMode == SeamlessTileMode.NONE &&
+                        destination == StrokeDestination.LAYER &&
+                        it.size == incoming.size &&
+                        layer.strokes.isEmpty()
+                }
             // The copy made while the stroke was drawn, when it is ready and still the layer's raster.
             val owned = if (destination.isMask) null else readyCopy(prepared, layer)
-            val base =
-                if (live != null) {
-                    commitLive(layer, incoming, live, owned)
-                } else {
+            val base = renderCommittedStroke(layer, destination, incoming, area, live, owned, targetPhysicalPlane)
+            val damageBefore = previewDamage
+            pushUndo()
+            if (destination.isMask) {
+                layer.mask = base
+                layer.maskFile = null
+                layer.maskOwned = true
+            } else {
+                layer.raster = base
+                layer.strokes.clear()
+                layer.rasterFile = null
+                if (targetPhysicalPlane != null) {
+                    layer.physicalPlane = targetPhysicalPlane
+                    layer.physicalPaintFile = null
+                    layer.physicalPlaneOwned = true
+                }
+            }
+            dirtyRasters += layer.id
+            dirty = true
+            // The commit only changed this layer, inside the stroke's reach.
+            previewDamage = damageBefore?.plus(area, layer.id)
+            emitAsync(CanvasInvalidationEvent.Full)
+        }
+
+        private fun expandIncomingStrokes(
+            stroke: Stroke,
+            layer: LayerData,
+        ): List<Stroke> {
+            val mirrored = SymmetryEngine.mirrorStroke(stroke, canvasWidth, canvasHeight, symmetryFor(layer, symmetrySettings))
+            return if (seamlessTileMode == SeamlessTileMode.NONE) {
+                mirrored
+            } else {
+                mirrored.flatMap { SeamlessTiling.wrappedStrokes(it, canvasWidth, canvasHeight, seamlessTileMode) }
+            }
+        }
+
+        private fun renderCommittedStroke(
+            layer: LayerData,
+            destination: StrokeDestination,
+            incoming: List<Stroke>,
+            area: IntBounds,
+            live: List<StrokeRasterizer.LiveStroke>?,
+            owned: PixelBuffer?,
+            targetPhysicalPlane: PhysicalPaintPlane?,
+        ): PixelBuffer =
+            when {
+                live != null -> commitLive(layer, incoming, live, owned)
+                targetPhysicalPlane != null ->
+                    LayerStrokeRenderer.renderWithPhysical(
+                        owned ?: layer.raster,
+                        layer.strokes.toList(),
+                        incoming,
+                        canvasWidth,
+                        canvasHeight,
+                        layer.isAlphaLocked,
+                        activeSelection,
+                        physicalPlane = targetPhysicalPlane,
+                        ownedBase = owned != null,
+                    )
+                else ->
                     LayerStrokeRenderer.render(
                         if (destination.isMask) layer.mask else owned ?: layer.raster,
                         if (destination.isMask) emptyList() else layer.strokes.toList(),
@@ -841,24 +953,7 @@ class CanvasRepositoryImpl
                         region = area,
                         ownedBase = owned != null,
                     )
-                }
-            val damageBefore = previewDamage
-            pushUndo()
-            if (destination.isMask) {
-                layer.mask = base
-                layer.maskFile = null
-                layer.maskOwned = true
-            } else {
-                layer.raster = base
-                layer.strokes.clear()
-                layer.rasterFile = null
             }
-            dirtyRasters += layer.id
-            dirty = true
-            // The commit only changed this layer, inside the stroke's reach.
-            previewDamage = damageBefore?.plus(area, layer.id)
-            emitAsync(CanvasInvalidationEvent.Full)
-        }
 
         /**
          * Starts copying [layer]'s raster now, while the stroke is still being drawn, so the commit can take the
@@ -3530,8 +3625,19 @@ class CanvasRepositoryImpl
                 compositor.compositeOnto(
                     target,
                     upper.layers.mapIndexed { index, layer ->
-                        Compositor.LayerInput(layer.toDomain(split + index), layer.raster, layer.strokes.toList(), layer.mask)
+                        Compositor.LayerInput(
+                            layer.toDomain(split + index),
+                            layer.raster,
+                            layer.strokes.toList(),
+                            layer.mask,
+                            physicalPlane = layer.physicalPlane,
+                        )
                     },
+                    Compositor.Options(
+                        physicalLightAngle = physicalLightAngle,
+                        physicalLightElevation = physicalLightElevation,
+                        physicalImpastoDepth = physicalImpastoDepth,
+                    ),
                 )
             } finally {
                 compositor.release()
@@ -3777,9 +3883,20 @@ class CanvasRepositoryImpl
                                         data.raster,
                                         data.strokes.toList(),
                                         if (independentMask == null) data.mask else null,
+                                        physicalPlane = data.physicalPlane,
                                     )
                                 val pixels =
-                                    renderer.renderLayerContent(input, snapshot.width, snapshot.height)
+                                    renderer.renderLayerContent(
+                                        input,
+                                        snapshot.width,
+                                        snapshot.height,
+                                        options =
+                                            Compositor.Options(
+                                                physicalLightAngle = frozen.second.physicalLightAngle,
+                                                physicalLightElevation = frozen.second.physicalLightElevation,
+                                                physicalImpastoDepth = frozen.second.physicalImpastoDepth,
+                                            ),
+                                    )
                                         ?: return@mapIndexedNotNull null
                                 layer to pixels
                             }
@@ -3876,7 +3993,13 @@ class CanvasRepositoryImpl
             return try {
                 localCompositor.composite(
                     layers.mapIndexed { index, layer ->
-                        Compositor.LayerInput(layer.toDomain(index), layer.raster, layer.strokes.toList(), layer.mask)
+                        Compositor.LayerInput(
+                            layer.toDomain(index),
+                            layer.raster,
+                            layer.strokes.toList(),
+                            layer.mask,
+                            physicalPlane = layer.physicalPlane,
+                        )
                     },
                     document.width,
                     document.height,
@@ -3891,6 +4014,9 @@ class CanvasRepositoryImpl
                         includeHiddenLayers = includeHidden,
                         applyAdjustments = applyAdjustments,
                         materialChannel = materialChannel,
+                        physicalLightAngle = document.physicalLightAngle,
+                        physicalLightElevation = document.physicalLightElevation,
+                        physicalImpastoDepth = document.physicalImpastoDepth,
                     ),
                 )
             } finally {
@@ -4242,7 +4368,158 @@ class CanvasRepositoryImpl
                 activeFrameIndex = activeFrame,
                 animation = animationSettings,
                 savedSelections = savedSelectionSlots.map(SelectionMaskCodec::encode),
+                physicalLightAngle = physicalLightAngle,
+                physicalLightElevation = physicalLightElevation,
+                physicalImpastoDepth = physicalImpastoDepth,
+                tileMode = seamlessTileMode,
             )
+
+        override fun seamlessTileMode(): SeamlessTileMode = seamlessTileMode
+
+        override fun setSeamlessTileMode(mode: SeamlessTileMode) {
+            if (seamlessTileMode == mode) return
+            seamlessTileMode = mode
+            dirty = true
+            emitAsync(CanvasInvalidationEvent.Full)
+        }
+
+        override fun physicalLightAngle(): Float = physicalLightAngle
+
+        override fun physicalLightElevation(): Float = physicalLightElevation
+
+        override fun physicalImpastoDepth(): Float = physicalImpastoDepth
+
+        override fun setPhysicalLighting(
+            angle: Float,
+            elevation: Float,
+            impastoDepth: Float,
+        ) {
+            val normalizedAngle = ((angle % 360f) + 360f) % 360f
+            val clampedElevation = elevation.coerceIn(5f, 85f)
+            val clampedDepth = impastoDepth.coerceIn(0f, 1f)
+            if (physicalLightAngle == normalizedAngle &&
+                physicalLightElevation == clampedElevation &&
+                physicalImpastoDepth == clampedDepth
+            ) {
+                return
+            }
+            physicalLightAngle = normalizedAngle
+            physicalLightElevation = clampedElevation
+            physicalImpastoDepth = clampedDepth
+            dirty = true
+            emitAsync(CanvasInvalidationEvent.Full)
+        }
+
+        override fun hasActiveWetPaint(): Boolean =
+            currentLayers().any { layer ->
+                layer.isVisible && layer.physicalPlane?.hasActiveWetness() == true
+            }
+
+        private fun matchesFrozenPlanes(
+            live: LayerData,
+            frozen: LayerData?,
+        ): Boolean =
+            frozen != null &&
+                live.raster === frozen.raster &&
+                live.mask === frozen.mask &&
+                live.physicalPlane === frozen.physicalPlane
+
+        override suspend fun stepPhysicalDiffusion(
+            gravityX: Float,
+            gravityY: Float,
+            diffusionRate: Float,
+            evaporationRate: Float,
+        ): Boolean =
+            withState {
+                var anyChanged = false
+                var anyWetRemaining = false
+                val wetCandidates =
+                    currentLayers().filter { layer ->
+                        layer.isVisible &&
+                            !layer.isLocked &&
+                            !layer.isGroup &&
+                            layer.raster != null &&
+                            layer.physicalPlane?.hasActiveWetness() == true
+                    }
+                wetCandidates.forEach { layer ->
+                    val plane = checkNotNull(layer.physicalPlane)
+                    val raster = checkNotNull(layer.raster)
+                    val targetRaster = raster.copy()
+                    val targetPlane = if (layer.physicalPlaneOwned) plane else plane.copy()
+                    PhysicalPaintEngine.stepWatercolorDiffusion(
+                        colorBuffer = targetRaster,
+                        plane = targetPlane,
+                        gravityX = gravityX,
+                        gravityY = gravityY,
+                        iterations = 1,
+                    )
+                    layer.raster = targetRaster
+                    layer.rasterFile = null
+                    layer.physicalPlane = targetPlane
+                    layer.physicalPaintFile = null
+                    layer.physicalPlaneOwned = true
+                    dirtyRasters += layer.id
+                    anyChanged = true
+                    if (targetPlane.hasActiveWetness()) anyWetRemaining = true
+                }
+                if (anyChanged) {
+                    dirty = true
+                    emitAsync(CanvasInvalidationEvent.Full)
+                }
+                anyWetRemaining
+            }
+
+        override suspend fun dryPhysicalLayer(layerId: Long): Boolean =
+            withState {
+                val layer = currentLayers().firstOrNull { it.id == layerId } ?: return@withState false
+                val plane = layer.physicalPlane ?: return@withState false
+                if (!plane.hasActiveWetness()) return@withState false
+                pushUndo()
+                val dried = plane.copy()
+                dried.dryAll()
+                layer.physicalPlane = if (dried.isEmpty()) null else dried
+                layer.physicalPaintFile = null
+                layer.physicalPlaneOwned = true
+                dirty = true
+                emitAsync(CanvasInvalidationEvent.Full)
+                true
+            }
+
+        override suspend fun dryAllPhysicalLayers(): Boolean =
+            withState {
+                val wetLayers = currentLayers().filter { it.physicalPlane?.hasActiveWetness() == true }
+                if (wetLayers.isEmpty()) return@withState false
+                pushUndo()
+                wetLayers.forEach { layer ->
+                    val dried = layer.physicalPlane?.copy()
+                    dried?.dryAll()
+                    layer.physicalPlane = if (dried == null || dried.isEmpty()) null else dried
+                    layer.physicalPaintFile = null
+                    layer.physicalPlaneOwned = true
+                }
+                dirty = true
+                emitAsync(CanvasInvalidationEvent.Full)
+                true
+            }
+
+        override suspend fun rewetPhysicalLayer(
+            layerId: Long,
+            amount: Float,
+        ): Boolean =
+            withState {
+                val layer = currentLayers().firstOrNull { it.id == layerId } ?: return@withState false
+                if (!layer.canPaint()) return@withState false
+                val raster = layer.raster ?: return@withState false
+                pushUndo()
+                val nextPlane = layer.physicalPlane?.copy() ?: PhysicalPaintPlane(canvasWidth, canvasHeight)
+                nextPlane.rewetPaintedPixels(raster, amount)
+                layer.physicalPlane = nextPlane
+                layer.physicalPaintFile = null
+                layer.physicalPlaneOwned = true
+                dirty = true
+                emitAsync(CanvasInvalidationEvent.Full)
+                true
+            }
 
         private fun emit(event: CanvasInvalidationEvent) {
             invalidationFlow.tryEmit(event)
@@ -4330,6 +4607,8 @@ class CanvasRepositoryImpl
             var rasterFile: String? = null
             var mask: PixelBuffer? = null
             var maskFile: String? = null
+            var physicalPlane: PhysicalPaintPlane? = null
+            var physicalPaintFile: String? = null
 
             /**
              * True when [mask] is owned exclusively by this layer and may be mutated in place.
@@ -4337,6 +4616,7 @@ class CanvasRepositoryImpl
              * corrupting the history entry that shares the buffer.
              */
             var maskOwned: Boolean = true
+            var physicalPlaneOwned: Boolean = true
 
             fun canPaint(): Boolean =
                 isVisible &&
@@ -4384,9 +4664,12 @@ class CanvasRepositoryImpl
                     it.rasterFile = rasterFile
                     it.mask = mask
                     it.maskFile = maskFile
-                    // The snapshot now shares the mask buffer, so the live layer must copy before it
-                    // paints again.
+                    it.physicalPlane = physicalPlane
+                    it.physicalPaintFile = physicalPaintFile
+                    // The snapshot now shares the mask and physical buffers, so the live layer must
+                    // copy before it mutates them again.
                     it.maskOwned = false
+                    it.physicalPlaneOwned = false
                 }
 
             /**
@@ -4436,7 +4719,9 @@ class CanvasRepositoryImpl
                     fresh.raster = raster
                     fresh.text = text
                     fresh.mask = mask
+                    fresh.physicalPlane = physicalPlane
                     fresh.maskOwned = false
+                    fresh.physicalPlaneOwned = false
                 }
 
             fun toDomain(index: Int): Layer =
@@ -4455,6 +4740,7 @@ class CanvasRepositoryImpl
                     isClippingMask = isClippingMask,
                     rasterFile = rasterFile,
                     maskFile = maskFile,
+                    physicalPaintFile = physicalPaintFile,
                     maskEnabled = maskEnabled,
                     maskInverted = maskInverted,
                     maskDensity = maskDensity,
@@ -4500,5 +4786,6 @@ class CanvasRepositoryImpl
             /** Pixel content is written as a single file per layer; undo keeps versions in memory. */
             private const val RASTER_VERSION = 1
             private const val MASK_PREFIX = "mask"
+            private const val PHYSICAL_PREFIX = "phys"
         }
     }

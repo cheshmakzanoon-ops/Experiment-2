@@ -263,7 +263,55 @@ fun CanvasScreen(
     var colorChipOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var contentOrigin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     var showReference by rememberSaveable(projectId) { mutableStateOf(false) }
+    var showMixingTray by rememberSaveable(projectId) { mutableStateOf(false) }
+    var pinPhysicalHud by rememberSaveable(projectId) { mutableStateOf(false) }
+    val seamlessTileMode by viewModel.physicalStudio.seamlessTileMode.collectAsState()
+    val physicalLightAngle by viewModel.physicalStudio.physicalLightAngle.collectAsState()
+    val physicalLightElevation by viewModel.physicalStudio.physicalLightElevation.collectAsState()
+    val physicalImpastoDepth by viewModel.physicalStudio.physicalImpastoDepth.collectAsState()
+    val physicalWetPaused by viewModel.physicalStudio.physicalWetPaused.collectAsState()
+    val physicalTiltGravity by viewModel.physicalStudio.physicalTiltGravity.collectAsState()
+    val hasActiveWetPaint by viewModel.physicalStudio.hasActiveWetPaint.collectAsState()
     val appContext = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    LaunchedEffect(uiState is CanvasUiState.Ready) {
+        if (uiState is CanvasUiState.Ready) viewModel.physicalStudio.syncFromDocument()
+    }
+    LaunchedEffect(canvasView, seamlessTileMode) {
+        canvasView?.setSeamlessTileMode(seamlessTileMode)
+    }
+    LaunchedEffect(settings.customShortcuts) {
+        com.artflow.studio.presentation.ui.ShortcutHost.overrides = settings.decodedShortcutOverrides()
+    }
+    LaunchedEffect(contentRevision) {
+        if (uiState is CanvasUiState.Ready) viewModel.physicalStudio.notifyStrokeCommitted()
+    }
+    androidx.compose.runtime.DisposableEffect(physicalTiltGravity) {
+        if (!physicalTiltGravity) {
+            onDispose {}
+        } else {
+            val sensorManager = appContext.getSystemService(android.content.Context.SENSOR_SERVICE) as? android.hardware.SensorManager
+            val accel = sensorManager?.getDefaultSensor(android.hardware.Sensor.TYPE_ACCELEROMETER)
+            val listener =
+                object : android.hardware.SensorEventListener {
+                    override fun onSensorChanged(event: android.hardware.SensorEvent) {
+                        val gx = (-event.values[0] / android.hardware.SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+                        val gy = (event.values[1] / android.hardware.SensorManager.GRAVITY_EARTH).coerceIn(-1f, 1f)
+                        viewModel.physicalStudio.updateTiltGravity(gx, gy)
+                    }
+
+                    override fun onAccuracyChanged(
+                        sensor: android.hardware.Sensor?,
+                        accuracy: Int,
+                    ) = Unit
+                }
+            if (accel != null) {
+                sensorManager.registerListener(listener, accel, android.hardware.SensorManager.SENSOR_DELAY_UI)
+            }
+            onDispose {
+                if (accel != null) sensorManager.unregisterListener(listener)
+            }
+        }
+    }
     // The reference image is remembered per artwork; the picker grants lasting read access.
     var referenceUri by rememberSaveable(projectId) { mutableStateOf(ReferenceImages.get(appContext, projectId)) }
     var referenceCanvas by rememberSaveable(projectId) { mutableStateOf(false) }
@@ -1038,6 +1086,16 @@ fun CanvasScreen(
                                 panel = EditorPanel.NONE
                                 showReference = true
                             },
+                            onMixingTray = {
+                                panel = EditorPanel.NONE
+                                showMixingTray = !showMixingTray
+                            },
+                            onPhysicalStudio = {
+                                panel = EditorPanel.NONE
+                                pinPhysicalHud = !pinPhysicalHud
+                            },
+                            tileMode = seamlessTileMode,
+                            onTileMode = { mode -> viewModel.physicalStudio.setSeamlessTileMode(mode) },
                             onFlip = { viewModel.canvasOps.flipCanvas(it) },
                             onPageAssist = {
                                 panel = EditorPanel.NONE
@@ -1412,6 +1470,43 @@ fun CanvasScreen(
                     // Keep the floating window below the actual focus-exit target.
                     modifier = Modifier.padding(top = if (focusMode) focusExitSize + 8.dp else 0.dp),
                     canvas = CanvasReference(referenceCanvas, canvasPreviewBitmap) { referenceCanvas = it },
+                )
+            }
+            if (showMixingTray && ready != null) {
+                com.artflow.studio.presentation.ui.components.editor.SpectralMixingTray(
+                    activeBrushColor = input.brushColor,
+                    onPickColor = viewModel::onColorPicked,
+                    onClose = { showMixingTray = false },
+                    modifier = Modifier.padding(top = if (focusMode) focusExitSize + 8.dp else 0.dp),
+                )
+            }
+            val showPhysicalHud =
+                ready != null &&
+                    !focusMode &&
+                    (input.brushParams.physicalMode != com.artflow.studio.domain.model.brush.PhysicalPaintMode.NONE || pinPhysicalHud)
+            if (showPhysicalHud) {
+                com.artflow.studio.presentation.ui.components.editor.PhysicalPaintHud(
+                    state =
+                        com.artflow.studio.presentation.ui.components.editor.PhysicalPaintHudState(
+                            mode = input.brushParams.physicalMode,
+                            hasWetPaint = hasActiveWetPaint,
+                            isPaused = physicalWetPaused,
+                            tiltGravityEnabled = physicalTiltGravity,
+                            lightAngle = physicalLightAngle,
+                            lightElevation = physicalLightElevation,
+                            impastoDepth = physicalImpastoDepth,
+                        ),
+                    actions =
+                        com.artflow.studio.presentation.ui.components.editor.PhysicalPaintHudActions(
+                            onTogglePause = viewModel.physicalStudio::toggleWetPaused,
+                            onToggleTiltGravity = viewModel.physicalStudio::toggleTiltGravity,
+                            onDryLayer = viewModel.physicalStudio::dryActiveLayer,
+                            onDryAll = viewModel.physicalStudio::dryAllLayers,
+                            onRewetLayer = viewModel.physicalStudio::rewetActiveLayer,
+                            onLightingChange = viewModel.physicalStudio::setPhysicalLighting,
+                            onOpenMixingTray = { showMixingTray = !showMixingTray },
+                        ),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 8.dp),
                 )
             }
             if (ready != null && !focusMode) {

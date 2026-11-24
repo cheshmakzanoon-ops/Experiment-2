@@ -78,10 +78,25 @@ fun ColorPanel(
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.color_title), style = MaterialTheme.typography.titleMedium)
+                val cmyk =
+                    com.artflow.studio.core.color.IccColorManager
+                        .srgbToCmyk(color)
+                val outOfGamut =
+                    com.artflow.studio.core.color.IccColorManager
+                        .isOutOfCmykGamut(color)
+                val cmykText =
+                    "C${(cmyk.c * 100).toInt()} M${(cmyk.m * 100).toInt()} " +
+                        "Y${(cmyk.y * 100).toInt()} K${(cmyk.k * 100).toInt()}" +
+                        if (outOfGamut) " · Out of CMYK gamut" else ""
                 Text(
                     text = "${ColorHarmony.nameOf(color)} · ${ColorHarmony.toHex(color)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = cmykText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (outOfGamut) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Swatch(color = previous, onClick = { onColorSelected(previous) }, description = stringResource(R.string.color_previous))

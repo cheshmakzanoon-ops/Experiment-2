@@ -57,6 +57,13 @@ data class CanvasActions(
     val onViewFilter: (ViewFilter) -> Unit = {},
     /** Reopens the 3D window; null when the artwork has no model. */
     val onModelView: (() -> Unit)? = null,
+    /** Opens or toggles the floating Spectral Pigment Mixing Tray. */
+    val onMixingTray: () -> Unit = {},
+    /** Toggles the collapsible Physical Paint Studio HUD pill. */
+    val onPhysicalStudio: () -> Unit = {},
+    /** Live seamless tiling mode for pattern/texture painting. */
+    val tileMode: com.artflow.studio.core.canvas.SeamlessTileMode = com.artflow.studio.core.canvas.SeamlessTileMode.NONE,
+    val onTileMode: (com.artflow.studio.core.canvas.SeamlessTileMode) -> Unit = {},
 )
 
 data class VideoActions(
@@ -215,7 +222,19 @@ private fun CanvasTab(
     ActionRow("Page Assist", canvas.onPageAssist)
     ActionRow("Drawing Guide", canvas.onDrawingGuide)
     ActionRow("Reference", canvas.onReference)
+    ActionRow("Spectral Mixing Tray", canvas.onMixingTray)
+    ActionRow("Physical Paint Studio", canvas.onPhysicalStudio)
     canvas.onModelView?.let { ActionRow("3D view", it) }
+    Text("Seamless tiling", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 8.dp))
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        com.artflow.studio.core.canvas.SeamlessTileMode.entries.forEach { mode ->
+            FilterChip(
+                selected = canvas.tileMode == mode,
+                onClick = { canvas.onTileMode(mode) },
+                label = { Text(mode.displayName) },
+            )
+        }
+    }
     ActionRow("Flip canvas horizontally", onClick = { canvas.onFlip(false) })
     ActionRow("Flip canvas vertically", onClick = { canvas.onFlip(true) })
     PrefSwitch("Display P3 colour profile", canvas.wideColor, canvas.onWideColor)

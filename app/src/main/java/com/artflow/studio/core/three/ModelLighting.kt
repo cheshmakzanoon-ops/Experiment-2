@@ -25,7 +25,27 @@ data class ModelLighting(
     val secondAzimuth: Float = -145f,
     val secondElevation: Float = 20f,
     val secondIntensity: Float = 0f,
+    /** Cook-Torrance IBL environment preset for PBR material lighting. */
+    val iblEnvironment: PbrLighting.IblEnvironment = PbrLighting.IblEnvironment.STUDIO_SOFTBOX,
 ) {
+    /** Evaluates physically-based Cook-Torrance GGX shading + IBL for a surface sample. */
+    fun shadePbr(
+        albedoArgb: Int,
+        normal: Vec3,
+        viewDir: Vec3,
+        surfaceMetallic: Float = metallic,
+        surfaceRoughness: Float = roughness,
+    ): Int =
+        PbrLighting.shadePoint(
+            albedoArgb = albedoArgb,
+            metallic = surfaceMetallic,
+            roughness = surfaceRoughness,
+            normal = normal,
+            viewDir = viewDir,
+            environment = iblEnvironment,
+            exposure = exposure,
+        )
+
     /** Unit vector from the model toward the light. */
     fun direction(): Vec3 = directionOf(azimuth, elevation)
 

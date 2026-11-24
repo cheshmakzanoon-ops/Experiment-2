@@ -105,7 +105,7 @@ internal object StillExportMemory {
                 }
                 ExportFormat.PSD, ExportFormat.PROCREATE -> layered()
                 ExportFormat.LAYER_PNGS -> layerPngs()
-                ExportFormat.MODEL_OBJ -> model(modelBytes)
+                ExportFormat.MODEL_OBJ, ExportFormat.MODEL_GLB -> model(modelBytes)
                 else -> Unit // The caller reports unsupported formats without encoding them.
             }
         }

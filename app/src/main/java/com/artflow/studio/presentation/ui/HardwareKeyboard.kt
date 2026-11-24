@@ -13,6 +13,7 @@ import com.artflow.studio.core.canvas.ShortcutAction
  */
 object ShortcutHost {
     var handler: ((ShortcutAction) -> Boolean)? = null
+    var overrides: Map<ShortcutAction, KeyChord> = emptyMap()
 }
 
 /** Android key codes on one side, the platform-free tokens of [KeyChord] on the other. */
@@ -64,15 +65,17 @@ internal object AndroidKeys {
     fun helperGroups(): List<KeyboardShortcutGroup> =
         ShortcutAction.Group.entries.mapNotNull { group ->
             val infos =
-                KeyboardShortcuts.bindings
-                    .filter { it.action.group == group }
-                    .mapNotNull { binding ->
-                        val code = keyCodes[binding.chord.key] ?: return@mapNotNull null
-                        var modifiers = 0
-                        if (binding.chord.primary) modifiers = modifiers or KeyEvent.META_CTRL_ON
-                        if (binding.chord.shift) modifiers = modifiers or KeyEvent.META_SHIFT_ON
-                        if (binding.chord.alt) modifiers = modifiers or KeyEvent.META_ALT_ON
-                        KeyboardShortcutInfo(binding.action.label, code, modifiers)
+                ShortcutAction.entries
+                    .filter { it.group == group }
+                    .flatMap { action ->
+                        KeyboardShortcuts.chordsFor(action, ShortcutHost.overrides).mapNotNull { chord ->
+                            val code = keyCodes[chord.key] ?: return@mapNotNull null
+                            var modifiers = 0
+                            if (chord.primary) modifiers = modifiers or KeyEvent.META_CTRL_ON
+                            if (chord.shift) modifiers = modifiers or KeyEvent.META_SHIFT_ON
+                            if (chord.alt) modifiers = modifiers or KeyEvent.META_ALT_ON
+                            KeyboardShortcutInfo(action.label, code, modifiers)
+                        }
                     }
             infos.takeIf { it.isNotEmpty() }?.let { KeyboardShortcutGroup(group.title, it) }
         }

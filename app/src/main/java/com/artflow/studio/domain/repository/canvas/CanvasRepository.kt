@@ -786,6 +786,58 @@ interface CanvasRepository {
 
     /** Releases caches. The repository is a singleton, so this only frees memory. */
     fun dispose()
+
+    // -----------------------------------------------------------------------------------------
+    // Physical Paint Studio & Seamless Tiling
+    // -----------------------------------------------------------------------------------------
+
+    /** Current seamless tiling mode for stroke wrapping and 3x3 canvas preview. */
+    fun seamlessTileMode(): com.artflow.studio.core.canvas.SeamlessTileMode = com.artflow.studio.core.canvas.SeamlessTileMode.NONE
+
+    /** Updates the document's seamless tiling mode and marks the document dirty. */
+    fun setSeamlessTileMode(mode: com.artflow.studio.core.canvas.SeamlessTileMode) = Unit
+
+    /** Dynamic 3D impasto raking-light azimuth in degrees (0..360). */
+    fun physicalLightAngle(): Float = 45f
+
+    /** Dynamic 3D impasto raking-light elevation in degrees (5..85). */
+    fun physicalLightElevation(): Float = 35f
+
+    /** Dynamic 3D impasto relief shading depth (0..1). */
+    fun physicalImpastoDepth(): Float = 0.5f
+
+    /** Updates the document's 3D impasto raking-light parameters and refreshes preview. */
+    fun setPhysicalLighting(
+        angle: Float,
+        elevation: Float,
+        impastoDepth: Float,
+    ) = Unit
+
+    /** True when at least one visible layer in the active frame still has wet physical paint. */
+    fun hasActiveWetPaint(): Boolean = false
+
+    /**
+     * Advances live watercolor diffusion by one tick across visible wet layers with optional
+     * accelerometer tilt gravity ([gravityX], [gravityY] in -1..1). Returns true while wet paint remains.
+     */
+    suspend fun stepPhysicalDiffusion(
+        gravityX: Float = 0f,
+        gravityY: Float = 0f,
+        diffusionRate: Float = 0.22f,
+        evaporationRate: Float = 0.025f,
+    ): Boolean = false
+
+    /** Dries all wet paint on [layerId] while keeping 3D impasto ridges intact (undoable). */
+    suspend fun dryPhysicalLayer(layerId: Long): Boolean = false
+
+    /** Dries all wet paint across every layer in the active frame (undoable). */
+    suspend fun dryAllPhysicalLayers(): Boolean = false
+
+    /** Re-wets painted pixels on [layerId] so dried watercolor can bleed again (undoable). */
+    suspend fun rewetPhysicalLayer(
+        layerId: Long,
+        amount: Float = 0.7f,
+    ): Boolean = false
 }
 
 /** Complete state of a canvas, returned after creating or loading a project. */

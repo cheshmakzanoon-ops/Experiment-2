@@ -131,6 +131,33 @@ class PhysicalPaintPlane(
         }
     }
 
+    /** True when any allocated tile still contains active moisture above the dry threshold. */
+    fun hasActiveWetness(threshold: Float = 0.01f): Boolean = tiles.values.any { tile -> tile.wetness.any { it > threshold } }
+
+    /** Re-activates dried paint across all non-transparent pixels in [buffer]. */
+    fun rewetPaintedPixels(
+        buffer: PixelBuffer,
+        amount: Float = 0.7f,
+    ) {
+        val strength = amount.coerceIn(0f, 1f)
+        if (strength <= 0f) return
+        val maxW = min(width, buffer.width)
+        val maxH = min(height, buffer.height)
+        for (y in 0 until maxH) {
+            val row = y * buffer.width
+            for (x in 0 until maxW) {
+                val alpha = (buffer.pixels[row + x] ushr 24) and 0xFF
+                if (alpha > 4) {
+                    val tile = obtainTile(x / TILE_SIZE, y / TILE_SIZE)
+                    val idx = localIndex(x, y)
+                    val target = strength * (alpha / 255f)
+                    tile.wetness[idx] = max(tile.wetness[idx], target).coerceIn(0f, 1f)
+                    tile.pigmentLoad[idx] = max(tile.pigmentLoad[idx], target * 0.8f).coerceIn(0f, 1f)
+                }
+            }
+        }
+    }
+
     fun copy(): PhysicalPaintPlane {
         val clone = PhysicalPaintPlane(width, height)
         for ((key, tile) in tiles) {

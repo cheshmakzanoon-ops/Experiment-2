@@ -38,7 +38,7 @@ internal class CanvasExportController(
             ExportFormat.stillFormats() + ExportFormat.animationFormats()
         } else {
             ExportFormat.stillFormats()
-        } + listOfNotNull(ExportFormat.MODEL_OBJ.takeIf { hasModel })
+        } + if (hasModel) listOf(ExportFormat.MODEL_OBJ, ExportFormat.MODEL_GLB) else emptyList()
 
     fun export(options: ExportOptions) {
         val (projectId, name) = currentProject()
