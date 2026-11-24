@@ -76,6 +76,8 @@ data class CanvasDocument(
     val physicalLightElevation: Float = 35f,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
     val physicalImpastoDepth: Float = 0.5f,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val tileMode: com.artflow.studio.core.canvas.SeamlessTileMode = com.artflow.studio.core.canvas.SeamlessTileMode.NONE,
 ) {
     /**
      * Frames in a canonical form. Documents written before animation existed have no [frames], so
