@@ -137,7 +137,9 @@ object ProcreateBrush {
                         ?.let { Base64.getEncoder().encodeToString(it) },
                 hueJitter = unit("dynamicsJitterHue"),
                 saturationJitter = unit("dynamicsJitterSaturation"),
-                brightnessJitter = maxOf(unit("dynamicsJitterLightness"), unit("dynamicsJitterDarkness")),
+                brightnessJitter = unit("dynamicsJitterLightness"),
+                darknessJitter =
+                    unit("dynamicsJitterDarkness").takeIf { it != unit("dynamicsJitterLightness") },
                 // The reference corpus contains all six colour pressure/tilt scalars.
                 // ArtFlow applies its documented HSV approximation; reference pixel parity is unknown.
                 colorDynamics =

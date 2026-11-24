@@ -308,6 +308,13 @@ private fun BrushGrainSettings(
                     label = { Text(texture.label) },
                 )
             }
+            com.artflow.studio.core.render.BrushSourceLibrary.GrainSource.entries.forEach { grain ->
+                FilterChip(
+                    selected = brushParams.blendTexture && brushParams.textureId == grain.id,
+                    onClick = { onBrushParamsChanged(brushParams.copy(textureId = grain.id, blendTexture = true)) },
+                    label = { Text(grain.label) },
+                )
+            }
             imported.forEachIndexed { index, id ->
                 FilterChip(
                     selected = brushParams.blendTexture && brushParams.textureId == id,
@@ -468,13 +475,23 @@ private fun BrushJitterSettings(
             valueDisplay = "%.0f%%".format(brushParams.saturationJitter * 100),
         )
 
-        // Brightness Jitter
+        // Lightness / Brightness Jitter
         BrushParameterSlider(
             label = stringResource(R.string.brush_adv_brightness_jitter),
             value = brushParams.brightnessJitter,
             onValueChange = { onBrushParamsChanged(brushParams.copy(brightnessJitter = it)) },
             valueRange = 0f..1f,
             valueDisplay = "%.0f%%".format(brushParams.brightnessJitter * 100),
+        )
+
+        // Independent Darkness Jitter (Procreate parity)
+        val darknessJitter = brushParams.effectiveDarknessJitter
+        BrushParameterSlider(
+            label = if (brushParams.darknessJitter == null) "Darkness jitter (follows brightness)" else "Darkness jitter",
+            value = darknessJitter,
+            onValueChange = { onBrushParamsChanged(brushParams.copy(darknessJitter = it.coerceIn(0f, 1f))) },
+            valueRange = 0f..1f,
+            valueDisplay = "%.0f%%".format(darknessJitter * 100),
         )
 
         // Procreate's secondary colour dynamics (the secondary swatch in the colour panel).
@@ -555,6 +572,13 @@ private fun BrushRotationSettings(
                 onClick = { onBrushParamsChanged(brushParams.copy(shapeId = null)) },
                 label = { Text(stringResource(R.string.brush_adv_round_tip)) },
             )
+            com.artflow.studio.core.render.BrushSourceLibrary.ShapeSource.entries.forEach { shape ->
+                FilterChip(
+                    selected = brushParams.shapeId == shape.id,
+                    onClick = { onBrushParamsChanged(brushParams.copy(shapeId = shape.id)) },
+                    label = { Text(shape.label) },
+                )
+            }
             imported.forEachIndexed { index, id ->
                 FilterChip(
                     selected = brushParams.shapeId == id,

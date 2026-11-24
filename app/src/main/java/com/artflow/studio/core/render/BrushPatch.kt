@@ -9,7 +9,7 @@ import kotlin.math.sqrt
 /** The selected brush's tip and grain for patch tools such as Smudge, which carry its texture in Procreate. */
 object BrushPatch {
     fun texture(params: BrushParams): Stamping.PatchTexture {
-        val tile = CustomGrains.get(params.shapeId)
+        val tile = BrushSourceLibrary.resolveShape(params.shapeId)
         val roundness = params.roundness.coerceIn(MIN_ROUNDNESS, 1f)
         val radians = Math.toRadians(params.rotation.toDouble())
         val cosA = cos(radians).toFloat()
