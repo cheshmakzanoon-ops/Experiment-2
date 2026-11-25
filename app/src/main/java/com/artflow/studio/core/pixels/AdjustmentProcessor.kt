@@ -315,11 +315,14 @@ object AdjustmentProcessor {
         outputBlack: Float,
         outputWhite: Float,
     ): IntArray {
-        val inBlack = inputBlack.coerceIn(0f, 255f)
+        // The input range needs at least one level of width, so its black point tops out at 254. A black
+        // point of 255 used to ask for the empty range 256..255 and throw while the layer was composited.
+        val inBlack = inputBlack.coerceIn(0f, 254f)
         val inWhite = inputWhite.coerceIn(inBlack + 1f, 255f)
         val safeGamma = gamma.coerceIn(0.01f, 10f)
+        // The output range may collapse to a single level (all white), which is a legitimate setting.
         val outBlack = outputBlack.coerceIn(0f, 255f)
-        val outWhite = outputWhite.coerceIn(outBlack + 1f, 255f)
+        val outWhite = outputWhite.coerceIn(outBlack, 255f)
 
         val lut = IntArray(256)
         for (i in 0..255) {

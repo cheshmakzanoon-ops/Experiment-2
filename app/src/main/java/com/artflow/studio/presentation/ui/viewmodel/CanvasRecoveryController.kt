@@ -82,8 +82,8 @@ class CanvasRecoveryController(
     }
 
     fun dismiss() {
-        // Dismissing only hides the UI prompt; unresolved recovery remains protected.
-        onDialogDismissed()
+        // Dismissing only hides the prompt. The recovery stays protected AND reachable: the editor keeps
+        // offering it (Quick menu) until the artist recovers or discards it.
     }
 
     fun saveOnBackground(projectId: Long) {

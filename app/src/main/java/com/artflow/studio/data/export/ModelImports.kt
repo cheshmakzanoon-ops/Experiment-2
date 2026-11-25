@@ -105,7 +105,7 @@ object ModelImports {
         return true
     }
 
-    private fun Layer.withoutRasterPaths(): Layer = copy(rasterFile = null, maskFile = null)
+    private fun Layer.withoutRasterPaths(): Layer = copy(rasterFile = null, maskFile = null, physicalPaintFile = null)
 
     internal fun fingerprints(planes: Map<MaterialChannel, PixelBuffer>): Map<MaterialChannel, String> =
         planes.mapValues {

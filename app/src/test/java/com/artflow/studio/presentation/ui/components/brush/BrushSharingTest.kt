@@ -61,13 +61,35 @@ class BrushSharingTest {
             // Refuse the platform handoff after writing the file; no activity is launched in this test.
             `when`(context.packageManager).thenThrow(IllegalStateException("No share provider"))
             assertFalse(shareBrushes(context, "Ink/set", brushes))
-            val file = File(temporary.root, "exports/brushes/Inkset.artbrush")
+            val file = sharedFiles().single { it.name == "Inkset.artbrush" }
             assertTrue(file.isFile)
             val (restored, images) = BrushFiles.decode(file.readText())
             assertEquals(brushes, restored)
             assertArrayEquals(shape.values, images.getValue(shapeId).values)
             assertArrayEquals(grain.values, images.getValue(grainId).values)
         }
+
+    @Test
+    fun everyShareOwnsAnImmutableFileSoAnEarlierDeliveryIsNeverRewritten() =
+        runTest {
+            `when`(context.packageManager).thenThrow(IllegalStateException("No share provider"))
+            val first = listOf(SavedBrush("a", "Ink", BrushParams(size = 10f)))
+            val second = listOf(SavedBrush("b", "Ink", BrushParams(size = 40f)))
+            assertFalse(shareBrushes(context, "Ink", first))
+            val earlier = sharedFiles().single()
+            val earlierBytes = earlier.readBytes()
+            assertFalse(shareBrushes(context, "Ink", second))
+            val files = sharedFiles()
+            assertEquals(2, files.size)
+            assertEquals("Each share needs its own path", 2, files.map { it.absolutePath }.distinct().size)
+            assertArrayEquals("An earlier share must not change", earlierBytes, earlier.readBytes())
+        }
+
+    private fun sharedFiles(): List<File> =
+        File(temporary.root, "exports/brushes")
+            .walkTopDown()
+            .filter { it.isFile && !it.name.endsWith(".partial") }
+            .toList()
 
     @Test
     fun cancellationPropagatesInsteadOfBecomingAShareFailure() =

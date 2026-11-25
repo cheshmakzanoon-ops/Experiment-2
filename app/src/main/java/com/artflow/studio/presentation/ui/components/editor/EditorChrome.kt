@@ -306,10 +306,13 @@ fun GuidesOverlay(
 
     var maskBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(selection) {
+        // The full-canvas overlay is built off the main thread, and only when the selection itself changed.
         maskBitmap =
             selection?.let { mask ->
-                val buffer: PixelBuffer = mask.toMaskBitmap(0xFFFF3B30.toInt())
-                BitmapPixelBridge.toBitmap(buffer).asImageBitmap()
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                    val buffer: PixelBuffer = mask.toMaskBitmap(0xFFFF3B30.toInt())
+                    BitmapPixelBridge.toBitmap(buffer).asImageBitmap()
+                }
             }
     }
 
@@ -501,6 +504,8 @@ fun QuickMenuSheet(
     canUndo: Boolean,
     canRedo: Boolean,
     modifier: Modifier = Modifier,
+    recoveryPending: Boolean = false,
+    onReviewRecovery: () -> Unit = {},
 ) {
     Column(
         modifier =
@@ -509,6 +514,11 @@ fun QuickMenuSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        if (recoveryPending) {
+            // A dismissed recovery prompt must not strand an unrecovered autosave.
+            Text("Recovery", style = MaterialTheme.typography.titleSmall)
+            AssistChip(onClick = onReviewRecovery, label = { Text("Review unsaved autosave") })
+        }
         Text(stringResource(R.string.editorchrome_view), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(onClick = onZoomOut, label = { Text(stringResource(R.string.editorchrome_zoom_out)) })

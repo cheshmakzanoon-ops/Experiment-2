@@ -462,11 +462,14 @@ object ArtflowPackage {
 
     private val GRAIN_ENTRY = Regex("""grains/custom-[0-9a-f]{1,32}\.grain""")
 
-    /** The manifest, previews, dependencies, custom grains, and layer pixel/mask files; nothing else may be written. */
+    /**
+     * The manifest, previews, dependencies, custom grains, and layer pixel/mask/physical-paint files;
+     * nothing else may be written. `.phys` is the physical-paint plane a manifest may reference.
+     */
     private val ALLOWED =
         Regex(
             """canvas\.artflow|canvas\.png|thumbnail\.png|model\.obj|dependencies\.json|""" +
-                """layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.png|""" +
+                """layers/\d{1,19}/[A-Za-z0-9_][A-Za-z0-9_.-]{0,120}\.(?:png|phys)|""" +
                 """grains/custom-[0-9a-f]{1,32}\.grain""",
         )
 }

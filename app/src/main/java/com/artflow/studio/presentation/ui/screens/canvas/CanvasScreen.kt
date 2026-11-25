@@ -1002,6 +1002,8 @@ fun CanvasScreen(
                     onRedo = { viewModel.redo() },
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
+                    recoveryPending = ready?.recoveryAvailable == true,
+                    onReviewRecovery = { showRecoveryDialog = true },
                 )
             }
 
@@ -1045,6 +1047,10 @@ fun CanvasScreen(
                             onInsertPhoto = insertPhoto,
                             onInsertPrivatePhoto = insertPrivatePhoto,
                             onAddText = {
+                                // Add Text starts a new text layer: forget the layer an earlier Edit Text targeted
+                                // and any position left pending, or Place would edit or overwrite the wrong one.
+                                editingText = null
+                                viewModel.cancelText()
                                 viewModel.setTool(ToolType.TEXT)
                                 panel = EditorPanel.TEXT
                             },
@@ -1161,10 +1167,21 @@ fun CanvasScreen(
                     openMenu = openMenu,
                     onButton = { button ->
                         canvasView?.cancelActiveGesture()
-                        if (adjustment != null) viewModel.adjustments.apply()
+                        val settling = adjustment != null
+                        if (settling && button != StudioButton.GALLERY) viewModel.adjustments.apply()
                         when (button) {
                             StudioButton.GALLERY -> {
-                                if (dirty) showExitConfirm = true else onNavigateBack()
+                                if (settling) {
+                                    // Leave only after the adjustment is committed: the dirty state read now predates it.
+                                    scope.launch {
+                                        viewModel.adjustments.applyAndWait()
+                                        if (viewModel.hasUnsavedChanges()) showExitConfirm = true else onNavigateBack()
+                                    }
+                                } else if (dirty) {
+                                    showExitConfirm = true
+                                } else {
+                                    onNavigateBack()
+                                }
                             }
 
                             StudioButton.ACTIONS -> {
@@ -1786,11 +1803,18 @@ fun CanvasScreen(
     }
 
     if (showBrushEditor) {
+        // With Smudge active the top-bar picker edits the smudge brush, as its own "Choose Smudge brush"
+        // route does; it must neither overwrite the paint brush nor switch the tool to Paint.
+        val editingSmudge = input.tool == ToolType.SMUDGE
         BrushStudioDialog(
-            initial = input.brushParams,
+            initial = if (editingSmudge) input.smudgeParams ?: input.brushParams else input.brushParams,
             onApply = {
-                viewModel.setBrushParams(it)
-                if (input.tool != ToolType.BRUSH) viewModel.setTool(ToolType.BRUSH)
+                if (editingSmudge) {
+                    viewModel.setSmudgeParams(it)
+                } else {
+                    viewModel.setBrushParams(it)
+                    if (input.tool != ToolType.BRUSH) viewModel.setTool(ToolType.BRUSH)
+                }
             },
             onDismiss = { showBrushEditor = false },
         )

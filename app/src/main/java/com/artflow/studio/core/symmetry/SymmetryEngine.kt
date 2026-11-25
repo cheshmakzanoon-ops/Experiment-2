@@ -266,6 +266,18 @@ object SymmetryEngine {
         val reflectX = CopyMap(-1f, 0f, 0f, 1f, 2f * axisX, 0f)
         val reflectY = CopyMap(1f, 0f, 0f, -1f, 0f, 2f * axisY)
         val halfTurn = CopyMap(-1f, 0f, 0f, -1f, 2f * axisX, 2f * axisY)
+        // Quarter turns about the axis point: (x, y) -> (axisX - dy, axisY + dx) and (axisX + dy, axisY - dx).
+        val quarterTurn = CopyMap(0f, -1f, 1f, 0f, axisX + axisY, axisY - axisX)
+        val threeQuarterTurn = CopyMap(0f, 1f, -1f, 0f, axisX - axisY, axisY + axisX)
+        // Rotational symmetry turns the vertical, horizontal and quadrant copies about the axis point instead of
+        // mirroring them. It is ignored for radial symmetry, which already turns, exactly as `instances` does.
+        if (settings.rotational && settings.type != SymmetryType.NONE && settings.type != SymmetryType.RADIAL) {
+            return if (settings.type == SymmetryType.QUADRANT || settings.secondaryAxis) {
+                listOf(identity, quarterTurn, halfTurn, threeQuarterTurn)
+            } else {
+                listOf(identity, halfTurn)
+            }
+        }
         return when (settings.type) {
             SymmetryType.NONE -> listOf(identity)
             SymmetryType.VERTICAL ->
@@ -275,22 +287,44 @@ object SymmetryEngine {
             SymmetryType.QUADRANT -> listOf(identity, reflectX, reflectY, halfTurn)
             SymmetryType.RADIAL -> {
                 val count = settings.radialCount.coerceIn(2, 32)
-                val baseAngle = Math.toRadians(settings.radialAngleDegrees.toDouble())
+                // The spoke angle places the mirror axis of kaleidoscope pairs; the turned copies are evenly spaced
+                // from the original, so an offset angle must not shift them and break the pattern's symmetry.
+                val mirrorAngle = 2.0 * Math.toRadians(settings.radialAngleDegrees.toDouble())
                 val centreX = width / 2f
                 val centreY = height / 2f
-                List(count) { i ->
-                    val angle = baseAngle + (2.0 * Math.PI * i) / count
-                    val cosA = cos(angle).toFloat()
-                    val sinA = sin(angle).toFloat()
-                    // Rotation about the canvas centre: x' = R·x + (centre - R·centre).
-                    CopyMap(
-                        a = cosA,
-                        b = -sinA,
-                        c = sinA,
-                        d = cosA,
-                        tx = centreX - (cosA * centreX - sinA * centreY),
-                        ty = centreY - (sinA * centreX + cosA * centreY),
-                    )
+                val turned =
+                    List(count) { i ->
+                        val angle = (2.0 * Math.PI * i) / count
+                        val cosA = cos(angle).toFloat()
+                        val sinA = sin(angle).toFloat()
+                        // Rotation about the canvas centre: x' = R·x + (centre - R·centre).
+                        CopyMap(
+                            a = cosA,
+                            b = -sinA,
+                            c = sinA,
+                            d = cosA,
+                            tx = centreX - (cosA * centreX - sinA * centreY),
+                            ty = centreY - (sinA * centreX + cosA * centreY),
+                        )
+                    }
+                if (!settings.mirroredSegments) {
+                    turned
+                } else {
+                    // Reflect across the first spoke, then turn: [[cos t, sin t], [sin t, -cos t]] with t = angle + 2 * spoke.
+                    turned +
+                        List(count) { i ->
+                            val theta = (2.0 * Math.PI * i) / count + mirrorAngle
+                            val cosT = cos(theta).toFloat()
+                            val sinT = sin(theta).toFloat()
+                            CopyMap(
+                                a = cosT,
+                                b = sinT,
+                                c = sinT,
+                                d = -cosT,
+                                tx = centreX - (cosT * centreX + sinT * centreY),
+                                ty = centreY - (sinT * centreX - cosT * centreY),
+                            )
+                        }
                 }
             }
         }

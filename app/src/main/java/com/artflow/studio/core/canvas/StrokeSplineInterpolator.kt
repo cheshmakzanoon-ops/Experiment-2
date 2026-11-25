@@ -4,9 +4,16 @@ import kotlin.math.ceil
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Online Catmull-Rom cubic spline interpolator for live touch and stylus strokes.
+ * Online cubic Hermite (non-uniform Catmull-Rom) interpolator for live touch and stylus strokes.
+ *
+ * Samples arrive unevenly: a slow, dense run followed by one long jump is routine. A uniform Catmull-Rom
+ * spline takes its tangents from the neighbouring samples regardless of their distance, so beside a much
+ * shorter or longer span it overshoots the span's ends and can even run backwards along it. The tangents
+ * here are scaled by the neighbouring chord lengths and bounded relative to the span, which keeps the
+ * curve smooth through evenly spaced samples (it reduces to Catmull-Rom there) and well behaved otherwise.
  *
  * Smooths polygonal segments on fast sweeps or 60 Hz touch digitizers by subdividing the middle
  * span `(p1 -> p2)` of a 4-point sliding window whenever its chord length exceeds [maxStepPx].
@@ -171,8 +178,57 @@ class StrokeSplineInterpolator(
         t3 = timestamp
     }
 
+    private var tangentX = 0f
+    private var tangentY = 0f
+
+    /**
+     * The span's end tangent from the chord to the far neighbour, scaled by [spanLength] over the two
+     * chords it joins, then bounded: no backward travel along the span and no excursion beyond 3x its length.
+     */
+    private fun boundedTangent(
+        towardX: Float,
+        towardY: Float,
+        neighbourChord: Float,
+        spanLength: Float,
+        spanX: Float,
+        spanY: Float,
+    ) {
+        val total = neighbourChord + spanLength
+        if (total <= 0f || spanLength <= 0f) {
+            tangentX = 0f
+            tangentY = 0f
+            return
+        }
+        val scale = spanLength / total
+        var mx = towardX * scale
+        var my = towardY * scale
+        val ux = spanX / spanLength
+        val uy = spanY / spanLength
+        val along = (mx * ux + my * uy).coerceIn(0f, MAX_TANGENT_SPANS * spanLength)
+        var px = mx - (mx * ux + my * uy) * ux
+        var py = my - (mx * ux + my * uy) * uy
+        val perpendicular = sqrt(px * px + py * py)
+        val limit = MAX_PERPENDICULAR_SPANS * spanLength
+        if (perpendicular > limit) {
+            px *= limit / perpendicular
+            py *= limit / perpendicular
+        }
+        mx = ux * along + px
+        my = uy * along + py
+        tangentX = mx
+        tangentY = my
+    }
+
     private fun emitSpan(emit: (x: Float, y: Float, pressure: Float, tiltX: Float, tiltY: Float, timestamp: Long) -> Unit) {
         val chord = hypot(x2 - x1, y2 - y1)
+        val before = hypot(x1 - x0, y1 - y0)
+        val after = hypot(x3 - x2, y3 - y2)
+        boundedTangent(x2 - x0, y2 - y0, before, chord, x2 - x1, y2 - y1)
+        val m1x = tangentX
+        val m1y = tangentY
+        boundedTangent(x3 - x1, y3 - y1, after, chord, x2 - x1, y2 - y1)
+        val m2x = tangentX
+        val m2y = tangentY
         val steps =
             if (chord <= maxStepPx) {
                 1
@@ -184,8 +240,8 @@ class StrokeSplineInterpolator(
             if (i == steps) {
                 emit(x2, y2, pr2, tx2, ty2, t2)
             } else {
-                val cx = catmullRom(x0, x1, x2, x3, u)
-                val cy = catmullRom(y0, y1, y2, y3, u)
+                val cx = hermite(x1, x2, m1x, m2x, u)
+                val cy = hermite(y1, y2, m1y, m2y, u)
                 val cpr = (pr1 + (pr2 - pr1) * u).coerceIn(0f, 1f)
                 val ctx = tx1 + (tx2 - tx1) * u
                 val cty = ty1 + (ty2 - ty1) * u
@@ -195,25 +251,25 @@ class StrokeSplineInterpolator(
         }
     }
 
-    private fun catmullRom(
-        v0: Float,
-        v1: Float,
-        v2: Float,
-        v3: Float,
+    private fun hermite(
+        start: Float,
+        end: Float,
+        startTangent: Float,
+        endTangent: Float,
         u: Float,
     ): Float {
         val u2 = u * u
         val u3 = u2 * u
-        return 0.5f * (
-            (2f * v1) +
-                (-v0 + v2) * u +
-                (2f * v0 - 5f * v1 + 4f * v2 - v3) * u2 +
-                (-v0 + 3f * v1 - 3f * v2 + v3) * u3
-        )
+        return (2f * u3 - 3f * u2 + 1f) * start +
+            (u3 - 2f * u2 + u) * startTangent +
+            (-2f * u3 + 3f * u2) * end +
+            (u3 - u2) * endTangent
     }
 
     companion object {
         const val DEFAULT_MAX_STEP_PX = 2.5f
         private const val MAX_SUBDIVISIONS = 16
+        private const val MAX_TANGENT_SPANS = 3f
+        private const val MAX_PERPENDICULAR_SPANS = 1.5f
     }
 }

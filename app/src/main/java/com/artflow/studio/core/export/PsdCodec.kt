@@ -815,17 +815,34 @@ object PsdCodec {
         }
 
         val layers = mutableListOf<PsdLayer>()
-        pending.forEach { record ->
+        pending.forEachIndexed { recordIndex, record ->
             val layerWidthLong = (record.right.toLong() - record.left).coerceAtLeast(0L)
             val layerHeightLong = (record.bottom.toLong() - record.top).coerceAtLeast(0L)
             val (maskWidth, maskHeight) = maskDimensions(record.mask)
             if (record.section != Section.NONE) {
                 layers += decodeFolderLayer(record, reader, depth, isPsb, maskWidth, maskHeight)
-                return@forEach
+                return@forEachIndexed
             }
             if (layerWidthLong == 0L || layerHeightLong == 0L) {
                 record.channels.forEach { (_, length) -> reader.skip(max(0, length)) }
-                return@forEach
+                // Records are stored bottom first, so the record above is the next one. An empty layer that
+                // anchors (or is) part of a clipping chain must survive as a transparent layer: dropping the
+                // base makes its clipped layers clip to whatever lies beneath instead of to nothing.
+                val anchorsClipping = record.isClippingMask || pending.getOrNull(recordIndex + 1)?.isClippingMask == true
+                if (anchorsClipping) {
+                    layers +=
+                        PsdLayer(
+                            name = record.name,
+                            pixels = PixelBuffer(1, 1),
+                            opacity = record.opacity,
+                            isVisible = record.isVisible,
+                            blendMode = record.blendMode,
+                            left = record.left,
+                            top = record.top,
+                            isClippingMask = record.isClippingMask,
+                        )
+                }
+                return@forEachIndexed
             }
             require(layerWidthLong <= Int.MAX_VALUE.toLong() && layerHeightLong <= Int.MAX_VALUE.toLong()) {
                 "A PSD layer is too large"

@@ -146,7 +146,12 @@ class ArtworkExporter
                     val memoryInput = StillExportInput(composite, layers, options, hasAdjustmentLayers, groups, layerMasks, materialMaps)
                     StillExportMemory.requireFits(memoryInput, memoryLimitBytes)
                     // Pin and admit model input before any texture/profile/scale allocation too.
-                    val model = if (options.format == ExportFormat.MODEL_OBJ) loadExportModel(projectId, memoryInput) else null
+                    val model =
+                        if (options.format == ExportFormat.MODEL_OBJ || options.format == ExportFormat.MODEL_GLB) {
+                            loadExportModel(projectId, memoryInput)
+                        } else {
+                            null
+                        }
                     val prepared = prepare(composite, targetWidth, targetHeight, options)
                     val fileName = ExportNaming.fileName(projectName, options)
                     var resizedPsdMasks = false
@@ -208,11 +213,14 @@ class ArtworkExporter
                             }
 
                             ExportFormat.MODEL_GLB -> {
+                                requireModelTextureAlignment(options)
                                 com.artflow.studio.core.three.GltfPbrExport.exportGlb(
                                     name = projectName,
                                     baseColor = flatten(prepared, options),
                                     metallic = materialMaps[com.artflow.studio.core.three.MaterialChannel.METALLIC],
                                     roughness = materialMaps[com.artflow.studio.core.three.MaterialChannel.ROUGHNESS],
+                                    // The file carries the model itself, not just a material with nothing to show.
+                                    mesh = com.artflow.studio.core.three.ObjParser.parse(requireNotNull(model)),
                                 )
                             }
 
@@ -420,6 +428,14 @@ class ArtworkExporter
                 }
             }
 
+        /** A model's texture must cover the whole canvas, undistorted, or its UV coordinates no longer line up. */
+        private fun requireModelTextureAlignment(options: ExportOptions) {
+            require(options.area == ExportArea.FULL_CANVAS || options.area == ExportArea.CURRENT_FRAME) {
+                "Export the full canvas to keep model texture coordinates aligned"
+            }
+            require(options.fitMode == FitMode.STRETCH) { "Use Stretch for model textures to preserve UV alignment" }
+        }
+
         /** The painted model: its OBJ with one material, the material, and the artwork as its texture. */
         private fun buildModelZip(
             model: String,
@@ -427,10 +443,7 @@ class ArtworkExporter
             options: ExportOptions,
             materialMaps: Map<MaterialChannel, PixelBuffer>,
         ): ByteArray {
-            require(options.area == ExportArea.FULL_CANVAS || options.area == ExportArea.CURRENT_FRAME) {
-                "Export the full canvas to keep model texture coordinates aligned"
-            }
-            require(options.fitMode == FitMode.STRETCH) { "Use Stretch for model textures to preserve UV alignment" }
+            requireModelTextureAlignment(options)
             val out = ByteArrayOutputStream()
             ZipOutputStream(out).use { zip ->
                 zip.putNextEntry(ZipEntry(ObjExport.OBJ))
@@ -888,7 +901,7 @@ class ArtworkExporter
                     val uri = requireNotNull(resolver.insert(collection, values)) { "Cannot create a gallery item" }
                     inserted = uri
                     requireNotNull(resolver.openOutputStream(uri, "w")) { "Cannot open the gallery item" }.use { output ->
-                        source.inputStream().use { input -> input.copyTo(output) }
+                        source.inputStream().use { input -> input.copyToCancellable(output) }
                     }
                     currentCoroutineContext().ensureActive()
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -921,6 +934,17 @@ class ArtworkExporter
                 }
             }
 
+        /** Copies in bounded chunks, checking for cancellation between them so a cancelled share stops writing at once. */
+        private suspend fun java.io.InputStream.copyToCancellable(output: java.io.OutputStream) {
+            val buffer = ByteArray(COPY_CHUNK_BYTES)
+            while (true) {
+                currentCoroutineContext().ensureActive()
+                val read = read(buffer)
+                if (read < 0) break
+                output.write(buffer, 0, read)
+            }
+        }
+
         private fun galleryFailure(error: Exception): String? {
             Timber.w(error, "Could not publish the export to the gallery")
             return null
@@ -934,7 +958,7 @@ class ArtworkExporter
             require(destination.scheme == "content") { "Choose a document destination" }
             val source = storage.exportedFile(filePath)
             requireNotNull(context.contentResolver.openOutputStream(destination, "wt")) { "Cannot open the chosen file" }.use { output ->
-                source.inputStream().use { input -> input.copyTo(output) }
+                source.inputStream().use { input -> input.copyToCancellable(output) }
                 output.flush()
             }
         }
@@ -1017,6 +1041,8 @@ class ArtworkExporter
             return bitmap
         }
     }
+
+private const val COPY_CHUNK_BYTES = 64 * 1024
 
 /**
  * Carries an [ExportError] message through the standard `Result` type.

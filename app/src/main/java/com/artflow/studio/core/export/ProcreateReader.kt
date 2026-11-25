@@ -117,6 +117,13 @@ object ProcreateReader {
          */
         val calibrationError: Double get() = tiles.calibrationError
 
+        /**
+         * How many tiles that were present in the file could not be placed (undecodable data, an unexpected
+         * size, or a position outside the canvas) among the layers read so far. A present tile that is left
+         * blank would silently drop part of the artist's painting, so an importer must refuse or disclose it.
+         */
+        val damagedTileCount: Int get() = tiles.damagedTiles
+
         /** A layer's pixels (straight ARGB in [colorProfile]), upright; empty when it has no tiles. */
         fun pixels(layer: Layer): PixelBuffer = tiles.layer(layer.uuid)
 
@@ -346,6 +353,11 @@ object ProcreateReader {
         private var bgra = false
         var calibrationError = Double.NaN
             private set
+
+        /** Present tiles that could not be placed; see [Document.damagedTileCount]. */
+        var damagedTiles = 0
+            private set
+
         private val byLayer: Map<String, List<Tile>> = index(files.names)
 
         val width get() = if (turns() % 2 == 0) storedWidth else storedHeight
@@ -448,13 +460,25 @@ object ProcreateReader {
             // Long arithmetic: a corrupt tile index must not wrap around into a valid-looking position.
             val leftL = tile.column.toLong() * size
             val topL = tile.row.toLong() * size
-            if (leftL !in 0L until storedWidth.toLong() || topL !in 0L until storedHeight.toLong()) return
+            if (data.isEmpty()) return
+            if (leftL !in 0L until storedWidth.toLong() || topL !in 0L until storedHeight.toLong()) {
+                damagedTiles++
+                return
+            }
             val left = leftL.toInt()
             val top = topL.toInt()
             val visibleWidth = minOf(size, storedWidth - left)
             val visibleHeight = minOf(size, storedHeight - top)
-            val bytes = decode(tile.path, data, size * size * 4) ?: return
-            val layout = tileLayout(bytes.size, visibleWidth, visibleHeight, mask, preferSingleChannel) ?: return
+            val bytes =
+                decode(tile.path, data, size * size * 4) ?: run {
+                    damagedTiles++
+                    return
+                }
+            val layout =
+                tileLayout(bytes.size, visibleWidth, visibleHeight, mask, preferSingleChannel) ?: run {
+                    damagedTiles++
+                    return
+                }
             for (y in 0 until visibleHeight) {
                 var at = y * layout.stride * layout.channels
                 val row = (top + y) * storedWidth + left

@@ -301,6 +301,11 @@ object LayerImports {
                             ) { "The imported mask dimensions do not match the artwork" }
                             it.toMaskBitmap()
                         }
+                    // A present tile that cannot be decoded would become a silent hole in the painting.
+                    check(document.damagedTileCount == 0) {
+                        "This Procreate file has ${document.damagedTileCount} damaged tile(s) in \"${node.name}\" or an earlier layer, " +
+                            "so it was not imported. Re-save it in Procreate and try again."
+                    }
                     layers += PreparedImportLayer(model, raster, mask)
                 }
             }
