@@ -6,9 +6,15 @@ important, what the audit asked for that is **not** done. Nothing here is a rele
 physical-device, publisher-artifact, upgrade and distribution gates in
 [RELEASE_READINESS.md](RELEASE_READINESS.md) are untouched and still open.
 
-Verification here means the JVM unit-test suite, static analysis and a Kotlin compile on Linux. No
-emulator, physical stylus, Photoshop/Procreate round trip or calibrated display was available, so
-anything that can only be judged on those is marked *unverified on device*.
+Verification here means the JVM unit-test suite, ktlint, detekt, a Kotlin compile of the application and
+of the instrumentation sources, and `assembleDebug`, all on Linux. The full JVM suite (2,405 tests) ran
+green apart from defects in two of the new tests, which were fixed and re-run in isolation; the full suite
+was not re-run once more after that last test-only change. Android lint (`lintDebug`/`lintRelease`) and the
+instrumentation tests were **not** run: there was no emulator, and no physical stylus, Photoshop/Procreate
+round trip or calibrated display. Anything that can only be judged on those is marked *unverified on device*.
+
+Two of the regression tests were checked the way a regression test should be: with the original ownership
+code restored, `diffusionAfterACaptureDoesNotRewriteTheCapturedRevision` fails; with the fix it passes.
 
 ## Fixed, with the evidence for each
 
@@ -19,13 +25,16 @@ anything that can only be judged on those is marked *unverified on device*.
 | C. Geometry and erase ignore physical fields | New `PhysicalPaintPlane.toPackedPixels()/fromPackedPixels()` carry wetness, relief and pigment through the exact pixel mapping of `transformLayer` and every canvas crop/rotate/flip/resize/resample. Erase, cut, clear, eraser strokes and raster edits drop physical state beneath transparent colour (`reconcilePhysicalPlane`). Region previews use a matching `cropped()` plane instead of the whole plane. Decoding rejects tiles outside the plane. | `ArtworkIntegrityTest`, `PhysicalPlanePrimitivesTest` |
 | D. Frame operations | Paste Frame uses `duplicateBlock` (fresh ids with group parents and link groups remapped). Copy/Paste Frame keep editable text (`ownPixelBuffers()`). Transparent trim takes the union of every frame, not the active one. | `ArtworkIntegrityTest.pastedFrameKeepsGroupStructureAndEditableText`, `trimKeepsContentFromEveryFrame` |
 | E. Damaged primary hides healthy recovery | `hasUnsavedRecovery` also reports recovery when the saved document is unreadable; `loadOrCreate` falls back to the protected placeholder (save/export blocked, autosave preserved) instead of an error. Dismissing the prompt no longer strands the recovery: the Quick menu offers "Review unsaved autosave". | `ArtworkIntegrityTest.unreadablePrimaryDoesNotHideAHealthyAutosave`, existing `AuthoritativeRecoveryTest` |
-| F. Operation identity | ColorDrop identifies its fill by `historyMark`, not undo depth. Liquify Reset uses a new trim-proof `historyPosition`. Adjustment Apply is an awaited job; each Apply closes only its own session and a new session waits for it. Gallery navigation waits for Apply to settle before reading the dirty state. | Compiles and existing suites; *behavioural tests for the UI-bound parts are not added* |
+| F. Operation identity | ColorDrop identifies its fill by `historyMark`, not undo depth. Liquify Reset uses a new trim-proof `historyPosition`. Adjustment Apply is an awaited job; each Apply closes only its own session and a new session waits for it. Gallery navigation waits for Apply to settle before reading the dirty state. | `AdjustmentSessionOwnershipTest` covers the Apply race. ColorDrop, Liquify Reset and Gallery navigation live in the Android view/screen and are compile-checked only |
 | G. Privacy | `pasteLayer` carries privacy provenance; the ordinary Copy/Cut/Copy-merged commands record whether the source was private. A delayed time-lapse capture is re-checked after its delay and inside the recorder's lock via `permitted`. | Compiles and existing suites |
 | Wetness quiescence | The activity threshold and the processing floor are now one constant (`ACTIVE_WETNESS`); sub-floor residue settles to dry; edge cells evaporate; tiles with nothing wet are skipped. | `PhysicalPlanePrimitivesTest.wetPaintAlwaysReachesQuiescenceEvenAtTheCanvasEdge` |
 | Physical memory in budgets | History accounting, retained-plane counting and load admission include physical planes. | Compiles and existing suites |
 | Unchanged selection rebuilds overlay | `selectionRevision` gates copying, counting and overlay rebuilding; the overlay bitmap is built off the main thread. | Compiles and existing suites |
 | Spline overshoot with uneven spacing | Tangents are scaled by neighbouring chord lengths and bounded relative to the span. | `StrokeSplineSpacingTest` |
 | Smudge picker and keyboard | The top-bar picker edits Smudge's own brush; size/opacity keys step from the active brush. | Compiles |
+| Symmetry settings not consumed | The committed-stroke expansion (`copyMaps`, the shipping path) now honours rotational symmetry and mirrored radial segments, and radial copies stay evenly spaced whatever the spoke angle. | `SymmetryStrokeExpansionTest` (agrees with the per-sample `instances` maths) |
+| P3 eyedropper loses gamut | `sampledColor` remembers the exact stored colour behind the 8-bit sRGB interface colour, so painting with the sample unchanged reproduces it. A colour the artist then edits is still an 8-bit sRGB value. | Compiles |
+| External copies ignore cancellation | Gallery publishing and "save to document" copy in chunks and check for cancellation. | Compiles |
 | Add Text keeps the previous target | Add Text clears the Edit Text target and any pending position. | Compiles |
 | Levels endpoints throw | `buildLevelsLut` no longer builds an empty range. | `PhysicalPlanePrimitivesTest.levelsAcceptEveryEndpointWithoutThrowing` |
 | Lasso Fill colour conversion | Uses `documentColor` like the other fills. | Compiles |
@@ -33,8 +42,14 @@ anything that can only be judged on those is marked *unverified on device*.
 | Brush share files | Each share writes an immutable file in its own directory (atomic move); stale shares are pruned after a day. | `BrushSharingTest` |
 | GLB without geometry | The `.glb` export now includes positions, normals, flipped-V UVs, a mesh, node, scene and the material assignment. | `GlbGeometryTest` |
 | PSD empty clipping bases | An empty-bounds layer that is, or anchors, a clipping chain is kept as a transparent layer. | Compiles; *no PSD fixture added* |
-| Procreate malformed tiles | A present tile that cannot be decoded or placed is counted, and the importer refuses the file with a specific message instead of leaving a silent hole. | Compiles |
+| Procreate malformed tiles | A present tile that cannot be decoded or placed is counted, and the importer refuses the file with a specific message instead of leaving a silent hole. | `ProcreateDamagedTileTest` |
 | `BrushStudioUiTest` phone failure | The test scrolls the category chip into view first (the six CI phone-lane failures). | *Needs the device matrix to confirm* |
+
+## Static-analysis note
+
+Two detekt `LargeClass` findings (`CanvasViewModel`, `PsdCodec`) were tipped over the threshold by this work
+and are recorded in `config/detekt/baseline.xml` rather than hidden: both classes want splitting, which is a
+refactor of its own, not part of this remediation.
 
 ## Not done
 
