@@ -60,7 +60,14 @@ class GlbGeometryTest {
             )
         val (json, bin) = parse(glb)
 
-        val primitive = json["meshes"]!!.jsonArray.single().jsonObject["primitives"]!!.jsonArray.single().jsonObject
+        val primitive =
+            json["meshes"]!!
+                .jsonArray
+                .single()
+                .jsonObject["primitives"]!!
+                .jsonArray
+                .single()
+                .jsonObject
         assertEquals(0, primitive["material"]!!.jsonPrimitive.int)
         val attributes = primitive["attributes"]!!.jsonObject
         val accessors = json["accessors"]!!.jsonArray
@@ -70,9 +77,25 @@ class GlbGeometryTest {
         assertEquals("VEC3", position["type"]!!.jsonPrimitive.content)
         assertTrue("A POSITION accessor must declare min and max", position["min"] is JsonArray && position["max"] is JsonArray)
 
-        assertEquals(0, json["nodes"]!!.jsonArray.single().jsonObject["mesh"]!!.jsonPrimitive.int)
+        assertEquals(
+            0,
+            json["nodes"]!!
+                .jsonArray
+                .single()
+                .jsonObject["mesh"]!!
+                .jsonPrimitive.int,
+        )
         assertEquals(0, json["scene"]!!.jsonPrimitive.int)
-        assertEquals(0, json["scenes"]!!.jsonArray.single().jsonObject["nodes"]!!.jsonArray.single().jsonPrimitive.int)
+        assertEquals(
+            0,
+            json["scenes"]!!
+                .jsonArray
+                .single()
+                .jsonObject["nodes"]!!
+                .jsonArray
+                .single()
+                .jsonPrimitive.int,
+        )
 
         // The positions in the binary chunk are the mesh's own, and glTF's v axis points down.
         val views = json["bufferViews"]!!.jsonArray

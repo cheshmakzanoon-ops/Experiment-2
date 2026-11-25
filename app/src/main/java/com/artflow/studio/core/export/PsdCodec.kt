@@ -829,19 +829,7 @@ object PsdCodec {
                 // anchors (or is) part of a clipping chain must survive as a transparent layer: dropping the
                 // base makes its clipped layers clip to whatever lies beneath instead of to nothing.
                 val anchorsClipping = record.isClippingMask || pending.getOrNull(recordIndex + 1)?.isClippingMask == true
-                if (anchorsClipping) {
-                    layers +=
-                        PsdLayer(
-                            name = record.name,
-                            pixels = PixelBuffer(1, 1),
-                            opacity = record.opacity,
-                            isVisible = record.isVisible,
-                            blendMode = record.blendMode,
-                            left = record.left,
-                            top = record.top,
-                            isClippingMask = record.isClippingMask,
-                        )
-                }
+                if (anchorsClipping) layers += transparentPlaceholder(record)
                 return@forEachIndexed
             }
             require(layerWidthLong <= Int.MAX_VALUE.toLong() && layerHeightLong <= Int.MAX_VALUE.toLong()) {
@@ -862,6 +850,19 @@ object PsdCodec {
         }
         return layers
     }
+
+    /** A one-pixel transparent layer carrying [record]'s name, blend, opacity, position and clipping flag. */
+    private fun transparentPlaceholder(record: PendingLayer): PsdLayer =
+        PsdLayer(
+            record.name,
+            PixelBuffer(1, 1),
+            record.opacity,
+            record.isVisible,
+            record.blendMode,
+            record.left,
+            record.top,
+            record.isClippingMask,
+        )
 
     private fun readSingleLayerPending(
         reader: PsdReader,

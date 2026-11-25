@@ -139,10 +139,12 @@ class CanvasRepositoryImpl
             return display
         }
 
-        override fun documentColor(srgb: Int): Int {
-            val sample = sampled
-            if (sample != null && sample.first == colorProfile && (srgb ushr 24) == 0xFF && srgb == sample.second) return sample.third
-            return super.documentColor(srgb)
+        override fun documentColor(srgb: Int): Int = exactSampleFor(srgb) ?: super.documentColor(srgb)
+
+        /** The stored colour [srgb] was sampled from, while it is still the unchanged sample in the same profile. */
+        private fun exactSampleFor(srgb: Int): Int? {
+            val sample = sampled ?: return null
+            return sample.third.takeIf { sample.first == colorProfile && srgb == sample.second }
         }
 
         private val trackedMs = AtomicLong()
@@ -342,6 +344,7 @@ class CanvasRepositoryImpl
             return layer
         }
 
+        @Suppress("TooGenericExceptionCaught") // Any failure to open the primary must leave a healthy recovery reachable.
         override suspend fun loadOrCreate(
             projectId: Long,
             width: Int,

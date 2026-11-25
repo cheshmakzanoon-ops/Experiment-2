@@ -39,10 +39,11 @@ class StrokeSplineSpacingTest {
     fun evenlySpacedSamplesStillGetTheSmoothCatmullRomCurve() {
         // A quarter-circle sampled evenly: interpolated points must stay close to the circle.
         val radius = 100f
-        val samples = (0..6).map { i ->
-            val angle = Math.toRadians(i * 15.0)
-            (radius * kotlin.math.cos(angle)).toFloat() to (radius * kotlin.math.sin(angle)).toFloat()
-        }
+        val samples =
+            (0..6).map { i ->
+                val angle = Math.toRadians(i * 15.0)
+                (radius * kotlin.math.cos(angle)).toFloat() to (radius * kotlin.math.sin(angle)).toFloat()
+            }
         val points = run(samples, step = 2.5f)
         points.forEach { (px, py) ->
             val distance = kotlin.math.hypot(px, py)

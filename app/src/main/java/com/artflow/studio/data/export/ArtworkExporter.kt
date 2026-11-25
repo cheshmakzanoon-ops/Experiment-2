@@ -220,7 +220,9 @@ class ArtworkExporter
                                     metallic = materialMaps[com.artflow.studio.core.three.MaterialChannel.METALLIC],
                                     roughness = materialMaps[com.artflow.studio.core.three.MaterialChannel.ROUGHNESS],
                                     // The file carries the model itself, not just a material with nothing to show.
-                                    mesh = com.artflow.studio.core.three.ObjParser.parse(requireNotNull(model)),
+                                    mesh =
+                                        com.artflow.studio.core.three.ObjParser
+                                            .parse(requireNotNull(model)),
                                 )
                             }
 

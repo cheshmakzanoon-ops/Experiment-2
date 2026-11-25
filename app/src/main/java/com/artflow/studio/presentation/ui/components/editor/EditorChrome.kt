@@ -504,8 +504,6 @@ fun QuickMenuSheet(
     canUndo: Boolean,
     canRedo: Boolean,
     modifier: Modifier = Modifier,
-    recoveryPending: Boolean = false,
-    onReviewRecovery: () -> Unit = {},
 ) {
     Column(
         modifier =
@@ -514,11 +512,6 @@ fun QuickMenuSheet(
                 .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (recoveryPending) {
-            // A dismissed recovery prompt must not strand an unrecovered autosave.
-            Text("Recovery", style = MaterialTheme.typography.titleSmall)
-            AssistChip(onClick = onReviewRecovery, label = { Text("Review unsaved autosave") })
-        }
         Text(stringResource(R.string.editorchrome_view), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AssistChip(onClick = onZoomOut, label = { Text(stringResource(R.string.editorchrome_zoom_out)) })
@@ -556,6 +549,24 @@ fun QuickMenuSheet(
             AssistChip(onClick = onInvertSelection, label = { Text(stringResource(R.string.chip_invert)) })
             AssistChip(onClick = onClearSelection, label = { Text(stringResource(R.string.chip_clear)) })
         }
+    }
+}
+
+/**
+ * A dismissed recovery prompt must not strand an unrecovered autosave: while one is pending, the Quick menu offers
+ * to review it again.
+ */
+@Composable
+fun RecoveryReviewRow(
+    onReview: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Recovery", style = MaterialTheme.typography.titleSmall)
+        AssistChip(onClick = onReview, label = { Text("Review unsaved autosave") })
     }
 }
 

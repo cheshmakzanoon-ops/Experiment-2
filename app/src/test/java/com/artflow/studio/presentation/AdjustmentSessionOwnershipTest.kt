@@ -9,7 +9,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -63,17 +62,15 @@ class AdjustmentSessionOwnershipTest {
             controller.setAmount(0.5f)
 
             val applying = checkNotNull(controller.apply())
-            withTimeout(20_000) { commitEntered.await() }
+            commitEntered.await()
 
             // The artist opens another adjustment while the first Apply is still committing.
             controller.start(LiveAdjustments.Kind.OPACITY)
             commitGate.complete(true)
             applying.join()
-            withTimeout(20_000) { secondOpened.await() }
+            secondOpened.await()
             // Let the second session finish opening.
-            withTimeout(20_000) {
-                while (controller.state.value == null) kotlinx.coroutines.yield()
-            }
+            while (controller.state.value == null) kotlinx.coroutines.yield()
 
             assertEquals("Only the first session was committed", 1, committed.size)
             assertNotNull("The newer adjustment must still be open", controller.state.value)

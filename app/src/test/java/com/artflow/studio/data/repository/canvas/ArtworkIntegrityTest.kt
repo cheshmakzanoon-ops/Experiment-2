@@ -3,6 +3,7 @@ package com.artflow.studio.data.repository.canvas
 import android.content.Context
 import com.artflow.studio.core.canvas.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.PhysicalPaintPlane
 import com.artflow.studio.core.text.TextLayerContent
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -71,18 +72,22 @@ class ArtworkIntegrityTest {
 
     /** Test-only view of the live physical planes: the sum of wetness and the count of allocated tiles. */
     private fun physical(): Pair<Float, Int> {
-        val frames = field(repository, "frameList") as List<*>
-        var wetness = 0f
-        var tiles = 0
-        frames.forEach { frame ->
-            (field(frame!!, "layers") as List<*>).forEach { layer ->
-                val plane = field(layer!!, "physicalPlane") as com.artflow.studio.core.render.PhysicalPaintPlane? ?: return@forEach
-                tiles += plane.allocatedTileCount()
-                for (y in 0 until plane.height) for (x in 0 until plane.width) wetness += plane.wetnessAt(x, y)
-            }
-        }
-        return wetness to tiles
+        val planes = livePlanes()
+        return planes.sumOf { it.totalWetness().toDouble() }.toFloat() to planes.sumOf { it.allocatedTileCount() }
     }
+
+    private fun PhysicalPaintPlane.totalWetness(): Float {
+        var total = 0f
+        for (y in 0 until height) {
+            for (x in 0 until width) total += wetnessAt(x, y)
+        }
+        return total
+    }
+
+    private fun livePlanes(): List<PhysicalPaintPlane> =
+        (field(repository, "frameList") as List<*>).flatMap { frame ->
+            (field(frame!!, "layers") as List<*>).mapNotNull { layer -> field(layer!!, "physicalPlane") as PhysicalPaintPlane? }
+        }
 
     private fun field(
         target: Any,
@@ -141,7 +146,12 @@ class ArtworkIntegrityTest {
         runTest {
             repository.createCanvas(64, 64, 72)
             paintWatercolor()
-            assertTrue(repository.cropCanvas(com.artflow.studio.core.pixels.IntBounds(0, 0, 31, 63)))
+            assertTrue(
+                repository.cropCanvas(
+                    com.artflow.studio.core.pixels
+                        .IntBounds(0, 0, 31, 63),
+                ),
+            )
             val cropped = livePlane()
             assertEquals(32, cropped.width)
             assertEquals(64, cropped.height)
@@ -185,7 +195,9 @@ class ArtworkIntegrityTest {
             val text =
                 TextLayerContent(
                     text = "Hello",
-                    style = com.artflow.studio.core.text.TextLayout.TextStyle(),
+                    style =
+                        com.artflow.studio.core.text.TextLayout
+                            .TextStyle(),
                     color = 0xFF000000.toInt(),
                     x = 4f,
                     y = 4f,
@@ -196,7 +208,12 @@ class ArtworkIntegrityTest {
             assertTrue(repository.pasteFrame(1))
             val pasted = repository.frames()[1].layers
             val ids = pasted.map { it.id }.toSet()
-            val original = repository.frames()[0].layers.map { it.id }.toSet()
+            val original =
+                repository
+                    .frames()[0]
+                    .layers
+                    .map { it.id }
+                    .toSet()
             assertTrue("Pasted layers need fresh identities", ids.intersect(original).isEmpty())
             val pastedChild = pasted.first { it.name == "Child" }
             val pastedGroup = pasted.first { it.isGroup }
@@ -257,10 +274,5 @@ class ArtworkIntegrityTest {
             }
         }
 
-    private fun livePlane(): com.artflow.studio.core.render.PhysicalPaintPlane {
-        val frames = field(repository, "frameList") as List<*>
-        return frames
-            .flatMap { frame -> field(frame!!, "layers") as List<*> }
-            .firstNotNullOf { layer -> field(layer!!, "physicalPlane") as com.artflow.studio.core.render.PhysicalPaintPlane? }
-    }
+    private fun livePlane(): PhysicalPaintPlane = livePlanes().first()
 }

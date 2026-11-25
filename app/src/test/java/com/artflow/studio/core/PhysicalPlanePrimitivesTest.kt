@@ -130,16 +130,17 @@ class PhysicalPlanePrimitivesTest {
 
     @Test
     fun levelsAcceptEveryEndpointWithoutThrowing() {
-        for (inBlack in listOf(0f, 254f, 255f)) {
-            for (inWhite in listOf(0f, 128f, 255f)) {
-                for (outBlack in listOf(0f, 255f)) {
-                    for (outWhite in listOf(0f, 255f)) {
-                        val lut = AdjustmentProcessor.buildLevelsLut(inBlack, inWhite, 1f, outBlack, outWhite)
-                        assertEquals(256, lut.size)
-                        assertTrue(lut.all { it in 0..255 })
-                    }
-                }
+        val inputBlacks = listOf(0f, 254f, 255f)
+        val inputWhites = listOf(0f, 128f, 255f)
+        val outputs = listOf(0f, 255f)
+        val combinations =
+            inputBlacks.flatMap { black ->
+                inputWhites.flatMap { white -> outputs.flatMap { low -> outputs.map { high -> listOf(black, white, low, high) } } }
             }
+        combinations.forEach { endpoints ->
+            val lut = AdjustmentProcessor.buildLevelsLut(endpoints[0], endpoints[1], 1f, endpoints[2], endpoints[3])
+            assertEquals(256, lut.size)
+            assertTrue(lut.all { it in 0..255 })
         }
         // Collapsing the output range to white is a legitimate setting and must give all white.
         val white = AdjustmentProcessor.buildLevelsLut(0f, 255f, 1f, 255f, 255f)

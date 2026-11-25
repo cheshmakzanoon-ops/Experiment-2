@@ -404,12 +404,7 @@ class CanvasViewModel
                             ensureActive()
                             // Stored values are in the document's profile; the recording is sRGB.
                             val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
-                            timelapse.capture(
-                                projectId,
-                                recorded,
-                                _settings.value.timelapseMaxSide,
-                                permitted = { _settings.value.recordTimelapse },
-                            )
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide) { _settings.value.recordTimelapse }
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -489,7 +484,7 @@ class CanvasViewModel
             _history.value = HistoryState(canvasRepository.undoDepth, canvasRepository.redoDepth)
         }
 
-        private var publishedSelectionRevision = -1L
+        private var shownSelectionRevision = -1L
 
         /**
          * Publishes the selection only when it actually changed. Every invalidation (each stroke sample)
@@ -498,10 +493,9 @@ class CanvasViewModel
          */
         private fun refreshSelection() {
             val revision = canvasRepository.selectionRevision
-            if (revision >= 0 && revision == publishedSelectionRevision) return
-            val mask = canvasRepository.selection()
-            publishedSelectionRevision = revision
-            _selection.value = mask
+            if (revision >= 0 && revision == shownSelectionRevision) return
+            shownSelectionRevision = revision
+            val mask = canvasRepository.selection().also { _selection.value = it }
             _selectionCount.value = mask?.selectedPixelCount() ?: 0
         }
 

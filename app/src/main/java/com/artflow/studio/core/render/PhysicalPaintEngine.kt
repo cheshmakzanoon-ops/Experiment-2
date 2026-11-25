@@ -38,7 +38,58 @@ class PhysicalPaintPlane(
         val pigmentLoad = FloatArray(TILE_PIXELS)
 
         fun hasState(): Boolean = wetness.any { it != 0f } || impastoHeight.any { it != 0f } || pigmentLoad.any { it != 0f }
+
+        fun hasStateAt(index: Int): Boolean = wetness[index] != 0f || impastoHeight[index] != 0f || pigmentLoad[index] != 0f
+
+        fun clearAt(index: Int) {
+            wetness[index] = 0f
+            impastoHeight[index] = 0f
+            pigmentLoad[index] = 0f
+        }
     }
+
+    /** Visits each in-bounds cell of the tile at [key]: its index in the tile's arrays and its plane coordinates. */
+    private inline fun forEachCell(
+        key: Long,
+        visit: (index: Int, x: Int, y: Int) -> Unit,
+    ) {
+        val originX = (key ushr 32).toInt() * TILE_SIZE
+        val originY = (key and 0xFFFFFFFFL).toInt() * TILE_SIZE
+        val columns = min(TILE_SIZE, width - originX)
+        val rows = min(TILE_SIZE, height - originY)
+        for (ly in 0 until rows) {
+            for (lx in 0 until columns) visit(ly * TILE_SIZE + lx, originX + lx, originY + ly)
+        }
+    }
+
+    /** Copies the tile at ([tx], [ty]) out of [packed], allocating it only when a cell in it carries state. */
+    private fun absorbPackedTile(
+        packed: PixelBuffer,
+        tx: Int,
+        ty: Int,
+    ) {
+        var tile: Tile? = null
+        forEachCell(tileKey(tx, ty)) { i, x, y ->
+            val argb = packed.pixels[y * packed.width + x]
+            val alpha = (argb ushr 24) / 255f
+            val wet = ((argb shr 16) and 0xFF) / 255f * alpha
+            val relief = reliefFromByte((argb shr 8) and 0xFF) * alpha
+            val pigment = (argb and 0xFF) / 255f * alpha
+            // Resampling noise around flat relief (one level either side) is flat, not a ridge.
+            val height = if (kotlin.math.abs(relief) <= ZERO_RELIEF_BAND) 0f else relief
+            if (wet >= HALF_LEVEL || height != 0f || pigment >= HALF_LEVEL) {
+                val target = tile ?: obtainTile(tx, ty).also { tile = it }
+                target.wetness[i] = wet.coerceIn(0f, 1f)
+                target.impastoHeight[i] = height.coerceIn(-1f, 1f)
+                target.pigmentLoad[i] = pigment.coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    private fun PixelBuffer.paintedAt(
+        x: Int,
+        y: Int,
+    ): Boolean = x < this.width && y < this.height && (pixels[y * this.width + x] ushr 24) != 0
 
     private val tiles = LinkedHashMap<Long, Tile>()
 
@@ -138,8 +189,7 @@ class PhysicalPaintPlane(
      * simulation's own processing floor ([ACTIVE_WETNESS]); a lower threshold would report cells as active
      * that the step skips, so a settling loop could never reach quiescence.
      */
-    fun hasActiveWetness(threshold: Float = ACTIVE_WETNESS): Boolean =
-        tiles.values.any { tile -> tile.wetness.any { it >= threshold } }
+    fun hasActiveWetness(threshold: Float = ACTIVE_WETNESS): Boolean = tiles.values.any { tile -> tile.wetness.any { it >= threshold } }
 
     /** Re-activates dried paint across all non-transparent pixels in [buffer]. */
     fun rewetPaintedPixels(
@@ -175,22 +225,12 @@ class PhysicalPaintPlane(
         val packed = PixelBuffer(width, height)
         packed.pixels.fill(PACKED_BLANK)
         for ((key, tile) in tiles) {
-            val originX = (key ushr 32).toInt() * TILE_SIZE
-            val originY = (key and 0xFFFFFFFFL).toInt() * TILE_SIZE
-            if (originX !in 0 until width || originY !in 0 until height) continue
-            for (ly in 0 until TILE_SIZE) {
-                val y = originY + ly
-                if (y >= height) break
-                for (lx in 0 until TILE_SIZE) {
-                    val x = originX + lx
-                    if (x >= width) break
-                    val i = ly * TILE_SIZE + lx
-                    packed.pixels[y * width + x] =
-                        (0xFF shl 24) or
-                        (packByte(tile.wetness[i]) shl 16) or
-                        (packByte(tile.impastoHeight[i] * 0.5f + 0.5f) shl 8) or
-                        packByte(tile.pigmentLoad[i])
-                }
+            forEachCell(key) { i, x, y ->
+                packed.pixels[y * width + x] =
+                    (0xFF shl 24) or
+                    (packByte(tile.wetness[i]) shl 16) or
+                    (packByte(tile.impastoHeight[i] * 0.5f + 0.5f) shl 8) or
+                    packByte(tile.pigmentLoad[i])
             }
         }
         return packed
@@ -199,19 +239,8 @@ class PhysicalPaintPlane(
     /** True when some cell still holds physical state although [raster] is fully transparent there. */
     fun hasStateBeneathTransparent(raster: PixelBuffer): Boolean {
         for ((key, tile) in tiles) {
-            val originX = (key ushr 32).toInt() * TILE_SIZE
-            val originY = (key and 0xFFFFFFFFL).toInt() * TILE_SIZE
-            for (ly in 0 until TILE_SIZE) {
-                val y = originY + ly
-                if (y >= height) break
-                for (lx in 0 until TILE_SIZE) {
-                    val x = originX + lx
-                    if (x >= width) break
-                    val i = ly * TILE_SIZE + lx
-                    if (tile.wetness[i] == 0f && tile.impastoHeight[i] == 0f && tile.pigmentLoad[i] == 0f) continue
-                    val covered = x < raster.width && y < raster.height && (raster.pixels[y * raster.width + x] ushr 24) != 0
-                    if (!covered) return true
-                }
+            forEachCell(key) { i, x, y ->
+                if (tile.hasStateAt(i) && !raster.paintedAt(x, y)) return true
             }
         }
         return false
@@ -224,26 +253,13 @@ class PhysicalPaintPlane(
     fun pruneTransparent(raster: PixelBuffer) {
         val iterator = tiles.entries.iterator()
         while (iterator.hasNext()) {
-            val entry = iterator.next()
-            val originX = (entry.key ushr 32).toInt() * TILE_SIZE
-            val originY = (entry.key and 0xFFFFFFFFL).toInt() * TILE_SIZE
-            val tile = entry.value
+            val (key, tile) = iterator.next()
             var any = false
-            for (ly in 0 until TILE_SIZE) {
-                val y = originY + ly
-                if (y >= height) break
-                for (lx in 0 until TILE_SIZE) {
-                    val x = originX + lx
-                    if (x >= width) break
-                    val i = ly * TILE_SIZE + lx
-                    val covered = x < raster.width && y < raster.height && (raster.pixels[y * raster.width + x] ushr 24) != 0
-                    if (!covered) {
-                        tile.wetness[i] = 0f
-                        tile.impastoHeight[i] = 0f
-                        tile.pigmentLoad[i] = 0f
-                    } else if (tile.wetness[i] != 0f || tile.impastoHeight[i] != 0f || tile.pigmentLoad[i] != 0f) {
-                        any = true
-                    }
+            forEachCell(key) { i, x, y ->
+                if (!raster.paintedAt(x, y)) {
+                    tile.clearAt(i)
+                } else if (tile.hasStateAt(i)) {
+                    any = true
                 }
             }
             if (!any) iterator.remove()
@@ -252,9 +268,9 @@ class PhysicalPaintPlane(
 
     /**
      * The part of this plane inside the rectangle at ([left], [top]) of size [newWidth] x [newHeight], re-based so
-     * the rectangle's corner is the new origin. Only allocated tiles are visited. A preview of one region of the
-     * canvas needs the physical state of that same region; handing it the whole plane puts relief in the wrong
-     * place and lets preview strokes write into the live document.
+     * the rectangle's corner is the new origin. A preview of one region of the canvas needs the physical state of
+     * that same region; handing it the whole plane puts relief in the wrong place and lets preview strokes write
+     * into the live document.
      */
     fun cropped(
         left: Int,
@@ -263,22 +279,10 @@ class PhysicalPaintPlane(
         newHeight: Int,
     ): PhysicalPaintPlane {
         val out = PhysicalPaintPlane(newWidth, newHeight)
-        val right = left + newWidth
-        val bottom = top + newHeight
         for ((key, tile) in tiles) {
-            val originX = (key ushr 32).toInt() * TILE_SIZE
-            val originY = (key and 0xFFFFFFFFL).toInt() * TILE_SIZE
-            val x0 = max(originX, left)
-            val x1 = min(min(originX + TILE_SIZE, right), width)
-            val y0 = max(originY, top)
-            val y1 = min(min(originY + TILE_SIZE, bottom), height)
-            for (y in y0 until y1) {
-                for (x in x0 until x1) {
-                    val i = (y - originY) * TILE_SIZE + (x - originX)
-                    val wet = tile.wetness[i]
-                    val relief = tile.impastoHeight[i]
-                    val pigment = tile.pigmentLoad[i]
-                    if (wet != 0f || relief != 0f || pigment != 0f) out.setCell(x - left, y - top, wet, relief, pigment)
+            forEachCell(key) { i, x, y ->
+                if (x in left until left + newWidth && y in top until top + newHeight && tile.hasStateAt(i)) {
+                    out.setCell(x - left, y - top, tile.wetness[i], tile.impastoHeight[i], tile.pigmentLoad[i])
                 }
             }
         }
@@ -377,6 +381,9 @@ class PhysicalPaintPlane(
         /** Relief is stored in one byte, whose midpoint (128) stands for flat; anything this close is flat. */
         private const val ZERO_RELIEF_BAND = 1.5f / 255f
 
+        /** Half of one 8-bit level: below this a packed channel is rounding noise, not state. */
+        private const val HALF_LEVEL = 0.5f / 255f
+
         /** The byte 128 is exactly flat, so a zero-height cell does not come back as a faint ridge. */
         private fun reliefFromByte(value: Int): Float = if (value == 128) 0f else (value / 255f) * 2f - 1f
 
@@ -390,31 +397,7 @@ class PhysicalPaintPlane(
             val tilesX = (packed.width + TILE_SIZE - 1) / TILE_SIZE
             val tilesY = (packed.height + TILE_SIZE - 1) / TILE_SIZE
             for (ty in 0 until tilesY) {
-                for (tx in 0 until tilesX) {
-                    var tile: Tile? = null
-                    for (ly in 0 until TILE_SIZE) {
-                        val y = ty * TILE_SIZE + ly
-                        if (y >= packed.height) break
-                        for (lx in 0 until TILE_SIZE) {
-                            val x = tx * TILE_SIZE + lx
-                            if (x >= packed.width) break
-                            val argb = packed.pixels[y * packed.width + x]
-                            val alpha = (argb ushr 24) / 255f
-                            if (alpha <= 0f) continue
-                            val wet = ((argb shr 16) and 0xFF) / 255f * alpha
-                            val relief = (((argb shr 8) and 0xFF) / 255f * 2f - 1f) * alpha
-                            val pigment = (argb and 0xFF) / 255f * alpha
-                            // Impasto 0 packs to 128/255, so resampling noise below one level is empty.
-                            val height = if (kotlin.math.abs(relief) <= ZERO_RELIEF_BAND) 0f else relief
-                            if (wet < 0.5f / 255f && height == 0f && pigment < 0.5f / 255f) continue
-                            val target = tile ?: plane.obtainTile(tx, ty).also { tile = it }
-                            val i = ly * TILE_SIZE + lx
-                            target.wetness[i] = wet.coerceIn(0f, 1f)
-                            target.impastoHeight[i] = height.coerceIn(-1f, 1f)
-                            target.pigmentLoad[i] = pigment.coerceIn(0f, 1f)
-                        }
-                    }
-                }
+                for (tx in 0 until tilesX) plane.absorbPackedTile(packed, tx, ty)
             }
             return plane
         }
@@ -576,11 +559,10 @@ object PhysicalPaintEngine {
                     val row = y * colorBuffer.width
                     for (x in x0..x1) {
                         val wet = plane.wetnessAt(x, y)
-                        if (wet <= 0f) continue
                         if (wet < PhysicalPaintPlane.ACTIVE_WETNESS) {
                             // Residual moisture settles to dry, so the simulation always reaches quiescence
                             // instead of leaving cells that are active to the loop but never advanced.
-                            nextPlane.setCell(x, y, 0f, plane.impastoAt(x, y), 0f)
+                            if (wet > 0f) nextPlane.setCell(x, y, 0f, plane.impastoAt(x, y), 0f)
                             continue
                         }
 
@@ -637,27 +619,7 @@ object PhysicalPaintEngine {
                     }
                 }
             }
-            // The one-cell border has no full neighbourhood to diffuse into, but it must still evaporate:
-            // otherwise paint touching the canvas edge stays wet forever and the loop never settles.
-            fun evaporateEdge(
-                x: Int,
-                y: Int,
-            ) {
-                val wet = plane.wetnessAt(x, y)
-                if (wet <= 0f) return
-                val next = if (wet < PhysicalPaintPlane.ACTIVE_WETNESS) 0f else (wet * 0.92f - 0.01f).coerceAtLeast(0f)
-                nextPlane.setCell(x, y, next, plane.impastoAt(x, y), if (next == 0f) 0f else plane.pigmentAt(x, y) * 0.95f)
-            }
-            if (w > 0 && h > 0) {
-                for (x in 0 until w) {
-                    evaporateEdge(x, 0)
-                    if (h > 1) evaporateEdge(x, h - 1)
-                }
-                for (y in 1 until h - 1) {
-                    evaporateEdge(0, y)
-                    if (w > 1) evaporateEdge(w - 1, y)
-                }
-            }
+            evaporateBorder(plane, nextPlane, w, h)
             nextPixels.copyInto(colorBuffer.pixels)
             for ((tx, ty) in nextPlane.allocatedTileCoords()) {
                 val src = nextPlane.obtainTile(tx, ty)
@@ -665,6 +627,35 @@ object PhysicalPaintEngine {
                 src.wetness.copyInto(dst.wetness)
                 src.pigmentLoad.copyInto(dst.pigmentLoad)
             }
+        }
+    }
+
+    /**
+     * The one-cell border has no full neighbourhood to diffuse into, but it must still evaporate: otherwise paint
+     * touching the canvas edge stays wet forever and the diffusion loop never settles.
+     */
+    private fun evaporateBorder(
+        plane: PhysicalPaintPlane,
+        nextPlane: PhysicalPaintPlane,
+        w: Int,
+        h: Int,
+    ) {
+        fun evaporate(
+            x: Int,
+            y: Int,
+        ) {
+            val wet = plane.wetnessAt(x, y)
+            if (wet <= 0f) return
+            val next = if (wet < PhysicalPaintPlane.ACTIVE_WETNESS) 0f else (wet * 0.92f - 0.01f).coerceAtLeast(0f)
+            nextPlane.setCell(x, y, next, plane.impastoAt(x, y), if (next == 0f) 0f else plane.pigmentAt(x, y) * 0.95f)
+        }
+        for (x in 0 until w) {
+            evaporate(x, 0)
+            evaporate(x, h - 1)
+        }
+        for (y in 1 until h - 1) {
+            evaporate(0, y)
+            evaporate(w - 1, y)
         }
     }
 

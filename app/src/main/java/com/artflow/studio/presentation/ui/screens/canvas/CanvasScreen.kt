@@ -132,6 +132,7 @@ import com.artflow.studio.presentation.ui.components.editor.PrefActions
 import com.artflow.studio.presentation.ui.components.editor.QuickAction
 import com.artflow.studio.presentation.ui.components.editor.QuickMenuSheet
 import com.artflow.studio.presentation.ui.components.editor.RadialQuickMenu
+import com.artflow.studio.presentation.ui.components.editor.RecoveryReviewRow
 import com.artflow.studio.presentation.ui.components.editor.ReferenceCompanion
 import com.artflow.studio.presentation.ui.components.editor.SelectionSheet
 import com.artflow.studio.presentation.ui.components.editor.SelectionToolbar
@@ -985,6 +986,7 @@ fun CanvasScreen(
             }
 
             EditorPanel.QUICK -> {
+                if (ready?.recoveryAvailable == true) RecoveryReviewRow(onReview = { showRecoveryDialog = true })
                 QuickMenuSheet(
                     scalePercent = (viewScale * 100).toInt(),
                     rotation = viewRotation.toInt(),
@@ -1002,8 +1004,6 @@ fun CanvasScreen(
                     onRedo = { viewModel.redo() },
                     canUndo = history.canUndo,
                     canRedo = history.canRedo,
-                    recoveryPending = ready?.recoveryAvailable == true,
-                    onReviewRecovery = { showRecoveryDialog = true },
                 )
             }
 
