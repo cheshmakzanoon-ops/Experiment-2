@@ -186,7 +186,7 @@ class PhysicalPaintPlane(
                     if (x >= width) break
                     val i = ly * TILE_SIZE + lx
                     packed.pixels[y * width + x] =
-                        PACKED_BLANK or
+                        (0xFF shl 24) or
                         (packByte(tile.wetness[i]) shl 16) or
                         (packByte(tile.impastoHeight[i] * 0.5f + 0.5f) shl 8) or
                         packByte(tile.pigmentLoad[i])
@@ -366,8 +366,11 @@ class PhysicalPaintPlane(
         private const val BINARY_VERSION = 1
         private const val MAX_TILES = 16_384
 
-        /** Alpha 255 marks "this cell exists"; resampling gaps stay alpha 0. */
-        private const val PACKED_BLANK = 0xFF shl 24
+        /**
+         * A cell with no physical state: alpha 255 marks "this cell exists" (resampling gaps stay alpha 0) and
+         * the relief channel holds its midpoint (128), which is flat. Zero there would decode as the deepest valley.
+         */
+        private const val PACKED_BLANK = (0xFF shl 24) or (128 shl 8)
 
         private fun packByte(unit: Float): Int = (unit * 255f + 0.5f).toInt().coerceIn(0, 255)
 
