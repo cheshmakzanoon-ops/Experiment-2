@@ -107,6 +107,20 @@ interface CanvasRepository {
      */
     val historyMark: Long get() = undoDepth.toLong()
 
+    /**
+     * Where the history cursor stands as a trim-proof coordinate: a new step moves it forward, undo back and
+     * redo forward again, and discarding old entries at the history cap leaves it unchanged. Unlike
+     * [undoDepth], two points on one timeline can be compared even after older steps were evicted.
+     */
+    val historyPosition: Long get() = undoDepth.toLong()
+
+    /**
+     * Changes whenever the active selection is replaced, and only then. A selection is immutable once
+     * published, so observers can skip rebuilding selection-derived state (overlay bitmaps, counts,
+     * contours) for the invalidations that left it untouched. Negative means "unknown": always refresh.
+     */
+    val selectionRevision: Long get() = -1L
+
     /** Total redo steps currently held. */
     val redoDepth: Int
 
@@ -282,10 +296,15 @@ interface CanvasRepository {
         description: String,
     ): Boolean
 
-    /** Inserts copied pixels above the active layer as one undo step, or leaves the document untouched. */
+    /**
+     * Inserts copied pixels above the active layer as one undo step, or leaves the document untouched.
+     * [isPrivate] carries the copied content's privacy provenance: pixels taken from a private layer stay
+     * out of the time-lapse after Paste, exactly as with the combined copy-and-paste command.
+     */
     suspend fun pasteLayer(
         pixels: PixelBuffer,
         materialChannel: MaterialChannel = MaterialChannel.COLOR,
+        isPrivate: Boolean = false,
     ): Long
 
     /**
@@ -633,6 +652,13 @@ interface CanvasRepository {
 
     /** Converts a stored colour back to sRGB for display in the interface. */
     fun displayColor(stored: Int): Int = ColorProfiles.convert(stored, getColorProfile(), ColorProfile.SRGB)
+
+    /**
+     * Like [displayColor], for a colour the artist just sampled with the eyedropper. The interface holds
+     * 8-bit sRGB, which cannot represent a colour outside that gamut; the repository remembers the exact stored
+     * colour it came from, so painting with the sample unchanged reproduces it instead of its clamped form.
+     */
+    fun sampledColor(stored: Int): Int = displayColor(stored)
 
     /**
      * Switches [profile] and converts stored colours to it, so the canvas looks the same. Fails, changing

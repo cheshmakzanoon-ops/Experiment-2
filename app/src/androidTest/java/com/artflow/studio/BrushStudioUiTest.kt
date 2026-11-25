@@ -58,7 +58,13 @@ class BrushStudioUiTest {
         compose.setContent {
             MaterialTheme { BrushStudioContent(BrushParams(), {}, {}) }
         }
-        compose.onNodeWithText("Inking").performClick().assertIsSelected()
+        // The category row scrolls horizontally; on a 320 dp phone this chip starts beyond the visible edge,
+        // so navigate to it as a user would instead of clicking at an off-screen position.
+        compose
+            .onNodeWithText("Inking")
+            .performScrollTo()
+            .performClick()
+            .assertIsSelected()
         compose.onNodeWithText("Search brushes").performTextInput("charcoal")
         compose.onNodeWithText("No matching brushes. Clear the search or choose another category.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Clear brush search").performClick()

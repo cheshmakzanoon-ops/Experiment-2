@@ -393,6 +393,8 @@ class CanvasViewModel
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         if (projectId == 0L || currentProjectId != projectId) return@collect
+                        // The artist may have switched recording off while this capture was waiting.
+                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
                         val revision = canvasRepository.contentRevision
                         // Playback only switches frames; it is not an edit worth recording.
                         if (revision == timelapseRevision || playbackActive) return@collect
@@ -402,7 +404,7 @@ class CanvasViewModel
                             ensureActive()
                             // Stored values are in the document's profile; the recording is sRGB.
                             val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
-                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide)
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide) { _settings.value.recordTimelapse }
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -482,9 +484,18 @@ class CanvasViewModel
             _history.value = HistoryState(canvasRepository.undoDepth, canvasRepository.redoDepth)
         }
 
+        private var shownSelectionRevision = -1L
+
+        /**
+         * Publishes the selection only when it actually changed. Every invalidation (each stroke sample)
+         * used to copy the whole mask, recount it and hand the overlay a new object that rebuilt a
+         * full-canvas bitmap; at 4096 x 3072 that is over 100 MiB of allocation for an unchanged selection.
+         */
         private fun refreshSelection() {
-            val mask = canvasRepository.selection()
-            _selection.value = mask
+            val revision = canvasRepository.selectionRevision
+            if (revision >= 0 && revision == shownSelectionRevision) return
+            shownSelectionRevision = revision
+            val mask = canvasRepository.selection().also { _selection.value = it }
             _selectionCount.value = mask?.selectedPixelCount() ?: 0
         }
 
@@ -510,17 +521,20 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
 
         fun setTool(tool: ToolType) {
-            if (tool == ToolType.LIQUIFY && _input.value.tool != ToolType.LIQUIFY) liquifyStartDepth = canvasRepository.undoDepth
+            if (tool == ToolType.LIQUIFY && _input.value.tool != ToolType.LIQUIFY) liquifyStartPosition = canvasRepository.historyPosition
             updateInput { it.copy(tool = tool, strokeDestination = StrokeDestination.LAYER) }
         }
 
-        /** History depth when Liquify was chosen; Reset returns the canvas there. */
-        private var liquifyStartDepth = 0
+        /**
+         * History position when Liquify was chosen; Reset returns the canvas there. A position, not a depth: at
+         * the history cap a new step evicts an old one and leaves the depth unchanged.
+         */
+        private var liquifyStartPosition = 0L
 
         /** Liquify's Reset: undoes every change made since Liquify was chosen. */
         fun resetLiquify() {
             var undone = false
-            while (canvasRepository.undoDepth > liquifyStartDepth && canvasRepository.undo()) undone = true
+            while (canvasRepository.historyPosition > liquifyStartPosition && canvasRepository.undo()) undone = true
             if (!undone) return
             refreshLayers()
             refreshHistory()
@@ -804,6 +818,9 @@ class CanvasViewModel
         // -----------------------------------------------------------------------------------------
         // History
         // -----------------------------------------------------------------------------------------
+
+        /** The live document's unsaved state, read at the moment of the call rather than from a collected snapshot. */
+        fun hasUnsavedChanges(): Boolean = canvasRepository.hasUnsavedChanges()
 
         fun undo() = if (canvasRepository.undo()) afterHistoryMove() else notify("Nothing to undo")
 

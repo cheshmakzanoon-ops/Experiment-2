@@ -44,6 +44,12 @@ class AdjustmentSessionController(
     private var selection: SelectionMask? = null
     private var previewJob: Job? = null
 
+    /**
+     * The Apply in flight. A new session waits for it, and each Apply closes only the session it was
+     * started with, so an earlier completion can never close a newer adjustment.
+     */
+    private var applyJob: Job? = null
+
     /** The whole-layer effect and the settings it was made for; Pencil mode blends it in where painted. */
     @Volatile private var filtered: Pair<State, PixelBuffer>? = null
     private var painted: SelectionMask? = null
@@ -54,6 +60,7 @@ class AdjustmentSessionController(
         color: Int = 0,
     ) {
         scope.launch {
+            applyJob?.join()
             closeSession()
             val opened = repository.beginRasterEdit(repository.getActiveLayerId())
             if (opened == null) {
@@ -177,26 +184,34 @@ class AdjustmentSessionController(
     }
 
     /** Records the adjustment as one undoable step; an untouched preview is simply closed. */
-    fun apply() {
-        val current = _state.value ?: return
-        val target = session ?: return
-        val source = original ?: return
+    fun apply(): Job? {
+        val current = _state.value ?: return null
+        val target = session ?: return null
+        val source = original ?: return null
         previewJob?.cancel()
-        scope.launch {
-            try {
-                val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
-                if (!result.pixels.contentEquals(source.pixels)) {
-                    result.pixels.copyInto(target.buffer.pixels)
-                    if (repository.commitRasterEdit(target, current.kind.displayName)) {
-                        onApplied()
-                    } else {
-                        notify("The layer changed; the adjustment was not applied")
+        val job =
+            scope.launch {
+                try {
+                    val result = withContext(Dispatchers.Default) { result(current) } ?: return@launch
+                    if (!result.pixels.contentEquals(source.pixels)) {
+                        result.pixels.copyInto(target.buffer.pixels)
+                        if (repository.commitRasterEdit(target, current.kind.displayName)) {
+                            onApplied()
+                        } else {
+                            notify("The layer changed; the adjustment was not applied")
+                        }
                     }
+                } finally {
+                    withContext(NonCancellable) { closeSession(owner = target) }
                 }
-            } finally {
-                withContext(NonCancellable) { closeSession() }
             }
-        }
+        applyJob = job
+        return job
+    }
+
+    /** Applies and returns only once the adjustment is committed (or refused), so a caller can act on the settled document. */
+    suspend fun applyAndWait() {
+        apply()?.join()
     }
 
     fun cancel() {
@@ -204,7 +219,15 @@ class AdjustmentSessionController(
         scope.launch { closeSession() }
     }
 
-    private suspend fun closeSession() {
+    /**
+     * Closes the current session. With [owner], only that session is closed: if a newer adjustment has
+     * already replaced it, just the owner's stale edit is cancelled and the newer session is left alone.
+     */
+    private suspend fun closeSession(owner: CanvasRepository.RasterEditSession? = null) {
+        if (owner != null && session !== owner) {
+            repository.cancelRasterEdit(owner)
+            return
+        }
         previewJob?.cancel()
         session?.let { repository.cancelRasterEdit(it) }
         session = null

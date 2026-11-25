@@ -77,18 +77,23 @@ class TimelapseRecorder
         /** Recorded frames in order, for the in-app replay. */
         suspend fun frameFiles(projectId: Long): List<File> = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
 
-        /** Appends [composite] to the recording unless it is identical to the previous frame. */
+        /**
+         * Appends [composite] to the recording unless it is identical to the previous frame.
+         * [permitted] is consulted again at the persistence boundary, inside the recorder's lock, so a
+         * recording switched off while this capture was scheduled or encoding writes nothing.
+         */
         suspend fun capture(
             projectId: Long,
             composite: PixelBuffer,
             maxSide: Int = MAX_SIDE,
+            permitted: () -> Boolean = { true },
         ) {
-            if (!isEnabled || !isRecording(projectId)) return
+            if (!isEnabled || !permitted() || !isRecording(projectId)) return
             withContext(Dispatchers.Default) {
                 val frame = downscale(composite, maxSide)
                 val hash = frame.pixels.contentHashCode()
                 mutex.withLock {
-                    if (!isEnabled || !isRecording(projectId)) return@withLock
+                    if (!isEnabled || !permitted() || !isRecording(projectId)) return@withLock
                     if (projectId == lastProjectId && hash == lastHash) return@withLock
                     val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
                     withContext(Dispatchers.IO) {

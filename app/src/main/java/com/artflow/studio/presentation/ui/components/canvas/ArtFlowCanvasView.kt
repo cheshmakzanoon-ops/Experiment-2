@@ -1042,7 +1042,7 @@ class ArtFlowCanvasView
             cancelActiveGesture()
             lastColorDrop = null
             colorDropTolerance = input.fillTolerance
-            bucketFill(x, y, colorDropTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
+            bucketFill(x, y, colorDropTolerance) { mark -> lastColorDrop = ColorDropFill(x, y, mark) }
             return true
         }
 
@@ -1062,14 +1062,17 @@ class ArtFlowCanvasView
             val (x, y) = viewToCanvas(viewX, viewY)
             if (floor(x).toInt() !in 0 until canvasWidth || floor(y).toInt() !in 0 until canvasHeight) return
             lastColorDrop = null
-            bucketFill(x, y, colorDropTolerance) { depth -> lastColorDrop = ColorDropFill(x, y, depth) }
+            bucketFill(x, y, colorDropTolerance) { mark -> lastColorDrop = ColorDropFill(x, y, mark) }
         }
 
-        /** Where the last ColorDrop landed and the history depth its fill produced. */
+        /**
+         * Where the last ColorDrop landed and the identity of the history step its fill produced. History
+         * depth is not an identity: fill, undo and a different edit return to the same depth.
+         */
         private class ColorDropFill(
             val x: Float,
             val y: Float,
-            val depth: Int,
+            val mark: Long,
         )
 
         private var lastColorDrop: ColorDropFill? = null
@@ -1082,12 +1085,12 @@ class ArtFlowCanvasView
             colorDropTolerance = tolerance.coerceIn(0, 255)
             val drop = lastColorDrop ?: return
             coroutineScope.launch {
-                if (canvasRepository.undoDepth != drop.depth || !canvasRepository.undo()) {
+                if (canvasRepository.historyMark != drop.mark || !canvasRepository.undo()) {
                     lastColorDrop = null
                     return@launch
                 }
                 reportHistory()
-                bucketFill(drop.x, drop.y, tolerance.coerceIn(0, 255)) { depth -> lastColorDrop = ColorDropFill(drop.x, drop.y, depth) }
+                bucketFill(drop.x, drop.y, tolerance.coerceIn(0, 255)) { mark -> lastColorDrop = ColorDropFill(drop.x, drop.y, mark) }
             }
         }
 
@@ -3292,7 +3295,8 @@ class ArtFlowCanvasView
 
         /** Fills the shape just traced with the brush colour, as one undo step. */
         private fun lassoFill(shape: List<Pair<Float, Float>>) {
-            val color = input.brushColor
+            // The interface colour is sRGB; convert it into the canvas's stored space like every other fill.
+            val color = canvasRepository.documentColor(input.brushColor)
             applyFillEdit("Lasso fill") { target, selection, alphaLocked ->
                 FillTool.lassoFill(target, shape, color, FillTool.Settings(mask = selection, alphaLock = alphaLocked)).changed
             }
@@ -3302,7 +3306,7 @@ class ArtFlowCanvasView
             x: Float,
             y: Float,
             tolerance: Int = input.fillTolerance,
-            onCommitted: ((Int) -> Unit)? = null,
+            onCommitted: ((Long) -> Unit)? = null,
         ) {
             // A pixel covers [i, i + 1), so the seed is the pixel under the touch; rounding would pick the neighbour past
             // the edge.
@@ -3365,7 +3369,7 @@ class ArtFlowCanvasView
         /** Capture the destination and policy before yielding; a no-op never consumes history. */
         private fun applyFillEdit(
             description: String,
-            onCommitted: ((Int) -> Unit)? = null,
+            onCommitted: ((Long) -> Unit)? = null,
             edit: (PixelBuffer, SelectionMask?, Boolean) -> Boolean,
         ) {
             val layerId = activeLayerId
@@ -3382,7 +3386,7 @@ class ArtFlowCanvasView
                         onStatusMessage?.invoke("$description did not change any pixels")
                     } else if (canvasRepository.commitRasterEdit(session, description)) {
                         reportHistory()
-                        onCommitted?.invoke(canvasRepository.undoDepth)
+                        onCommitted?.invoke(canvasRepository.historyMark)
                     } else {
                         onStatusMessage?.invoke("The document changed before $description could be applied")
                     }
@@ -3429,7 +3433,7 @@ class ArtFlowCanvasView
                     }
                 if (color != null) {
                     // The canvas stores its own colour space; the picker shows sRGB.
-                    val opaque = Channels.withAlpha(canvasRepository.displayColor(color), 255)
+                    val opaque = Channels.withAlpha(canvasRepository.sampledColor(color), 255)
                     if (source != null && source === samplingSource) {
                         onEyedropperChanged?.invoke(EyedropperLoupe(viewX, viewY, opaque, samplingPrevious))
                     }

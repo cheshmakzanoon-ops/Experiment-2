@@ -21,6 +21,10 @@ class ClipboardController(
 ) {
     private var image: PixelBuffer? = null
     private var imageChannel = MaterialChannel.COLOR
+
+    /** Whether the copied pixels came from a private layer; Paste must not launder them into recorded artwork. */
+    private var imagePrivate = false
+
     private val _hasContent = MutableStateFlow(false)
     val hasContent: StateFlow<Boolean> = _hasContent.asStateFlow()
 
@@ -32,6 +36,7 @@ class ClipboardController(
         perform {
             image = repository.copySelectionToLayer(cut = false)
             imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            imagePrivate = repository.getActiveLayer()?.isPrivate == true
             _hasContent.value = true
         }
 
@@ -39,6 +44,7 @@ class ClipboardController(
         perform {
             image = repository.copySelectionToLayer(cut = true)
             imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            imagePrivate = repository.getActiveLayer()?.isPrivate == true
             _hasContent.value = true
         }
 
@@ -49,6 +55,8 @@ class ClipboardController(
             val selection = requireCopiableSelection()
             image = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
             imageChannel = MaterialChannel.COLOR
+            // A merged copy of a document that shows private layers contains their pixels.
+            imagePrivate = repository.getAllLayers().any { it.isPrivate && it.isVisible }
             _hasContent.value = true
         }
 
@@ -89,20 +97,23 @@ class ClipboardController(
         if (cut) {
             image = repository.cutSelection()
             imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+            imagePrivate = repository.getActiveLayer()?.isPrivate == true
             _hasContent.value = true
             return
         }
         val layerId = repository.getActiveLayerId()
         val channel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
+        val sourcePrivate = repository.getActiveLayer()?.isPrivate == true
         val selection = requireCopiableSelection()
         val pixels = checkNotNull(repository.layerPixels(layerId)) { "This layer has no pixels to copy" }
         image = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
         imageChannel = channel
+        imagePrivate = sourcePrivate
         _hasContent.value = true
     }
 
     private suspend fun pasteAsLayer() {
         val copied = image ?: error("Nothing has been copied yet")
-        repository.pasteLayer(copied, imageChannel)
+        repository.pasteLayer(copied, imageChannel, isPrivate = imagePrivate)
     }
 }

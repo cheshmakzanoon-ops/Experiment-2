@@ -33,6 +33,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.util.UUID
 
 /** Share the brush being edited as an `.artbrush` or Procreate `.brush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
@@ -100,9 +103,22 @@ internal suspend fun shareBrushes(
         val file =
             withContext(Dispatchers.IO) {
                 val encoded = BrushShareFiles.encode(name, brushes, format)
-                val directory = File(context.filesDir, "exports/brushes")
-                check(directory.isDirectory || directory.mkdirs()) { "The brush export directory could not be created" }
-                File(directory, encoded.fileName).apply { writeBytes(encoded.bytes) }
+                val root = File(context.filesDir, "exports/brushes")
+                check(root.isDirectory || root.mkdirs()) { "The brush export directory could not be created" }
+                // Each share owns an immutable file in its own directory. A receiving app may still be reading
+                // an earlier share, so a later one must never rewrite or replace that path.
+                val directory = File(root, UUID.randomUUID().toString())
+                check(directory.mkdirs()) { "The brush export directory could not be created" }
+                val target = File(directory, encoded.fileName)
+                val partial = File(directory, ".${encoded.fileName}.partial")
+                try {
+                    partial.outputStream().use { it.write(encoded.bytes) }
+                    Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+                } finally {
+                    partial.delete()
+                }
+                pruneStaleShares(root, keep = directory)
+                target
             }
         withContext(Dispatchers.Main) { share(context, file) }
         true
@@ -122,6 +138,19 @@ internal suspend fun shareBrushes(
         false
     }
 }
+
+/** Older shares are no longer being delivered; remove them so exports cannot accumulate without bound. */
+private fun pruneStaleShares(
+    root: File,
+    keep: File,
+) {
+    val cutoff = System.currentTimeMillis() - STALE_SHARE_MS
+    root.listFiles()?.forEach { entry ->
+        if (entry != keep && entry.isDirectory && entry.lastModified() < cutoff) entry.deleteRecursively()
+    }
+}
+
+private const val STALE_SHARE_MS = 24L * 60 * 60 * 1000
 
 private fun share(
     context: Context,

@@ -82,14 +82,19 @@ private fun runBrush(
             if (env.input.tool == ToolType.ERASER) {
                 viewModel.setEraserSize(steppedSize(env.input.eraserSize, up))
             } else {
-                viewModel.setBrushSize(steppedSize(env.input.brushParams.size, up))
+                // Step from the brush that is active: the setter writes to Smudge's own brush while smudging.
+                viewModel.setBrushSize(steppedSize(activeBrush(env).size, up))
             }
         }
-        ShortcutAction.OPACITY_UP -> viewModel.setBrushOpacity(env.input.brushParams.opacity + OPACITY_STEP)
-        ShortcutAction.OPACITY_DOWN -> viewModel.setBrushOpacity(env.input.brushParams.opacity - OPACITY_STEP)
+        ShortcutAction.OPACITY_UP -> viewModel.setBrushOpacity(activeBrush(env).opacity + OPACITY_STEP)
+        ShortcutAction.OPACITY_DOWN -> viewModel.setBrushOpacity(activeBrush(env).opacity - OPACITY_STEP)
         else -> Unit
     }
 }
+
+/** The brush the size and opacity keys act on: Smudge's own brush while smudging with one, else the paint brush. */
+private fun activeBrush(env: ShortcutEnvironment) =
+    env.input.smudgeParams?.takeIf { env.input.tool == ToolType.SMUDGE } ?: env.input.brushParams
 
 private fun runView(
     action: ShortcutAction,

@@ -20,6 +20,9 @@ object GifEncoder {
     private const val HARD_EDGE_ALPHA = 128
     private val OPAQUE_ALPHA = 0xFF000000.toInt()
 
+    /** Graphics Control Extension disposal method 2, shifted into bits 2-4 of the packed field. */
+    private const val DISPOSE_TO_BACKGROUND = 2 shl 2
+
     /**
      * Encodes [frames] into an animated GIF.
      *
@@ -124,8 +127,10 @@ object GifEncoder {
         out.write(0xF9)
         out.write(0x04)
         val transparencyFlag = if (transparentIndex >= 0) 0x01 else 0x00
-        // Disposal method 2 (restore to background) keeps transparent areas clean between frames.
-        out.write(0x04 or transparencyFlag)
+        // Disposal method 2 (restore to background) keeps transparent areas clean between frames. The method
+        // occupies bits 2-4 of the packed field, so it is 2 shl 2 = 0x08; 0x04 would be method 1 (leave in
+        // place), which lets a transparent frame show the previous frame's marks through it.
+        out.write(DISPOSE_TO_BACKGROUND or transparencyFlag)
         writeShort(out, delayCs)
         out.write(if (transparentIndex >= 0) transparentIndex else 0)
         out.write(0x00)

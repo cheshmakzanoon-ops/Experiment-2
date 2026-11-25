@@ -129,6 +129,24 @@ class CanvasRepositoryImpl
         private var canvasHeight = 1080
         private var canvasDpi = 72
         private var colorProfile = ColorProfile.SRGB
+
+        /** The last eyedropper sample: the profile it was taken in, its opaque sRGB form and its exact stored colour. */
+        private var sampled: Triple<ColorProfile, Int, Int>? = null
+
+        override fun sampledColor(stored: Int): Int {
+            val display = displayColor(stored)
+            sampled = Triple(colorProfile, display or OPAQUE_MASK, stored or OPAQUE_MASK)
+            return display
+        }
+
+        override fun documentColor(srgb: Int): Int = exactSampleFor(srgb) ?: super.documentColor(srgb)
+
+        /** The stored colour [srgb] was sampled from, while it is still the unchanged sample in the same profile. */
+        private fun exactSampleFor(srgb: Int): Int? {
+            val sample = sampled ?: return null
+            return sample.third.takeIf { sample.first == colorProfile && srgb == sample.second }
+        }
+
         private val trackedMs = AtomicLong()
         private var backgroundColor = 0xFFFFFFFF.toInt()
         private var physicalLightAngle = 45f
@@ -163,6 +181,12 @@ class CanvasRepositoryImpl
         private var materialPaintValue: Float = 1f
         private var symmetrySettings = SymmetryEngine.Settings()
         private var activeSelection: SelectionMask? = null
+            set(value) {
+                if (field !== value) selectionRevisionCounter++
+                field = value
+            }
+        private var selectionRevisionCounter = 0L
+        override val selectionRevision: Long get() = selectionRevisionCounter
 
         /** Save & Load slots owned by this document; encoded into every save. */
         private val savedSelectionSlots = mutableListOf<SelectionMask>()
@@ -320,13 +344,26 @@ class CanvasRepositoryImpl
             return layer
         }
 
+        @Suppress("TooGenericExceptionCaught") // Any failure to open the primary must leave a healthy recovery reachable.
         override suspend fun loadOrCreate(
             projectId: Long,
             width: Int,
             height: Int,
             dpi: Int,
         ): CanvasState? {
-            val loaded = loadCanvas(projectId)
+            val loaded =
+                try {
+                    loadCanvas(projectId)
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (primaryFailure: Exception) {
+                    // The saved generation is unreadable. If a recovery generation exists it must stay
+                    // reachable: open the same protected placeholder used when no saved document exists, so
+                    // the recovery prompt is offered and save/export cannot overwrite the only healthy copy.
+                    if (!storage.hasUnsavedRecovery(projectId)) throw primaryFailure
+                    Timber.w(primaryFailure, "Saved generation of project %d is unreadable; offering its recovery", projectId)
+                    null
+                }
             if (loaded != null) return loaded
             createCanvas(width, height, dpi)
             return withState {
@@ -385,7 +422,10 @@ class CanvasRepositoryImpl
         ) {
             val frames = document.resolvedFrames()
             requireCanvasMemory(document.width, document.height)
-            val rasterCount = frames.sumOf { frame -> frame.layers.sumOf { listOfNotNull(it.rasterFile, it.maskFile).size } }
+            val rasterCount =
+                frames.sumOf { frame ->
+                    frame.layers.sumOf { listOfNotNull(it.rasterFile, it.maskFile, it.physicalPaintFile).size }
+                }
             require(rasterBudget.allows(document.width, document.height, rasterCount)) {
                 "This artwork needs more memory than this device provides"
             }
@@ -710,6 +750,9 @@ class CanvasRepositoryImpl
         override var historyMark: Long = 0L
             private set
 
+        override var historyPosition: Long = 0L
+            private set
+
         override val redoDepth: Int get() = redoStack.size
 
         override fun projectId(): Long = currentProjectId
@@ -897,6 +940,8 @@ class CanvasRepositoryImpl
                     layer.physicalPlane = targetPhysicalPlane
                     layer.physicalPaintFile = null
                     layer.physicalPlaneOwned = true
+                } else if (isEraser) {
+                    reconcilePhysicalPlane(layer)
                 }
             }
             dirtyRasters += layer.id
@@ -1154,6 +1199,7 @@ class CanvasRepositoryImpl
                     layer.raster = session.buffer.copy()
                     layer.strokes.clear()
                     layer.rasterFile = null
+                    reconcilePhysicalPlane(layer)
                     dirtyRasters += layer.id
                 }
                 dirty = true
@@ -1207,6 +1253,7 @@ class CanvasRepositoryImpl
         override suspend fun pasteLayer(
             pixels: PixelBuffer,
             materialChannel: MaterialChannel,
+            isPrivate: Boolean,
         ): Long =
             withState {
                 requireClipboardReady(paste = true)
@@ -1221,7 +1268,7 @@ class CanvasRepositoryImpl
                     }
                 coroutineContext.ensureActive()
                 requireClipboardTarget(layers, active, revision, paste = true)
-                insertPastedLayer(prepared, materialChannel = materialChannel)
+                insertPastedLayer(prepared, materialChannel = materialChannel, isPrivate = isPrivate)
             }
 
         override suspend fun copySelectionToLayer(cut: Boolean): PixelBuffer = prepareClipboardSelection(cut, paste = true)
@@ -1330,7 +1377,27 @@ class CanvasRepositoryImpl
             source.raster = pixels
             source.strokes.clear()
             source.rasterFile = null
+            reconcilePhysicalPlane(source)
             dirtyRasters += source.id
+        }
+
+        /**
+         * Physical paint (wetness, relief, pigment) must not outlive the colour it belongs to. After any
+         * edit that can remove paint (erase, cut, clear), drop the state beneath transparent pixels.
+         * Call after [pushUndo]: the plane is shared with that snapshot, so the pruned result is a copy.
+         */
+        private fun reconcilePhysicalPlane(layer: LayerData) {
+            val plane = layer.physicalPlane ?: return
+            val raster = layer.raster
+            if (raster == null) {
+                layer.physicalPlane = null
+            } else {
+                if (!plane.hasStateBeneathTransparent(raster)) return
+                val pruned = plane.copy().also { it.pruneTransparent(raster) }
+                layer.physicalPlane = pruned.takeIf { !it.isEmpty() }
+            }
+            layer.physicalPaintFile = null
+            layer.physicalPlaneOwned = true
         }
 
         override suspend fun setLayerPixels(
@@ -1346,12 +1413,20 @@ class CanvasRepositoryImpl
                 layer.raster = buffer.copy()
                 layer.strokes.clear()
                 layer.rasterFile = null
+                reconcilePhysicalPlane(layer)
                 dirtyRasters += layer.id
                 dirty = true
                 emit(CanvasInvalidationEvent.Full)
                 Timber.d("Set pixels for layer ${layer.name} ($description)")
                 true
             }
+
+        private class TransformResult(
+            val pixels: PixelBuffer,
+            val mask: PixelBuffer?,
+            val physicalPlane: PhysicalPaintPlane?,
+            val unchanged: Boolean,
+        )
 
         override suspend fun transformLayer(
             layerId: Long,
@@ -1384,24 +1459,38 @@ class CanvasRepositoryImpl
                             val pixels = LayerTransform.apply(source, parameters, checkActive = { ensureActive() })
                             val sourceMask = sourceLayer.mask
                             val mask = sourceMask?.let { LayerTransform.apply(it, parameters, checkActive = { ensureActive() }) }
+                            // Wetness, relief and pigment move with the paint they belong to, through the identical mapping.
+                            val sourcePlane = sourceLayer.physicalPlane?.takeIf { !it.isEmpty() }
+                            val plane =
+                                sourcePlane?.let {
+                                    val moved =
+                                        LayerTransform.apply(it.toPackedPixels(), parameters, checkActive = { ensureActive() })
+                                    PhysicalPaintPlane.fromPackedPixels(moved).takeIf { next -> !next.isEmpty() }
+                                }
                             val samePixels = sourceLayer.strokes.isEmpty() && source.pixels.contentEquals(pixels.pixels)
                             val sameMask = if (sourceMask == null) mask == null else sourceMask.pixels.contentEquals(mask?.pixels)
-                            Triple(pixels, mask, samePixels && sameMask)
+                            val samePlane = sourcePlane == null || sourcePlane.contentEquals(plane)
+                            TransformResult(pixels, mask, plane, samePixels && sameMask && samePlane)
                         }
                     }
                 coroutineContext.ensureActive()
                 if (currentProjectId != project || activeFrame != frame || activeLayerData() !== layer) return@withState false
                 if (editRevision != expectedRevision || activeSelection != null) return@withState false
                 if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty()) return@withState false
-                if (results.all { it.third }) return@withState true
+                if (results.all { it.unchanged }) return@withState true
                 pushUndo()
                 targets.zip(results).forEach { (target, result) ->
-                    target.raster = result.first
+                    target.raster = result.pixels
                     target.strokes.clear()
                     target.rasterFile = null
-                    target.mask = result.second
+                    target.mask = result.mask
                     target.maskFile = null
                     target.maskOwned = true
+                    if (target.physicalPlane != null) {
+                        target.physicalPlane = result.physicalPlane
+                        target.physicalPaintFile = null
+                        target.physicalPlaneOwned = true
+                    }
                     dirtyRasters += target.id
                 }
                 dirty = true
@@ -2627,7 +2716,8 @@ class CanvasRepositoryImpl
                 snapshot.frames.sumOf { frame ->
                     frame.layers.sumOf { layer ->
                         (if (layer.raster != null || layer.strokes.isNotEmpty() || layer.text != null) 1L else 0L) +
-                            (if (layer.mask != null) 1L else 0L)
+                            (if (layer.mask != null) 1L else 0L) +
+                            (if (layer.physicalPlane?.isEmpty() == false) 1L else 0L)
                     }
                 }
             rasterBudget.requireFits(width, height, planes.toInt())
@@ -2653,6 +2743,15 @@ class CanvasRepositoryImpl
                                             result.rasterFile = null
                                             result.mask = layer.mask?.let { transform(it, true) }
                                             result.maskFile = null
+                                            // Physical state follows the canvas: same crop, rotation, flip or resample.
+                                            // A plane left at the old size would constrain later painting and relief.
+                                            result.physicalPlane =
+                                                layer.physicalPlane?.takeIf { !it.isEmpty() }?.let { plane ->
+                                                    val moved = transform(plane.toPackedPixels(), false)
+                                                    PhysicalPaintPlane.fromPackedPixels(moved).takeIf { next -> !next.isEmpty() }
+                                                }
+                                            result.physicalPaintFile = null
+                                            result.physicalPlaneOwned = true
                                         }
                                     }.toMutableList()
                             FrameData(frame.id, frame.name, frame.durationMs, layers, frame.isKeyframe, frame.activeLayerId)
@@ -2677,9 +2776,11 @@ class CanvasRepositoryImpl
         override suspend fun trimTransparent(): Boolean =
             withState {
                 val document = canvasSnapshot()
-                // Cropping transforms every texture plane. A material artwork must retain painted
-                // coverage in every channel and frame, including zero-valued opaque scalar texels.
-                val stacks = if (allLayers().any { it.materialChannel.isScalar }) frameList.map { it.layers } else listOf(currentLayers())
+                // Cropping transforms every frame and every texture plane, so the kept bounds must be the union
+                // of every frame's content. Using only the active frame would cut away paint elsewhere in the
+                // animation. A material artwork must also retain coverage in every channel, including
+                // zero-valued opaque scalar texels.
+                val stacks = frameList.map { it.layers }
                 var content: IntBounds? = null
                 for (layers in stacks) {
                     for (channel in layers.map { it.materialChannel }.distinct()) {
@@ -3100,8 +3201,7 @@ class CanvasRepositoryImpl
                             source.layers
                                 .map { layer ->
                                     layer.duplicate(layer.id, layer.name) { ++strokeCursor }.also { fresh ->
-                                        fresh.raster = fresh.raster?.copy()
-                                        fresh.mask = fresh.mask?.copy()
+                                        fresh.ownPixelBuffers()
                                     }
                                 }.toMutableList(),
                     )
@@ -3133,16 +3233,12 @@ class CanvasRepositoryImpl
                         name = "${clip.name} copy",
                         durationMs = clip.durationMs,
                         isKeyframe = clip.isKeyframe,
+                        // New layer ids, with group parents and link groups remapped onto the pasted copies,
+                        // exactly as Duplicate Frame does; keeping the clipboard's ids would orphan children.
                         layers =
-                            clip.layers
-                                .map { layer ->
-                                    val newId = nextLayerId++
-                                    layer.duplicate(newId, layer.name) { nextStrokeId++ }.also { fresh ->
-                                        fresh.raster = fresh.raster?.copy()
-                                        fresh.mask = fresh.mask?.copy()
-                                        dirtyRasters += newId
-                                    }
-                                }.toMutableList(),
+                            duplicateBlock(clip.layers) { it.name }
+                                .onEach { fresh -> fresh.ownPixelBuffers() }
+                                .toMutableList(),
                     )
                 val target = insertAt.coerceIn(0, frameList.size)
                 frameList.add(target, frame)
@@ -3657,6 +3753,9 @@ class CanvasRepositoryImpl
                     layer.snapshotCopy().also { copy ->
                         copy.raster = layer.raster?.crop(region)
                         copy.mask = layer.mask?.crop(region)
+                        // Relief and wetness must be those of the same region, in the region's own coordinates.
+                        copy.physicalPlane =
+                            layer.physicalPlane?.cropped(region.left, region.top, region.width, region.height)?.takeIf { !it.isEmpty() }
                         copy.strokes.clear()
                         layer.strokes.mapTo(copy.strokes) { PreviewCache.translate(it, dx, dy) }
                     }
@@ -4050,6 +4149,7 @@ class CanvasRepositoryImpl
             opacityRun = null
             val snapshot = undoStack.removeLastOrNull() ?: return false
             historyMark++
+            historyPosition--
             redoStack.addLast(currentSnapshot())
             restore(snapshot)
             trimHistory(redoStack)
@@ -4062,6 +4162,7 @@ class CanvasRepositoryImpl
             opacityRun = null
             val snapshot = redoStack.removeLastOrNull() ?: return false
             historyMark++
+            historyPosition++
             undoStack.addLast(currentSnapshot())
             restore(snapshot)
             trimHistory(undoStack)
@@ -4073,12 +4174,14 @@ class CanvasRepositoryImpl
         private fun pushUndo() {
             undoPushes++
             historyMark++
+            historyPosition++
             redoStack.clear()
             undoStack.addLast(currentSnapshot())
             trimHistory(undoStack)
             // Any buffer captured by a snapshot is now shared and must be copied before the next
-            // in-place edit (masks are painted in place; layer pixels clone on `beginRasterEdit`).
-            allLayers().forEach { it.maskOwned = false }
+            // in-place edit (masks are painted in place; layer pixels clone on `beginRasterEdit`;
+            // physical planes diffuse in place).
+            allLayers().forEach { it.markShared() }
         }
 
         /** Keeps the nearest states in either direction, preferring the inverse of the last action. */
@@ -4109,6 +4212,7 @@ class CanvasRepositoryImpl
                         frame.layers.forEach { layer ->
                             accounting.includeRaster(layer.raster)
                             accounting.includeRaster(layer.mask)
+                            accounting.includePhysical(layer.physicalPlane)
                         }
                     }
                 }
@@ -4143,7 +4247,7 @@ class CanvasRepositoryImpl
          * snapshot (undo entry) or a duplicate, both of which hand out references to the same buffer.
          */
         private fun markRastersShared() {
-            allLayers().forEach { it.maskOwned = false }
+            allLayers().forEach { it.markShared() }
         }
 
         /**
@@ -4241,7 +4345,17 @@ class CanvasRepositoryImpl
 
         /** Saved duplicates decode independently; count planes, not shared PixelBuffer identities. */
         private fun rasterPlanes(layers: List<LayerData>): Int =
-            layers.sumOf { (if (it.raster != null) 1 else 0) + (if (it.mask != null) 1 else 0) }
+            layers.sumOf { (if (it.raster != null) 1 else 0) + (if (it.mask != null) 1 else 0) + physicalPlaneEquivalents(it) }
+
+        /**
+         * A dense physical plane keeps three float arrays per pixel, three times a colour plane. Count the
+         * allocated tiles in colour-plane units so watercolor and impasto layers cannot exceed the budget unseen.
+         */
+        private fun physicalPlaneEquivalents(layer: LayerData): Int {
+            val bytes = layer.physicalPlane?.estimatedBytes() ?: return 0
+            val colourPlane = canvasWidth.toLong() * canvasHeight * Int.SIZE_BYTES
+            return ((bytes + colourPlane - 1) / colourPlane).toInt()
+        }
 
         /** Provisional first paint also reserves its eventual persisted plane until cancellation. */
         private fun reservedRasterLayers(): Set<Long> =
@@ -4616,7 +4730,30 @@ class CanvasRepositoryImpl
              * corrupting the history entry that shares the buffer.
              */
             var maskOwned: Boolean = true
+
+            /** Same contract as [maskOwned], for the physical-paint plane, whose diffusion mutates in place. */
             var physicalPlaneOwned: Boolean = true
+
+            /**
+             * Records that a snapshot, duplicate or save capture now holds this layer's mutable planes.
+             * Every capture must call this on the LIVE layer, otherwise a later in-place edit (mask
+             * painting, wetness diffusion) rewrites a revision the capture believes is frozen.
+             */
+            fun markShared() {
+                maskOwned = false
+                physicalPlaneOwned = false
+            }
+
+            /**
+             * Gives this layer private copies of its pixel buffers without turning editable text into
+             * pixels: assigning [raster] clears [text], so the text is restored afterwards.
+             */
+            fun ownPixelBuffers() {
+                val editableText = text
+                raster = raster?.copy()
+                text = editableText
+                mask = mask?.copy()
+            }
 
             fun canPaint(): Boolean =
                 isVisible &&
@@ -4666,10 +4803,10 @@ class CanvasRepositoryImpl
                     it.maskFile = maskFile
                     it.physicalPlane = physicalPlane
                     it.physicalPaintFile = physicalPaintFile
-                    // The snapshot now shares the mask and physical buffers, so the live layer must
-                    // copy before it mutates them again.
-                    it.maskOwned = false
-                    it.physicalPlaneOwned = false
+                    // The snapshot now shares the mask and physical buffers, so the LIVE layer (this)
+                    // and the copy must both clone before either mutates them again.
+                    it.markShared()
+                    markShared()
                 }
 
             /**
@@ -4720,8 +4857,8 @@ class CanvasRepositoryImpl
                     fresh.text = text
                     fresh.mask = mask
                     fresh.physicalPlane = physicalPlane
-                    fresh.maskOwned = false
-                    fresh.physicalPlaneOwned = false
+                    fresh.markShared()
+                    markShared()
                 }
 
             fun toDomain(index: Int): Layer =
@@ -4775,6 +4912,7 @@ class CanvasRepositoryImpl
 
         companion object {
             private const val BYTES_PER_PIXEL = 4L
+            private const val OPAQUE_MASK = -0x1000000
             private const val BELOW_CACHE_HEAP_SHARE = 8L
             private const val LIVE_HEAP_SHARE = 6L
             private const val MAX_HISTORY = 30

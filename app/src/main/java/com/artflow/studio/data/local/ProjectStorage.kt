@@ -216,18 +216,26 @@ class ProjectStorage
             val document = CanvasDocumentCodec.decode(bytes.decodeToString())
             CanvasDocumentCodec.requireValidHeader(document)
             CanvasDocumentCodec.requireValidStructure(document)
-            document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
-                listOfNotNull(layer.rasterFile, layer.maskFile).forEach { resolve(projectId, it) }
-            }
+            // Every manifest-named asset is path-validated, including physical-paint planes.
+            referencedFiles(document).forEach { resolve(projectId, it) }
             return document
         }
 
-        /** True when the autosave is newer than the last explicit save. */
+        /**
+         * True when an autosave exists that the artist may need: it is newer than the last explicit save,
+         * there is no saved document, or the saved document cannot be read at all. A damaged primary
+         * generation must never hide a healthy recovery generation.
+         */
         suspend fun hasUnsavedRecovery(projectId: Long): Boolean =
             withContext(ioDispatcher) {
                 val autosave = autosaveFile(projectId)
                 val document = documentFile(projectId)
-                autosave.exists() && (!document.exists() || autosave.lastModified() > document.lastModified())
+                autosave.exists() &&
+                    (
+                        !document.exists() ||
+                            autosave.lastModified() > document.lastModified() ||
+                            runCatching { decodeDocument(document, projectId) }.isFailure
+                    )
             }
 
         // -----------------------------------------------------------------------------------------
@@ -393,11 +401,7 @@ class ProjectStorage
                     val retained = keep.map(::normalizeRelativePath).toMutableSet()
                     pinnedRasters[projectId]?.let { retained.addAll(it.keys) }
                     listOfNotNull(loadDocument(projectId), loadAutosave(projectId)).forEach { document ->
-                        document.resolvedFrames().flatMap { it.layers }.forEach { layer ->
-                            listOfNotNull(layer.rasterFile, layer.maskFile, layer.physicalPaintFile).forEach {
-                                retained.add(normalizeRelativePath(it))
-                            }
-                        }
+                        referencedFiles(document).forEach { retained.add(normalizeRelativePath(it)) }
                     }
                     val deleted =
                         StorageFileTree.prune(layersDir, context.filesDir) { file ->
@@ -780,11 +784,16 @@ class ProjectStorage
             return missingFonts to missingGrains
         }
 
+        /**
+         * The single authoritative asset-dependency contract: every file a document manifest names.
+         * Duplication, packaging, import validation, pinning and pruning all enumerate through here, so a
+         * new per-layer asset kind can never be copied by one operation and silently dropped by another.
+         */
         fun referencedFiles(document: CanvasDocument): List<String> =
             document
                 .resolvedFrames()
                 .flatMap { it.layers }
-                .flatMap { listOfNotNull(it.rasterFile, it.maskFile) }
+                .flatMap { listOfNotNull(it.rasterFile, it.maskFile, it.physicalPaintFile) }
                 .distinct()
 
         private data class CopyManifest(
