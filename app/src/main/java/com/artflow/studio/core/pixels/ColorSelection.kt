@@ -78,9 +78,11 @@ internal object ColorSelection {
         hard: Float,
         antiAlias: Boolean,
     ): Int {
-        val distance = sqrt(distanceSquared(pixel, target))
-        if (distance <= hard) return 255
-        if (!antiAlias || distance >= hard + 30f) return 0
+        val squared = distanceSquared(pixel, target)
+        if (squared <= hard * hard) return 255
+        if (!antiAlias) return 0
+        val distance = sqrt(squared)
+        if (distance >= hard + 30f) return 0
         return ((hard + 30f - distance) / 30f * 255f).roundToInt().coerceIn(0, 255)
     }
 

@@ -148,4 +148,38 @@ class GradientToolTest {
         assertEquals(0xFF000000.toInt(), target.pixels[4])
         assertEquals(0xFFFFFFFF.toInt(), target.pixels[8])
     }
+
+    @Test
+    fun removingARepeatedStopRemovesOnlyOneOccurrenceAndKeepsTheMinimum() {
+        val shared = GradientTool.Stop(0f, red)
+        val end = GradientTool.Stop(1f, 0xFFFFFFFF.toInt())
+        val gradient = GradientTool.Gradient("Repeated", GradientTool.GradientType.LINEAR, listOf(shared, shared, end))
+
+        val edited = GradientTool.removeStop(gradient, 0f)
+
+        assertEquals(listOf(shared, end), edited.stops)
+        assertEquals(listOf(shared, shared, end), gradient.stops)
+        assertEquals(edited, GradientTool.removeStop(edited, 0f))
+    }
+
+    @Test
+    fun largeFiniteOffsetsKeepPerpendicularProjectionAtTheStartStop() {
+        val origin = 1e25f
+        val offset = 1e18f
+        for (type in listOf(GradientTool.GradientType.LINEAR, GradientTool.GradientType.REFLECTED)) {
+            val target = PixelBuffer(1, 1)
+            val ramp = GradientTool.Presets.BLACK_TO_WHITE.copy(type = type)
+
+            GradientTool.draw(
+                target,
+                origin,
+                origin,
+                origin + offset,
+                origin - offset,
+                GradientTool.Settings(ramp, dither = false),
+            )
+
+            assertEquals("$type must cancel the opposite projection terms", 0xFF000000.toInt(), target.pixels[0])
+        }
+    }
 }

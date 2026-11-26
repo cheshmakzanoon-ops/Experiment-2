@@ -8,7 +8,7 @@ import com.artflow.studio.domain.model.layer.Layer
 /**
  * Applies group headers to their member layers, at any nesting depth. Normal groups are isolated:
  * their members are merged against transparency before the result is blended with the stack.
- * Only a fully opaque Pass Through group lets its members blend with layers outside the group.
+ * Only a fully opaque, unclipped Pass Through group lets its members blend with layers outside the group.
  * A mask or reduced group opacity also requires merging members before applying that coverage.
  */
 object LayerGroups {
@@ -45,7 +45,7 @@ object LayerGroups {
 
     fun isolates(group: Layer): Boolean =
         group.isGroup &&
-            (group.blendMode != BlendMode.PASS_THROUGH || group.opacity < 1f)
+            (group.blendMode != BlendMode.PASS_THROUGH || group.opacity < 1f || group.isClippingMask)
 
     /** Stack entries, bottom first. Isolated groups sit at their header's position with their own plan. */
     fun plan(inputs: List<Compositor.LayerInput>): List<Entry> {

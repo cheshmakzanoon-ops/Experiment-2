@@ -10,7 +10,8 @@ an OpenGL ES 2.0 display surface. It includes pressure-sensitive brushes, layers
 selections and transforms, animation, reference images, and 3D texture painting.
 
 **Release status:** engineering candidate. Current implementation and verification outcomes are
-recorded by revision in the [follow-through log](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md),
+recorded by revision in the [November 26 hardening record](docs/release/PRODUCTION_HARDENING_2026-11-26.md)
+and the earlier [follow-through log](docs/release/PRODUCTION_FOLLOWTHROUGH_2026-11-19.md),
 with earlier results in [Test evidence](docs/release/TEST_EVIDENCE.md). Publisher signing,
 physical-device/stylus acceptance, upgrade testing, and store submission remain separate gates in
 [Release sign-off](docs/release/RELEASE_SIGNOFF.md). A helper's unit test or green emulator run does
@@ -39,6 +40,17 @@ Other release gates remain open: the same revision's
 had one failing test (68 of 69 passed).
 
 ## Current development
+
+The [November 26 hardening](docs/release/PRODUCTION_HARDENING_2026-11-26.md) protects referenced
+artwork and older recovery snapshots, preserves physical paint through selected transforms,
+and connects palette management, export previews, and clone-source/alignment controls. It also
+corrects thin-tip coverage, preserves complete text clusters, binds asynchronous previews,
+exports and frame clipboard operations to their artwork, and fixes feathered layered exports.
+Liquify Freeze/Unfreeze now retains temporary protection across accepted distortions, with
+selection-aware taps, cancellation, clear/reset controls and mask-memory admission. Merged
+clipboard copies preserve private-layer provenance from pinned animation frames as well.
+Its task ledger distinguishes implemented changes, independent reviews, local kernel checks,
+and exact-revision hosted qualification. Source publication does not complete the release gates.
 
 The [November 21 production hardening](docs/release/PRODUCTION_HARDENING_2026-11-21.md) protects
 artwork duplication against concurrent autosave cleanup, streams completed MP4 exports without
@@ -129,6 +141,10 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   and the device's available memory. A bounded copy supplies both metadata and decoding; oversized
   or unreadable input is rejected with an import error. This sampling applies to inserted photos,
   not to silently reducing the pixels of an existing editable native document.
+  Ordinary bitmap decoding supplies straight-alpha sRGB pixels, which are then converted once
+  into the destination document profile. Colors outside sRGB are clipped at that decode boundary,
+  including when a tagged Display P3 photo is inserted into a Display P3 artwork. Native Procreate
+  tile imports use a separate profile-aware path.
 - **Brush assets and imports:** startup waits for saved brush shapes and textures before opening
   the editor. A load failure offers Retry or an explicit choice to open with available brushes;
   missing textures can change subsequent strokes. Imported batches must fit decoding, retained
@@ -152,6 +168,11 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance
   benchmark suite or physical latency acceptance threshold.
+- **Onion skins:** combined admission covers full-resolution composition, accumulated ghost
+  buffers and overlapping renderer generations. Ghost output can decrease from a 1,024-pixel
+  maximum edge to 64 pixels, or be omitted with feedback when the full request cannot fit.
+  Existing artwork and animation history remain intact. These are conservative memory estimates;
+  native-driver peaks and animation smoothness still require physical-device measurements.
 - **Procreate:** supported rasters, hierarchy, layer masks, and blends have independent fixture
   coverage. Application-level animation/guide interchange and some group/effect semantics remain
   incomplete. Some exports use a rendered appearance layer with hidden sources. Self-roundtrips

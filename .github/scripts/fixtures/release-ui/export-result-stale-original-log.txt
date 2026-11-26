@@ -1,0 +1,53 @@
+INSTRUMENTATION_STATUS: class=com.artflow.qualification.ReleasePayloadWorkflowTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.artflow.qualification.ReleasePayloadWorkflowTest:
+INSTRUMENTATION_STATUS: test=paintSaveProcessDeathReopenAndSharePreservePixels
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.artflow.qualification.ReleasePayloadWorkflowTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=androidx.test.uiautomator.StaleObjectException
+	at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+	at androidx.test.uiautomator.UiObject2.getVisibleBounds(UiObject2.java:327)
+	at com.artflow.qualification.VisibleUi.freshVisible(VisibleUi.java:45)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:56)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:52)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.export(ReleasePayloadWorkflowTest.java:118)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.paintSaveProcessDeathReopenAndSharePreservePixels(ReleasePayloadWorkflowTest.java:77)
+
+INSTRUMENTATION_STATUS: stream=
+Error in paintSaveProcessDeathReopenAndSharePreservePixels(com.artflow.qualification.ReleasePayloadWorkflowTest):
+androidx.test.uiautomator.StaleObjectException
+	at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+	at androidx.test.uiautomator.UiObject2.getVisibleBounds(UiObject2.java:327)
+	at com.artflow.qualification.VisibleUi.freshVisible(VisibleUi.java:45)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:56)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:52)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.export(ReleasePayloadWorkflowTest.java:118)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.paintSaveProcessDeathReopenAndSharePreservePixels(ReleasePayloadWorkflowTest.java:77)
+
+INSTRUMENTATION_STATUS: test=paintSaveProcessDeathReopenAndSharePreservePixels
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 23.675
+There was 1 failure:
+1) paintSaveProcessDeathReopenAndSharePreservePixels(com.artflow.qualification.ReleasePayloadWorkflowTest)
+androidx.test.uiautomator.StaleObjectException
+	at androidx.test.uiautomator.UiObject2.getAccessibilityNodeInfo(UiObject2.java:1042)
+	at androidx.test.uiautomator.UiObject2.getVisibleBounds(UiObject2.java:327)
+	at com.artflow.qualification.VisibleUi.freshVisible(VisibleUi.java:45)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:56)
+	at com.artflow.qualification.VisibleUi.scroll(VisibleUi.java:52)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.export(ReleasePayloadWorkflowTest.java:118)
+	at com.artflow.qualification.ReleasePayloadWorkflowTest.paintSaveProcessDeathReopenAndSharePreservePixels(ReleasePayloadWorkflowTest.java:77)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

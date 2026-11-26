@@ -213,16 +213,16 @@ object FillTool {
         val out = coverage.copy()
         val width = coverage.width
         val height = coverage.height
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
+        for (y in 0 until height) {
+            for (x in 0 until width) {
                 val index = y * width + x
                 if ((out.coverage[index].toInt() and 0xFF) != 0) continue
 
                 var neighbours = 0
-                if ((coverage.coverage[index - 1].toInt() and 0xFF) != 0) neighbours++
-                if ((coverage.coverage[index + 1].toInt() and 0xFF) != 0) neighbours++
-                if ((coverage.coverage[index - width].toInt() and 0xFF) != 0) neighbours++
-                if ((coverage.coverage[index + width].toInt() and 0xFF) != 0) neighbours++
+                if (coverage.coverageAt(x - 1, y) != 0) neighbours++
+                if (coverage.coverageAt(x + 1, y) != 0) neighbours++
+                if (coverage.coverageAt(x, y - 1) != 0) neighbours++
+                if (coverage.coverageAt(x, y + 1) != 0) neighbours++
                 if (neighbours > 0) {
                     out.coverage[index] = (neighbours * 60).coerceAtMost(255).toByte()
                 }
@@ -248,14 +248,13 @@ object FillTool {
         val tolerance = sqrt(toleranceSquared)
         val ramp = max(tolerance * 0.5f, 8f)
 
-        fun covered(index: Int): Boolean = (coverage.coverage[index].toInt() and 0xFF) != 0
-
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
+        for (y in 0 until height) {
+            for (x in 0 until width) {
                 val index = y * width + x
-                if (covered(index)) continue
-                val beside = covered(index - 1) || covered(index + 1)
-                if (!(beside || covered(index - width) || covered(index + width))) continue
+                if (coverage.coverage[index].toInt() != 0) continue
+                val beside = coverage.coverageAt(x - 1, y) != 0 || coverage.coverageAt(x + 1, y) != 0
+                val aboveOrBelow = coverage.coverageAt(x, y - 1) != 0 || coverage.coverageAt(x, y + 1) != 0
+                if (!(beside || aboveOrBelow)) continue
                 val distance = sqrt(colorDistanceSquared(source.pixels[index], seed))
                 val share = ((tolerance + ramp - distance) / ramp).coerceIn(0f, 1f)
                 if (share > 0f) out.coverage[index] = (share * 255f).roundToInt().toByte()

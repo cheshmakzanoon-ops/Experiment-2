@@ -23,7 +23,10 @@ object LayerImports {
         isPrivate: Boolean = false,
     ): Long = insertImage(repository, isPrivate) { image }
 
-    /** Captures the destination before loading pixels; neither overload takes ownership of the source. */
+    /**
+     * Captures the destination before loading straight-alpha sRGB pixels; neither overload takes
+     * ownership of the source. Platform photo decoders normalize tags before this conversion.
+     */
     suspend fun insertImage(
         repository: CanvasRepository,
         isPrivate: Boolean = false,

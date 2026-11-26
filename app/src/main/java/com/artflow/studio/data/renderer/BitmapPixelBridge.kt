@@ -44,7 +44,12 @@ object BitmapPixelBridge {
             setPixels(buffer.pixels, 0, buffer.width, 0, 0, buffer.width, buffer.height)
         }
 
-    /** Copies a bitmap into a buffer. The bitmap is not recycled. */
+    /**
+     * Copies a bitmap into straight-alpha sRGB pixels, as specified by [Bitmap.getPixels].
+     * Android converts tagged bitmap colors here; labeling these returned channels with the
+     * original bitmap profile would apply that profile twice. Colors outside sRGB are clipped.
+     * The bitmap is not recycled.
+     */
     fun fromBitmap(bitmap: Bitmap): PixelBuffer {
         val width = bitmap.width
         val height = bitmap.height
@@ -322,6 +327,7 @@ object BitmapPixelBridge {
     /**
      * Decodes a picked image (honouring EXIF rotation and mirroring on every supported API), downsampled so its longest
      * side stays within [maxDimension] and its simultaneous rasters fit the import heap budget.
+     * Returned pixels are sRGB, including when the source carries a wide-gamut color profile.
      * A bounded encoded snapshot makes metadata and pixels consistent even if a provider changes
      * what it returns between opens. The metadata pass chooses a sample before allocating pixels.
      */

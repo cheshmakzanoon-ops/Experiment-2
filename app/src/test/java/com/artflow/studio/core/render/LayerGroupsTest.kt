@@ -3,6 +3,7 @@ package com.artflow.studio.core.render
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -120,5 +121,49 @@ class LayerGroupsTest {
         val outer = Layer(20, "Outer", 3, isGroup = true, blendMode = BlendMode.PASS_THROUGH)
         val result = Compositor().composite(listOf(paper, ink, Compositor.LayerInput(inner), Compositor.LayerInput(outer)), 1, 1)
         assertEquals(0xFF800000.toInt(), result.pixels.single())
+    }
+
+    @Test fun clippedPassThroughGroupRetainsBaseCoverageAndAppliesOpacityOnce() {
+        val base =
+            Compositor.LayerInput(
+                Layer(1, "Base", 0, opacity = 0.5f),
+                PixelBuffer(2, 1, intArrayOf(0x400000FF, 0)),
+            )
+        val member =
+            Compositor.LayerInput(
+                Layer(2, "Ink", 1, parentGroupId = 10),
+                PixelBuffer.filled(2, 1, 0xFF00FF00.toInt()),
+            )
+        val second = member.copy(layer = member.layer.copy(id = 3, index = 2))
+        val group = Layer(10, "Clipped", 3, isGroup = true, isClippingMask = true, blendMode = BlendMode.PASS_THROUGH)
+        for ((opacity, expected) in listOf(1f to 0x2000FF00, 0.5f to 0x2000807F)) {
+            val result = Compositor().composite(listOf(base, member, second, Compositor.LayerInput(group.copy(opacity = opacity))), 2, 1)
+            assertArrayEquals(intArrayOf(expected, 0), result.pixels)
+        }
+    }
+
+    @Test fun clippedPassThroughGroupCannotPaintWithoutAVisibleBase() {
+        val background = Compositor.LayerInput(Layer(1, "Paper", 0), PixelBuffer.filled(1, 1, 0xFF0000FF.toInt()))
+        val base = Compositor.LayerInput(Layer(2, "Base", 1), PixelBuffer.filled(1, 1, 0xFFFF0000.toInt()))
+        val member =
+            Compositor.LayerInput(
+                Layer(3, "Ink", 2, parentGroupId = 10),
+                PixelBuffer.filled(1, 1, 0xFF00FF00.toInt()),
+            )
+        val group =
+            Compositor.LayerInput(
+                Layer(10, "Clipped", 3, isGroup = true, isClippingMask = true, blendMode = BlendMode.PASS_THROUGH),
+            )
+        val blockedBases =
+            listOf(
+                base.copy(layer = base.layer.copy(isVisible = false)),
+                base.copy(layer = base.layer.copy(opacity = 0f)),
+                base.copy(raster = null),
+            )
+        for (blocked in blockedBases) {
+            val result = Compositor().composite(listOf(background, blocked, member, group), 1, 1)
+            assertEquals(0xFF0000FF.toInt(), result.pixels.single())
+        }
+        assertEquals(0, Compositor().composite(listOf(member, group), 1, 1).pixels.single())
     }
 }

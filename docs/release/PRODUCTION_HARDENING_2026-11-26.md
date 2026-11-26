@@ -40,6 +40,17 @@ complete Procreate interchange, GPU painting, or physical pen-latency qualificat
 | 022 | Animation playback review | No additional blocking defect found in ping-pong boundaries, bounded holds, preview/export order, stop/start generation or structural-edit cancellation; source review and scoped formatting only. Physical timing remains unqualified. |
 | 023 | Frame clipboard ownership | Cancel queued work and clear Paste on document changes; check project/generation before commands and feedback; clear repository clipboard when creating a fresh canvas. Five controller tests and one real ViewModel/repository regression added. |
 | 024 | Onion-skin color profiles | Encode chosen sRGB tints into the document profile and invalidate retained ghosts when that profile changes. Add a P3 alpha/source-preservation regression. Combined compositor/ghost memory admission remains a follow-up. |
+| 025 | Liquify freeze workflow | Connect selected Freeze/Unfreeze taps and drags, immutable accepted coverage, clear/reset controls, cached percentage and document/layer/frame/revision ownership. Admit mask copies before allocation. Six kernel and three device regressions added. |
+| 026 | Tagged raster insertion review | Confirm existing sRGB decoded-pixel to destination-profile conversion. Document ordinary-photo gamut clipping and add a real URI/file, sRGB/P3, alpha, undo/redo and save/reopen regression. Do not relabel decoded sRGB channels as P3. |
+| 027 | Onion-skin memory and lifetime | Admit full composition, accumulated ghost buffers and old/new renderer ownership before allocation; reduce output or refuse safely. Serialize across cancellation and view recreation. Four budget, six ownership and one GL regression added. |
+| 028 | Fill at canvas boundaries | Use safe neighbor lookup on every row/column, including one-pixel-wide canvases; preserve reference pixels and once-applied selection coverage. Three regressions added. |
+| 029 | Gradient editing and numeric stability | Remove only one repeated stop occurrence; widen only overflowing linear/reflected projections while preserving finite Float output. Two regressions added. |
+| 030 | Pixel clipboard ownership and privacy | Cancel obsolete queued edits without clearing valid cross-artwork clipboard contents. Keep cut commit/publication contiguous. Capture merged pixels, selection and privacy from one frozen layer set, including pinned frames. Controller, repository and device regressions added. |
+| 031 | Release UI observation | Diagnose the retained export-result failure as a detached accessibility handle. Treat only a stale read as unobserved under existing bounds, without action replay or test-attempt retry. Seven helper regressions and original failure evidence retained. |
+| 032 | Ellipse selection coverage | Exclude exact left-boundary samples consistently with the other ellipse boundaries; retain polygon half-open spans. Add exact coverage, transposition and reversed-winding regressions. |
+| 033 | Hard color-selection threshold | Use the same squared-distance comparison for contiguous, global and range selections; avoid a square-root rounding disagreement at a real two-pixel threshold. One regression added. |
+| 034 | Clipped Pass Through groups | Retain group isolation when clipping is enabled, so members respect translucent, empty, hidden or absent bases and group opacity applies once. Two regressions added. |
+| 035 | Brush model/serialization review | No concrete defect found in detached mutable snapshots, bounded dual graphs, supported import numeric handling, exact-value entry or migration defaults; source/test review only. |
 
 The integrator also binds export completion and cancellation to the initiating artwork/request,
 so an old operation cannot replace a newer result. Opening another artwork cancels pending
@@ -63,6 +74,21 @@ exports and clears the prior result without deleting completed export files.
   ran 2,458 JVM tests and failed three: two brush fingerprints changed with the corrected
   rasterization, and a new export test inferred a non-void return type that JUnit rejected.
   The seven emulator configurations did not run after this build-stage failure.
+- `6e645e70c5a9420acc7f9a06a24a704a81f2b48c` publishes tasks 018–024 and the export
+  test-signature correction. Hosted Android compilation found a missing Compose `mutableStateOf`
+  import in the new clone view state. `6466b40127dc6595145ff2f79f5d034d00428a95`
+  supplies that import. The failed source revision remains a failed checkpoint; runtime results
+  are recorded only against the revision that actually ran them.
+- At `6466b401`, [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45769476819)
+  executed 2,493 JVM tests with one failure: the historical compound-brush capture also uses an
+  elliptical secondary tip. A separate comparison reproduced all six original hashes with the
+  previous ellipse helpers before recording the intentional new captures. Original fixtures and
+  their provenance remain unchanged; all eight secondary-grain tests then passed locally.
+  [Optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45769476793)
+  and [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45769476849)
+  passed. [Normal release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45769476784)
+  failed on a stale accessibility node while the export result appeared; task 031 addresses the
+  observation failure without accepting or replaying that failed attempt.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android
@@ -76,6 +102,9 @@ exports and clears the prior result without deleting completed export files.
   pixels (geometric expectations 15.708 and 35.390), instead of decreasing to 9.569. The geometric
   regressions remain independent of the refreshed captured hashes. This is kernel evidence,
   not an Android performance benchmark.
+- A fourth focused run executed all 13 requested Liquify, onion, fill, gradient, color-selection
+  and secondary-grain classes: **103 tests passed**. Later selection/group additions require
+  their own subsequent execution; they are not included in this result.
 - The local Python tools suite passed **76 tests**. The initial CI-script suite ran 408 cases with
   one environment error (the workspace has a Java runtime but no `javac`) and six external-fixture
   skips. Hosted CI provisions JDK 17 and remains the authority for the complete script suite.

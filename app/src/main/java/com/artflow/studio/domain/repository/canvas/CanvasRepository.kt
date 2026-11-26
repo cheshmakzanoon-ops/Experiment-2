@@ -349,6 +349,9 @@ interface CanvasRepository {
     /** Removes selected source pixels as one transaction and returns their private clipboard copy. */
     suspend fun cutSelection(): PixelBuffer
 
+    /** Copies the selected visible composite and its privacy from one frozen set of layers, including pinned frames. */
+    suspend fun copyMergedSelection(): CanvasClipboardSnapshot
+
     /**
      * Affine transform of the active layer, its linked peers and all their masks, as one undo step.
      * Rejects selections, in-flight gestures and stale callers; never transforms another frame.
@@ -950,6 +953,12 @@ sealed class CanvasInvalidationEvent {
         val index: Int,
     ) : CanvasInvalidationEvent()
 }
+
+/** Caller-owned merged clipboard pixels with the privacy provenance of the layers that produced them. */
+data class CanvasClipboardSnapshot(
+    val pixels: PixelBuffer,
+    val isPrivate: Boolean,
+)
 
 /** Immutable caller-owned export data; later editor changes cannot alter this snapshot. */
 data class CanvasExportSnapshot(

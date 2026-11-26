@@ -8,6 +8,7 @@ import android.graphics.PorterDuffXfermode
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.opengl.GLUtils
+import com.artflow.studio.core.animation.OnionSkinMemory
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -15,6 +16,7 @@ import timber.log.Timber
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.microedition.khronos.egl.EGLConfig
@@ -165,12 +167,21 @@ class OpenGLCanvasRenderer
             val bitmap: Bitmap,
         )
 
-        private val pendingOnionSkins = AtomicReference<List<Pair<Bitmap, Float>>?>(null)
+        private class OnionImages(
+            val frames: List<Pair<Bitmap, Float>>,
+            val reservedBytes: Long,
+        )
+
+        private val pendingOnionSkins = AtomicReference<OnionImages?>(null)
+        private val onionReservedBytes = AtomicLong()
+
+        /** Pending/retained bitmaps, their textures and an upload allowance, across both threads. */
+        val onionAllocationBytes: Long get() = onionReservedBytes.get()
 
         // GL-thread-owned images survive EGL context loss and can be reuploaded into the new context.
         private var retainedComposite: Bitmap? = null
         private var retainedCompositeGeneration = 0L
-        private var retainedOnions: List<Pair<Bitmap, Float>> = emptyList()
+        private var retainedOnions: OnionImages? = null
         private var maxTextureSize = 0
         private var isInitialized = false
         private var reportedUploadFailure = false
@@ -470,8 +481,8 @@ class OpenGLCanvasRenderer
 
         private fun refreshOnionTextures() {
             val incoming = pendingOnionSkins.getAndSet(null)
+            val obsolete = if (incoming != null) retainedOnions else null
             if (incoming != null) {
-                retainedOnions.forEach { it.first.recycle() }
                 retainedOnions = incoming
             }
             if (incoming == null && onionTexturesReady) return
@@ -479,7 +490,9 @@ class OpenGLCanvasRenderer
             onionTextures.forEach { GLES20.glDeleteTextures(1, intArrayOf(it), 0) }
             onionTextures.clear()
             onionAlphas.clear()
-            retainedOnions.forEach { (bitmap, alpha) ->
+            // Keep the old reservation until its GL textures, as well as its bitmaps, are gone.
+            obsolete?.let(::releaseOnions)
+            retainedOnions?.frames?.forEach { (bitmap, alpha) ->
                 uploadBitmap(bitmap)?.let { uploaded ->
                     onionTextures += uploaded.handle
                     onionAlphas += alpha
@@ -583,14 +596,17 @@ class OpenGLCanvasRenderer
             frames: List<Pair<PixelBuffer, Float>>,
             primaryAlpha: Float = 1f,
         ) {
-            this.primaryAlpha = if (frames.isEmpty()) 1f else primaryAlpha.coerceIn(0f, 1f)
             val bitmaps = mutableListOf<Pair<Bitmap, Float>>()
             var published = false
             try {
                 frames.forEach { (buffer, alpha) -> bitmaps += BitmapPixelBridge.toBitmap(buffer) to alpha.coerceIn(0f, 1f) }
-                val obsolete = pendingOnionSkins.getAndSet(bitmaps)
+                val bytes = frames.sumOf { (buffer, _) -> buffer.width.toLong() * buffer.height * OnionSkinMemory.RENDERER_BYTES_PER_PIXEL }
+                val incoming = OnionImages(bitmaps, bytes)
+                onionReservedBytes.addAndGet(bytes)
+                val obsolete = pendingOnionSkins.getAndSet(incoming)
                 published = true // The GL thread owns these bitmaps from this point.
-                obsolete?.forEach { it.first.recycle() }
+                this.primaryAlpha = if (frames.isEmpty()) 1f else primaryAlpha.coerceIn(0f, 1f)
+                obsolete?.let(::releaseOnions)
             } finally {
                 if (!published) bitmaps.forEach { it.first.recycle() }
             }
@@ -598,7 +614,12 @@ class OpenGLCanvasRenderer
 
         fun clearOnionSkins() {
             primaryAlpha = 1f
-            pendingOnionSkins.getAndSet(emptyList())?.forEach { it.first.recycle() }
+            pendingOnionSkins.getAndSet(OnionImages(emptyList(), 0L))?.let(::releaseOnions)
+        }
+
+        private fun releaseOnions(images: OnionImages) {
+            images.frames.forEach { it.first.recycle() }
+            onionReservedBytes.addAndGet(-images.reservedBytes)
         }
 
         fun setCanvasSize(
@@ -671,14 +692,14 @@ class OpenGLCanvasRenderer
                 pendingRegions.forEach { it.bitmap.recycle() }
                 pendingRegions.clear()
             }
-            pendingOnionSkins.getAndSet(null)?.forEach { it.first.recycle() }
+            pendingOnionSkins.getAndSet(null)?.let(::releaseOnions)
             retainedComposite?.recycle()
             retainedComposite = null
             retainedCanvas = null
             dabVertexArray = FloatArray(0)
             dabVertexBuffer = null
-            retainedOnions.forEach { it.first.recycle() }
-            retainedOnions = emptyList()
+            retainedOnions?.let(::releaseOnions)
+            retainedOnions = null
             isInitialized = false
             previewState.invalidateContent()
             previewState.awaitSurface()

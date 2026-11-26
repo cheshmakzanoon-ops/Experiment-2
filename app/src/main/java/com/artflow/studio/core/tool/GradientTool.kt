@@ -162,7 +162,7 @@ object GradientTool {
         when (type) {
             GradientType.LINEAR -> {
                 // Projection of the pixel onto the drag axis.
-                ((px * dx + py * dy) / (length * length)).coerceIn(0f, 1f)
+                (projectedOffset(px, py, dx, dy) / (length * length)).coerceIn(0f, 1f)
             }
             GradientType.RADIAL -> {
                 (sqrt(px * px + py * py) / length).coerceIn(0f, 1f)
@@ -176,12 +176,23 @@ object GradientTool {
             }
             GradientType.REFLECTED -> {
                 // The linear ramp mirrored about the start, so both sides fade outwards.
-                (abs(px * dx + py * dy) / (length * length)).coerceIn(0f, 1f)
+                (abs(projectedOffset(px, py, dx, dy)) / (length * length)).coerceIn(0f, 1f)
             }
             GradientType.DIAMOND -> {
                 (abs(px) / length + abs(py) / length).coerceIn(0f, 1f)
             }
         }
+
+    private fun projectedOffset(
+        px: Float,
+        py: Float,
+        dx: Float,
+        dy: Float,
+    ): Float {
+        val projection = px * dx + py * dy
+        // Preserve ordinary Float rounding; widen only products that overflow before they cancel.
+        return if (projection.isFinite()) projection else (px.toDouble() * dx + py.toDouble() * dy).toFloat()
+    }
 
     /** Reject invalid coordinates and overflowing axes before any pixel is touched. */
     private fun dragLength(
@@ -444,7 +455,9 @@ object GradientTool {
     ): Gradient {
         if (gradient.stops.size <= 2) return gradient
         val target = gradient.sortedStops.minByOrNull { abs(it.position - position) } ?: return gradient
-        return gradient.copy(stops = gradient.stops.filterNot { it === target })
+        val stops = gradient.stops.toMutableList()
+        stops.remove(target)
+        return gradient.copy(stops = stops)
     }
 
     /** Moves an existing stop, keeping it inside its neighbours (stops must stay ordered). */

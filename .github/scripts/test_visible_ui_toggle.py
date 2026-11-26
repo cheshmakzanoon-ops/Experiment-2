@@ -1,4 +1,4 @@
-"""Exercise the release driver's Java accessibility helpers using retained Settings evidence.
+"""Exercise the release driver's Java accessibility helpers using retained failure evidence.
 
 Requires the JDK 17 already provisioned by Android CI. No Android SDK, emulator,
 Gradle, network resolution, substituted driver implementation, or retry is used.
@@ -36,8 +36,10 @@ class VisibleUiToggleTests(unittest.TestCase):
             java_tool("javac"), "--release", "17", "-d", str(cls.classes),
             str(ROOT / "release-ui/src/main/java/com/artflow/qualification/AccessibleToggle.java"),
             str(ROOT / "release-ui/src/main/java/com/artflow/qualification/AccessibleScroll.java"),
+            str(ROOT / "release-ui/src/main/java/com/artflow/qualification/AccessibleObservation.java"),
             str(FIXTURES / "AccessibleToggleRegression.java"),
             str(FIXTURES / "AccessibleScrollRegression.java"),
+            str(FIXTURES / "AccessibleObservationRegression.java"),
         ], check=True, text=True, capture_output=True, timeout=30)
 
     def run_case(self, name, regression="AccessibleToggleRegression", fixture="settings-checkable-rows.xml", extra=()):
@@ -93,6 +95,30 @@ class VisibleUiToggleTests(unittest.TestCase):
 
     def test_missing_scroll_container_causes_no_action(self):
         self.scroll_case("scroll-empty")
+
+    def observation_case(self, name):
+        self.run_case(name, "AccessibleObservationRegression", "export-result-stale-original-log.txt")
+
+    def test_current_visible_node_is_observed_once(self):
+        self.observation_case("observation-visible")
+
+    def test_missing_node_is_not_observed_or_inspected(self):
+        self.observation_case("observation-missing")
+
+    def test_hidden_node_is_not_accepted_as_visible(self):
+        self.observation_case("observation-hidden")
+
+    def test_detached_lookup_remains_unobserved_without_repeating_the_read(self):
+        self.observation_case("observation-detached-lookup")
+
+    def test_detached_export_result_bounds_require_a_new_observation(self):
+        self.observation_case("observation-detached-bounds")
+
+    def test_unrelated_accessibility_failures_propagate(self):
+        self.observation_case("observation-unrelated-failure")
+
+    def test_qualification_assertions_propagate(self):
+        self.observation_case("observation-assertion-failure")
 
 
 if __name__ == "__main__":

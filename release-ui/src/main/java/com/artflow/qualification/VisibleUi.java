@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.BySelector;
 import androidx.test.uiautomator.Direction;
+import androidx.test.uiautomator.StaleObjectException;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
 import java.util.ArrayList;
@@ -41,8 +42,11 @@ final class VisibleUi {
         if (Build.VERSION.SDK_INT < 34 || !instrumentation.getUiAutomation().clearCache()) {
             throw new AssertionError("A fresh visible tree requires a connected API 34+ accessibility cache");
         }
-        UiObject2 value = device.findObject(selector);
-        return value != null && !value.getVisibleBounds().isEmpty() ? value : null;
+        // An asynchronous export can replace a node between lookup and its bounds read,
+        // even after clearing the cache. Treat only that detached observation as unavailable;
+        // the existing bounded wait/scroll will query a fresh tree, without replaying an action.
+        return AccessibleObservation.visible(() -> device.findObject(selector),
+                node -> !node.getVisibleBounds().isEmpty(), StaleObjectException.class);
     }
 
     void text(String value) { scroll(By.pkg(APP).text(value)).click(); }

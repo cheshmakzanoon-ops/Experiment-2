@@ -125,6 +125,43 @@ class ClipboardTransactionDeviceTest {
             )
         }
 
+    @Test
+    fun mergedPrivatePinnedPixelsKeepTheirCoverageAndPrivacyAfterSaveAndReopen(): Unit =
+        runBlocking(Dispatchers.Main) {
+            repository.loadOrCreate(projectId, WIDTH, HEIGHT, 72)
+            val source = repository.getActiveLayerId()
+            repository.setLayerPixels(source, PixelBuffer.filled(WIDTH, HEIGHT, red), "Private pinned source")
+            repository.setLayerPrivate(source, true)
+            val pinned = repository.frames().single().id
+            repository.addFrame(duplicateCurrent = false)
+            repository.updateAnimationSettings(
+                repository.timeline.value.settings
+                    .copy(foregroundFrameIds = setOf(pinned)),
+            )
+            repository.setSelection(SelectionMask(WIDTH, HEIGHT, ByteArray(WIDTH * HEIGHT) { 128.toByte() }))
+            val queued = ArrayDeque<suspend () -> Unit>()
+            val clipboard = ClipboardController(repository) { queued.addLast(it) }
+            clipboard.copyMerged()
+            queued.removeFirst().invoke()
+            clipboard.paste()
+            queued.removeFirst().invoke()
+            val pasted = repository.getActiveLayerId()
+            val expected = IntArray(WIDTH * HEIGHT) { 0x80FF0000.toInt() }
+            assertTrue(requireNotNull(repository.getActiveLayer()).isPrivate)
+            assertArrayEquals(expected, pixels(pasted))
+            repository.saveCanvas(projectId)
+            repository.dispose()
+            repository = CanvasRepositoryImpl(storage)
+            requireNotNull(repository.loadCanvas(projectId))
+            assertTrue(repository.getAllLayers().first { it.id == pasted }.isPrivate)
+            assertArrayEquals(expected, pixels(pasted))
+            val recorded = requireNotNull(repository.compositeWithoutPrivateLayers())
+            assertArrayEquals(IntArray(WIDTH * HEIGHT) { repository.getBackgroundColor() }, recorded.pixels)
+            File(TestEvidence.directory(), "clipboard-private-pinned.txt").writeText(
+                "privatePinnedSource=true\nselectionAlpha=128\npastedAlpha=128\nreopenedPrivate=true\nexcludedFromTimelapse=true\n",
+            )
+        }
+
     private suspend fun execute(action: ClipboardController.() -> Unit) {
         val queued = ArrayDeque<suspend () -> Unit>()
         ClipboardController(repository) { queued.addLast(it) }.action()

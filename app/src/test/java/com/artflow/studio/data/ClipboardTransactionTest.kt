@@ -7,6 +7,7 @@ import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import com.artflow.studio.presentation.ui.viewmodel.ClipboardController
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -335,5 +336,130 @@ class ClipboardTransactionTest {
             repository.clearSelection()
             assertEquals(null, execute { paste() })
             assertArrayEquals(IntArray(8) { red }, pixels(repository.getActiveLayerId()))
+        }
+
+    @Test
+    fun queuedCommandsAreCancelledAtOpenButCompletedPrivateCopiesCanCrossArtworks() =
+        runTest {
+            val source = fixture()
+            repository.setLayerPrivate(source, true)
+            assertEquals(null, execute { copy() })
+            clipboard.copy()
+            clipboard.copy(cut = true)
+            clipboard.copyAndPaste()
+            clipboard.cutAndPaste()
+            clipboard.copyMerged()
+            clipboard.paste()
+            clipboard.clear()
+            clipboard.fill(blue)
+
+            clipboard.cancelPending()
+            repository.createCanvas(4, 2, 72)
+            val destination = repository.getActiveLayerId()
+            repository.setLayerPixels(destination, PixelBuffer.filled(4, 2, blue), "New artwork")
+            val before = repository.getAllLayers()
+            val mark = repository.historyMark
+            while (queued.isNotEmpty()) {
+                assertTrue(runCatching { queued.removeFirst().invoke() }.exceptionOrNull() is CancellationException)
+            }
+            assertEquals(before, repository.getAllLayers())
+            assertEquals(mark, repository.historyMark)
+            assertArrayEquals(IntArray(8) { blue }, pixels(destination))
+            assertTrue(clipboard.hasContent.value)
+
+            assertEquals(null, execute { paste() })
+            val pasted = requireNotNull(repository.getActiveLayer())
+            assertTrue(pasted.isPrivate)
+            assertArrayEquals(IntArray(8) { red }, pixels(pasted.id))
+        }
+
+    @Test
+    fun openingAnArtworkCancelsAnInFlightCutBeforeItsWorkerCanCommit() =
+        runTest {
+            installRepository(StandardTestDispatcher(testScheduler))
+            fixture()
+            assertEquals(null, execute { copy() })
+            val cut = async(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) { execute { cutAndPaste() } }
+            assertFalse(cut.isCompleted)
+            clipboard.cancelPending()
+            repository.createCanvas(4, 2, 72)
+            val destination = repository.getActiveLayerId()
+            repository.setLayerPixels(destination, PixelBuffer.filled(4, 2, blue), "New artwork")
+            val before = repository.getAllLayers()
+            val mark = repository.historyMark
+            runCurrent()
+            assertTrue(cut.await() is CancellationException)
+            assertEquals(before, repository.getAllLayers())
+            assertEquals(mark, repository.historyMark)
+            assertArrayEquals(IntArray(8) { blue }, pixels(destination))
+            assertEquals(null, execute { paste() })
+            assertArrayEquals(IntArray(8) { red }, pixels(repository.getActiveLayerId()))
+        }
+
+    @Test
+    fun mergedCopyFreezesSelectionAndPrivateProvenanceBeforeRendering() =
+        runTest {
+            installRepository(StandardTestDispatcher(testScheduler))
+            val source = fixture()
+            repository.setLayerPrivate(source, true)
+            repository.setSelection(SelectionMask(4, 2, ByteArray(8) { 128.toByte() }))
+            val copy = async(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) { execute { copyMerged() } }
+            assertFalse(copy.isCompleted)
+            repository.setLayerPrivate(source, false)
+            repository.setSelection(SelectionMask(4, 2))
+            repository.setLayerPixels(source, PixelBuffer.filled(4, 2, blue), "New source")
+            runCurrent()
+            assertEquals(null, copy.await())
+            assertEquals(null, execute { paste() })
+            val pasted = requireNotNull(repository.getActiveLayer())
+            assertTrue(pasted.isPrivate)
+            // The captured 128/255 selection is applied once, despite the later empty selection.
+            assertArrayEquals(IntArray(8) { 0x80FF0000.toInt() }, pixels(pasted.id))
+        }
+
+    @Test
+    fun aNewCopyCancelsAnOlderCutBeforeRemovingItsSource() =
+        runTest {
+            installRepository(StandardTestDispatcher(testScheduler))
+            val source = fixture()
+            val mark = repository.historyMark
+            val cut = async(Dispatchers.Main.immediate, start = CoroutineStart.UNDISPATCHED) { execute { copy(cut = true) } }
+            assertFalse(cut.isCompleted)
+            assertEquals(null, execute { copy() })
+            runCurrent()
+            assertTrue(cut.await() is CancellationException)
+            assertEquals(mark, repository.historyMark)
+            assertArrayEquals(IntArray(8) { red }, pixels(source))
+            assertEquals(null, execute { paste() })
+            assertArrayEquals(IntArray(8) { red }, pixels(repository.getActiveLayerId()))
+        }
+
+    @Test
+    fun mergedCopyIncludesPrivateProvenanceFromPinnedBackgroundAndForegroundFrames() =
+        runTest {
+            for (background in listOf(true, false)) {
+                val source = fixture()
+                repository.setLayerPrivate(source, true)
+                val pinned = repository.frames().single().id
+                repository.addFrame(duplicateCurrent = false)
+                val settings = repository.timeline.value.settings
+                repository.updateAnimationSettings(
+                    if (background) {
+                        settings.copy(
+                            backgroundFrameIds = setOf(pinned),
+                        )
+                    } else {
+                        settings.copy(foregroundFrameIds = setOf(pinned))
+                    },
+                )
+                assertFalse(repository.getAllLayers().any { it.isPrivate })
+                assertEquals(null, execute { copyMerged() })
+                assertEquals(null, execute { paste() })
+                val pasted = requireNotNull(repository.getActiveLayer())
+                assertTrue(pasted.isPrivate)
+                assertArrayEquals(IntArray(8) { red }, pixels(pasted.id))
+                val recorded = requireNotNull(repository.compositeWithoutPrivateLayers())
+                assertArrayEquals(IntArray(8) { repository.getBackgroundColor() }, recorded.pixels)
+            }
         }
 }

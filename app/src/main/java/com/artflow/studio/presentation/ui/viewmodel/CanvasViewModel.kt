@@ -291,6 +291,7 @@ class CanvasViewModel
             exportController.reset()
             canvasPreview.reset()
             frameClipboard.reset()
+            clipboard.cancelPending()
             recoveryController.onProjectOpening(projectId)
             imports.cancel()
             cancelText()

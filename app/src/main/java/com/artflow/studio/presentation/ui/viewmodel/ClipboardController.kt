@@ -5,10 +5,15 @@ import com.artflow.studio.core.pixels.SelectionClipboard
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 
 /**
@@ -19,50 +24,54 @@ class ClipboardController(
     private val repository: CanvasRepository,
     private val perform: (suspend () -> Unit) -> Unit,
 ) {
-    private var image: PixelBuffer? = null
-    private var imageChannel = MaterialChannel.COLOR
+    private data class Image(
+        val pixels: PixelBuffer,
+        val channel: MaterialChannel,
+        val isPrivate: Boolean,
+    )
 
-    /** Whether the copied pixels came from a private layer; Paste must not launder them into recorded artwork. */
-    private var imagePrivate = false
+    private data class Request(
+        val projectId: Long,
+        val generation: Long,
+        val copySequence: Long?,
+    )
+
+    private var image: Image? = null
+    private var generation = 0L
+    private var copySequence = 0L
+    private val operations = mutableMapOf<Job, Request>()
 
     private val _hasContent = MutableStateFlow(false)
     val hasContent: StateFlow<Boolean> = _hasContent.asStateFlow()
 
-    fun copy(cut: Boolean = false) = perform { copyLayer(cut) }
+    /** Closing an artwork cancels its commands; a completed pixel copy remains available to Paste. */
+    fun cancelPending() {
+        generation++
+        operations.keys.toList().forEach { it.cancel() }
+    }
 
-    fun paste() = perform { pasteAsLayer() }
+    fun copy(cut: Boolean = false) = copyLayer(cut, paste = false)
 
-    fun copyAndPaste() =
-        perform {
-            image = repository.copySelectionToLayer(cut = false)
-            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
-            imagePrivate = repository.getActiveLayer()?.isPrivate == true
-            _hasContent.value = true
+    fun paste() =
+        performOwned {
+            val copied = image ?: error("Nothing has been copied yet")
+            repository.pasteLayer(copied.pixels, copied.channel, isPrivate = copied.isPrivate)
         }
 
-    fun cutAndPaste() =
-        perform {
-            image = repository.copySelectionToLayer(cut = true)
-            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
-            imagePrivate = repository.getActiveLayer()?.isPrivate == true
-            _hasContent.value = true
-        }
+    fun copyAndPaste() = copyLayer(cut = false, paste = true)
+
+    fun cutAndPaste() = copyLayer(cut = true, paste = true)
 
     /** Copy All: the visible artwork (all layers merged) inside the selection. */
     fun copyMerged() =
-        perform {
-            val composite = checkNotNull(repository.compositeBuffer()) { "Nothing to copy" }
-            val selection = requireCopiableSelection()
-            image = withContext(Dispatchers.Default) { SelectionClipboard.extract(composite, selection) }
-            imageChannel = MaterialChannel.COLOR
-            // A merged copy of a document that shows private layers contains their pixels.
-            imagePrivate = repository.getAllLayers().any { it.isPrivate && it.isVisible }
-            _hasContent.value = true
+        performOwned(copying = true) { request ->
+            val copied = repository.copyMergedSelection()
+            publish(request, Image(copied.pixels, MaterialChannel.COLOR, copied.isPrivate))
         }
 
     /** Clears the layer, or only its selected pixels (Procreate's three-finger scrub). */
     fun clear(layerId: Long? = null) =
-        perform {
+        performOwned {
             val selection = repository.selection()
             repository.applyRasterEdit(layerId ?: repository.getActiveLayerId(), "Clear layer") {
                 SelectionClipboard.erase(it, selection)
@@ -73,7 +82,7 @@ class ClipboardController(
     fun fill(
         color: Int,
         layerId: Long? = null,
-    ) = perform {
+    ) = performOwned {
         val selection = repository.selection()
         val target = layerId ?: repository.getActiveLayerId()
         val alphaLocked = repository.getAllLayers().firstOrNull { it.id == target }?.isAlphaLocked == true
@@ -93,27 +102,73 @@ class ClipboardController(
         return selection
     }
 
-    private suspend fun copyLayer(cut: Boolean) {
-        if (cut) {
-            image = repository.cutSelection()
-            imageChannel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
-            imagePrivate = repository.getActiveLayer()?.isPrivate == true
-            _hasContent.value = true
-            return
-        }
-        val layerId = repository.getActiveLayerId()
-        val channel = repository.getActiveLayer()?.materialChannel ?: MaterialChannel.COLOR
-        val sourcePrivate = repository.getActiveLayer()?.isPrivate == true
+    private fun copyLayer(
+        cut: Boolean,
+        paste: Boolean,
+    ) = performOwned(copying = true) { request ->
+        val layer = repository.getActiveLayer()
+        val pixels =
+            when {
+                paste -> repository.copySelectionToLayer(cut)
+                cut -> repository.cutSelection()
+                else -> extractLayer(repository.getActiveLayerId())
+            }
+        publish(request, Image(pixels, layer?.materialChannel ?: MaterialChannel.COLOR, layer?.isPrivate == true))
+    }
+
+    private suspend fun extractLayer(layerId: Long): PixelBuffer {
         val selection = requireCopiableSelection()
         val pixels = checkNotNull(repository.layerPixels(layerId)) { "This layer has no pixels to copy" }
-        image = withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
-        imageChannel = channel
-        imagePrivate = sourcePrivate
+        return withContext(Dispatchers.Default) { SelectionClipboard.extract(pixels, selection) }
+    }
+
+    private suspend fun publish(
+        request: Request,
+        copied: Image,
+    ) {
+        ensureOwned(request)
+        image = copied
         _hasContent.value = true
     }
 
-    private suspend fun pasteAsLayer() {
-        val copied = image ?: error("Nothing has been copied yet")
-        repository.pasteLayer(copied, imageChannel, isPrivate = imagePrivate)
+    private fun performOwned(
+        copying: Boolean = false,
+        action: suspend (Request) -> Unit,
+    ) {
+        if (copying) {
+            copySequence++
+            operations
+                .filterValues { it.copySequence != null }
+                .keys
+                .toList()
+                .forEach { it.cancel() }
+        }
+        val request = Request(repository.projectId(), generation, copySequence.takeIf { copying })
+        perform {
+            // A committed cut and publication of its clipboard must have no cancellable dispatcher
+            // handoff between them. Repository commits run on this same Main.immediate dispatcher.
+            withContext(Dispatchers.Main.immediate) {
+                ensureOwned(request)
+                val operation = currentCoroutineContext().job
+                operations[operation] = request
+                try {
+                    action(request)
+                } finally {
+                    operations -= operation
+                    // A late failure from a closed artwork must not become feedback in its successor.
+                    ensureOwned(request)
+                }
+            }
+        }
+    }
+
+    private suspend fun ensureOwned(request: Request) {
+        currentCoroutineContext().ensureActive()
+        if (request.generation != generation || request.projectId != repository.projectId()) {
+            throw CancellationException("The artwork was closed")
+        }
+        if (request.copySequence != null && request.copySequence != copySequence) {
+            throw CancellationException("A newer copy replaced this command")
+        }
     }
 }

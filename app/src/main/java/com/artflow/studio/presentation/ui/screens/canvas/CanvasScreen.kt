@@ -2017,6 +2017,15 @@ private fun ToolOptionsPanel(
                     )
                 }
             }
+            val frozenPercent = canvasView?.liquifyFrozenPercent ?: 0
+            val hasFrozenAreas = canvasView?.hasLiquifyFrozenAreas == true
+            val frozenAmount = if (hasFrozenAreas && frozenPercent == 0) "less than 1" else frozenPercent.toString()
+            Text("Frozen area: $frozenAmount% of canvas", style = MaterialTheme.typography.bodySmall)
+            Text(
+                "Freeze protects pixels from later Liquify strokes. Reset, other edits or leaving Liquify clear the frozen areas.",
+                style = MaterialTheme.typography.labelSmall,
+            )
+            TextButton(onClick = { canvasView?.clearLiquifyFreeze() }, enabled = hasFrozenAreas) { Text("Clear frozen areas") }
             // Liquify paints with the brush size, as the sidebar and the brush outline show it.
             Text("Size ${input.brushParams.size.toInt()} px", style = MaterialTheme.typography.labelSmall)
             Slider(
@@ -2059,7 +2068,10 @@ private fun ToolOptionsPanel(
                     modifier = Modifier.semantics { contentDescription = "Adjust last liquify gesture" },
                 )
             }
-            TextButton(onClick = viewModel::resetLiquify) { Text("Reset liquify") }
+            TextButton(onClick = {
+                canvasView?.resetLiquifyState()
+                viewModel.resetLiquify()
+            }) { Text("Reset liquify") }
         }
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)

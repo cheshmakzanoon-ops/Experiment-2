@@ -113,9 +113,10 @@ class SecondaryGrainBlendTest {
     }
 
     @Test
-    fun historicalMultiplyPixelsRemainIdenticalForPaintAndEraseInEveryDualMode() {
-        // Captured using the published 2d57dbd renderer, independently of this corrected renderer.
-        val source = requireNotNull(javaClass.getResourceAsStream("/documents/secondary-grain-multiply-v3.sha256"))
+    fun capturedMultiplyPixelsRemainIdenticalForPaintAndEraseInEveryDualMode() {
+        // The historical input uses an elliptical secondary tip. Its captured footprint changed
+        // with area-consistent coverage; original hashes and comparison provenance are retained.
+        val source = requireNotNull(javaClass.getResourceAsStream("/documents/secondary-grain-multiply-area-2026-11-26.sha256"))
         val expected =
             source.bufferedReader().use { it.readLines() }.filter { it.isNotBlank() }.associate { line ->
                 val parts = line.split(' ')

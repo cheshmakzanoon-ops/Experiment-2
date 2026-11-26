@@ -203,6 +203,7 @@ object LiquifyTool {
         val usePressure: Boolean = true,
     ) {
         val radius: Float get() = if (size.isFinite()) (size / 2f).coerceIn(1f, 4096f) else 1f
+        val editsFreezeMask: Boolean get() = mode == Mode.FREEZE || mode == Mode.UNFREEZE
     }
 
     /**
@@ -258,30 +259,7 @@ object LiquifyTool {
                     Mode.CRYSTALS -> applyCrystals(centerX, centerY, stepDistance)
                     Mode.EDGE -> applyEdge(centerX, centerY, dx / distance, dy / distance, stepDistance)
                     Mode.RECONSTRUCT -> applyReconstruction(centerX, centerY, stepDistance)
-                    Mode.FREEZE ->
-                        settings.freezeMask?.let {
-                            paintFreezeMask(
-                                it,
-                                map.width,
-                                map.height,
-                                centerX,
-                                centerY,
-                                settings.radius,
-                                frozen = true,
-                            )
-                        }
-                    Mode.UNFREEZE ->
-                        settings.freezeMask?.let {
-                            paintFreezeMask(
-                                it,
-                                map.width,
-                                map.height,
-                                centerX,
-                                centerY,
-                                settings.radius,
-                                frozen = false,
-                            )
-                        }
+                    Mode.FREEZE, Mode.UNFREEZE -> paintFreezeAt(centerX, centerY)
                 }
             }
 
@@ -296,12 +274,24 @@ object LiquifyTool {
 
         private fun pressureOf(pressure: Float): Float = if (settings.usePressure) unit(pressure) else 1f
 
+        /** Mask painting includes the initial tap and never uses distortion momentum. */
+        internal fun paintFreezeAt(
+            x: Float,
+            y: Float,
+        ) {
+            if (!settings.editsFreezeMask) return
+            settings.freezeMask?.let {
+                paintFreezeMask(it, map.width, map.height, x, y, settings.radius, settings.mode == Mode.FREEZE, settings.mask)
+            }
+        }
+
         /**
          * Momentum: when the pen lifts, the gesture glides on along its last direction, slowing to a
          * stop over up to [MOMENTUM_REACH] brush widths. Call once, after the last [dragTo].
          * @return the region the glide distorted, or null when there is no momentum or no movement.
          */
         fun release(): IntBounds? {
+            if (settings.editsFreezeMask) return null
             val momentum = unit(settings.momentum)
             if (momentum <= 0f || totalDistance <= 0f || settings.mode == Mode.RECONSTRUCT) return null
             val reach = momentum * MOMENTUM_REACH * settings.radius * 2f
@@ -562,8 +552,9 @@ object LiquifyTool {
         require(
             settings.mask == null || (settings.mask.width == width && settings.mask.height == height),
         ) { "Selection dimensions must match" }
-        val owned = settings.copy(freezeMask = settings.freezeMask?.copyOf(), mask = settings.mask?.copy())
-        return Session(x, y, owned, DisplacementMap(width, height))
+        val freeze = settings.freezeMask?.copyOf() ?: if (settings.editsFreezeMask) BooleanArray(count) else null
+        val owned = settings.copy(freezeMask = freeze, mask = settings.mask?.copy())
+        return Session(x, y, owned, DisplacementMap(width, height)).also { it.paintFreezeAt(x, y) }
     }
 
     private fun unit(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
@@ -641,18 +632,24 @@ object LiquifyTool {
         centerY: Float,
         radius: Float,
         frozen: Boolean,
+        mask: SelectionMask? = null,
     ) {
-        require(freezeMask.size == width * height) { "Freeze mask size must match the canvas" }
+        require(freezeMask.size == checkedPixelCount(width, height)) { "Freeze mask size must match the canvas" }
+        require(mask == null || (mask.width == width && mask.height == height)) { "Selection dimensions must match" }
+        if (!centerX.isFinite() || !centerY.isFinite()) return
+        if (!radius.isFinite() || radius <= 0f) return
         val x0 = max(0, floor(centerX - radius).toInt())
         val x1 = min(width - 1, ceil(centerX + radius).toInt())
         val y0 = max(0, floor(centerY - radius).toInt())
         val y1 = min(height - 1, ceil(centerY + radius).toInt())
         for (py in y0..y1) {
             for (px in x0..x1) {
+                val index = py * width + px
+                if (mask != null && mask.alphaAt(index) <= 0f) continue
                 val dx = px + 0.5f - centerX
                 val dy = py + 0.5f - centerY
                 if (dx * dx + dy * dy > radius * radius) continue
-                freezeMask[py * width + px] = frozen
+                freezeMask[index] = frozen
             }
         }
     }

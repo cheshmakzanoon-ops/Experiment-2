@@ -6,6 +6,7 @@
 store evidence is complete.**
 Engineering changes may be published to main after their implementation and required verification;
 source publication is not a Play release. Current work on main is tracked in the
+[November 26 hardening record](PRODUCTION_HARDENING_2026-11-26.md) and the earlier
 [production follow-through record](PRODUCTION_FOLLOWTHROUGH_2026-11-19.md), which incorporates the
 earlier [November 19 hardening](PRODUCTION_HARDENING_2026-11-19.md) from
 [PR #41](https://github.com/cheshmakzanoon-ops/Experiment-2/pull/41). Each published revision requires

@@ -117,6 +117,16 @@ class ColorSelectionTest {
         )
     }
 
+    @Test fun hardMatchingAgreesAtTheFloatRoundingBoundary() {
+        // The squared distance is just above 171², but its Float square root rounds to 171.
+        val source = PixelBuffer(2, 1, intArrayOf(0x29D35ECD, 0xC6376A2A.toInt()))
+        val expected = byteArrayOf(255.toByte(), 0)
+        for (contiguous in listOf(true, false)) {
+            assertArrayEquals(expected, SelectionMask.magicWand(source, 0, 0, 57, contiguous, false).coverage)
+        }
+        assertArrayEquals(expected, SelectionMask.colorRange(source, source.pixels[0], 57, false).coverage)
+    }
+
     @Test fun cancellationStopsWorkAndNeverMutatesSourcePixels() {
         val source = PixelBuffer.filled(512, 512, red)
         val before = source.pixels.copyOf()

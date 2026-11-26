@@ -70,13 +70,13 @@ internal object SelectionGeometry {
                         // Near the top/bottom, preserve the small nonzero half-width.
                         val center = (xMin + xMax) / 2.0
                         val halfWidth = spanX / 2.0 * extent
-                        accumulateSpan(samples, center - halfWidth, center + halfWidth)
+                        accumulateSpan(samples, center - halfWidth, center + halfWidth, includeLeft = false)
                     } else {
                         // Near the middle, preserve small edge offsets using
                         // 1 - sqrt(1 - d*d) = d*d / (1 + sqrt(1 - d*d)).
                         val d = (scanY - (yMin + yMax) / 2.0) / (spanY / 2.0)
                         val inset = spanX / 2.0 * d * d / (1.0 + extent)
-                        accumulateSpan(samples, xMin + inset, xMax - inset)
+                        accumulateSpan(samples, xMin + inset, xMax - inset, includeLeft = false)
                     }
                 }
             }
@@ -145,9 +145,12 @@ internal object SelectionGeometry {
         samples: IntArray,
         left: Double,
         right: Double,
+        includeLeft: Boolean = true,
     ) {
         val limit = samples.size * 4
-        val start = ceil(left * 4 - 0.5).coerceIn(0.0, limit.toDouble()).toInt()
+        // Polygon spans are half-open; ellipse samples must be strictly inside both edges.
+        val firstSample = if (includeLeft) ceil(left * 4 - 0.5) else floor(left * 4 - 0.5) + 1
+        val start = firstSample.coerceIn(0.0, limit.toDouble()).toInt()
         val end = ceil(right * 4 - 0.5).coerceIn(0.0, limit.toDouble()).toInt()
         if (start >= end) return
         for (x in start / 4..(end - 1) / 4) {

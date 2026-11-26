@@ -138,6 +138,47 @@ class CanvasPreviewFailureDeviceTest {
             }
         }
 
+    @Test
+    fun onionAdmissionCountsPendingAndRetainedImagesUntilTheirRealOwnersReleaseThem() {
+        lateinit var owned: OpenGLCanvasRenderer
+        withCanvas(4) { canvas, _ ->
+            owned = canvas.renderer
+            val previous = PixelBuffer.filled(32, 16, Color.RED)
+            val replacement = PixelBuffer.filled(16, 8, Color.GREEN)
+            val previousBytes = 32L * 16 * 12
+            val replacementBytes = 16L * 8 * 12
+            canvas.renderer.setOnionSkins(listOf(previous to 0.5f))
+            val drawn = CountDownLatch(1)
+            canvas.queueEvent {
+                try {
+                    canvas.renderer.onDrawFrame(null)
+                } finally {
+                    drawn.countDown()
+                }
+            }
+            assertTrue("The ghost was not consumed by the GL thread", drawn.await(10, TimeUnit.SECONDS))
+            assertEquals(previousBytes, canvas.renderer.onionAllocationBytes)
+
+            // Stop GL consumption so the old retained set and new pending set coexist reliably.
+            canvas.pauseRendering()
+            canvas.renderer.setOnionSkins(listOf(replacement to 0.4f))
+            assertEquals(previousBytes + replacementBytes, canvas.renderer.onionAllocationBytes)
+            canvas.renderer.setOnionSkins(listOf(replacement to 0.2f))
+            assertEquals(
+                "Replacing an unclaimed set releases it once",
+                previousBytes + replacementBytes,
+                canvas.renderer.onionAllocationBytes,
+            )
+            canvas.renderer.clearOnionSkins()
+            assertEquals("Clearing pending ghosts must still reserve the GL-owned set", previousBytes, canvas.renderer.onionAllocationBytes)
+            canvas.resumeRendering()
+            await { canvas.renderer.onionAllocationBytes == 0L }
+            canvas.renderer.setOnionSkins(listOf(replacement to 0.3f))
+            assertEquals(replacementBytes, canvas.renderer.onionAllocationBytes)
+        }
+        assertEquals("Detaching releases any remaining pending or retained ghosts", 0L, owned.onionAllocationBytes)
+    }
+
     private suspend fun beginShapeNodeDrag(canvas: ArtFlowCanvasView): IntArray {
         var offer: ShapeEditState? = null
         var snapped = false

@@ -1,0 +1,22 @@
+ArtFlow secondary-grain Multiply captures after consistent ellipse footprint coverage.
+No reference-application assets. The input remains SecondaryGrainLegacyFixture in
+SecondaryGrainBlendTest.kt, including its roundness=0.6 secondary tip, fixed points,
+timestamps, seed, textures and three historical dual modes for paint and erase.
+
+Renderer source: 6466b40127dc6595145ff2f79f5d034d00428a95.
+Capture runtime: JRE 21, Kotlin compiler 2.0.21, SDK-free pixel/render classes.
+Pixel SHA-256: row-major ARGB integers encoded as four big-endian bytes.
+Current expectations: secondary-grain-multiply-area-2026-11-26.sha256.
+
+The earlier secondary-grain-multiply-v3.sha256 and secondary-grain-v3-provenance.txt
+are retained unchanged. Replacing only Stamping/SubpixelEllipse on the comparison
+classpath with the separately compiled helpers from
+7f3da6e2f3d25fe7c5bec6d1f8e69c5eeb102dbe reproduced all six original v3 hashes exactly.
+Using the new ellipse helpers produced the six current captures. This isolates the
+intentional shape-coverage change from the grain blend operations.
+
+The seven other analytic SecondaryGrainBlendTest cases retain their independent
+numeric expectations for depth, secondary opacity, neutral/absent textures,
+SUBTRACT/HARD_MIX thresholds, all dual combinations, erase RGB, and crop origin.
+StampingTipTest separately checks mathematical ellipse area and monotonic growth.
+These pixel fixtures do not establish Android latency or reference-app equivalence.

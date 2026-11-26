@@ -232,6 +232,44 @@ and observes its fresh target or viewport result; direction and timeout limits a
 The receiver must still be visibly selected through the actual chooser and verify its URI grant,
 PNG content and complete saved/reopened pixel comparison. A fresh complete original run is required.
 
+### Detached export-result accessibility observations
+
+[Run 45769476784](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45769476784)
+at `6466b40127dc6595145ff2f79f5d034d00428a95` failed its sole original invocation
+after the first **Export PNG** click. At `06:43:39.334`, the driver queried
+`release-saved.png`; at `06:43:39.928`, UiAutomator could no longer refresh the
+matched node. The exception is `StaleObjectException` from `getVisibleBounds`,
+called by `VisibleUi.freshVisible` at the initial result lookup in `export`.
+Clearing the accessibility cache does not make lookup and the following bounds
+read atomic while the export sheet is recomposing.
+
+The screenshot was captured before the hierarchy: it shows the export controls,
+while the subsequent hierarchy contains the visible `release-saved.png` result,
+`64×64 · 881 B`, and its **Share** control. This establishes that the driver lost
+its observation during the UI update; it does not establish the unperformed share,
+process-death reopen, or exported-pixel checks. There are no PNG-receiver receipts,
+and the original run remains failed. The retained failure hierarchy SHA-256 is
+`288c1dcfd9983d7817d1fc74d1c0b14838e76b3f7abed384ee9af7781b91881b`;
+the failure PNG SHA-256 is
+`1ce7ade796648b8d87653400dabbff1a35fc07f3dabfb3ae5e6c9b2f40e59bd1`.
+
+The driver now treats only a `StaleObjectException` during target lookup or its
+visibility read as an unavailable observation. The next existing bounded
+observation clears the cache and obtains a current node. The helper performs one
+read, owns no polling loop or deadline, and never wraps an action. Other runtime
+failures and assertion failures propagate. Export, clicks, pointer painting and
+instrumentation are not replayed; scroll limits, target deadlines and all source,
+process, grant and pixel assertions remain unchanged.
+
+The original instrumentation output is retained at
+`.github/scripts/fixtures/release-ui/export-result-stale-original-log.txt`.
+Seven focused host cases execute the actual Java observation helper through the
+existing `test_visible_ui_toggle.py` harness. They cover current, missing and
+offscreen nodes, detachment during lookup or bounds inspection, reacquisition on
+the caller's next observation, and propagation of unrelated errors and assertions.
+These checks cannot replace a fresh complete ordinary-release workflow on the
+final source revision.
+
 For a clean checkout and a fresh local disposable emulator:
 
 ```bash

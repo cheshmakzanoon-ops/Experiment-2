@@ -50,6 +50,7 @@ import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.layer.LayerBlendContract
 import com.artflow.studio.domain.model.layer.LayerEffects
+import com.artflow.studio.domain.repository.canvas.CanvasClipboardSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasExportSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -3442,19 +3443,35 @@ class CanvasRepositoryImpl
         override suspend fun compositeWithoutPrivateLayers(): PixelBuffer? =
             composite(includeHidden = false, applyAdjustments = true, includePrivate = false)
 
+        override suspend fun copyMergedSelection(): CanvasClipboardSnapshot {
+            val (frozen, selection) =
+                withState {
+                    val selected = activeSelection
+                    require(selected == null || selected.isActive()) { "Nothing is selected" }
+                    captureComposite(includePrivate = true) to selected?.copy()
+                }
+            val (layers, document) = frozen
+            return withContext(clipboardDispatcher) {
+                val rendered = renderFrozen(layers, document)
+                val copied = if (selection == null) rendered else SelectionClipboard.extract(rendered, selection)
+                CanvasClipboardSnapshot(copied, layers.any { it.isPrivate && it.isVisible })
+            }
+        }
+
         private suspend fun composite(
             includeHidden: Boolean,
             applyAdjustments: Boolean,
             includePrivate: Boolean,
         ): PixelBuffer? {
-            val snapshot =
-                withState {
-                    markRastersShared()
-                    withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, frameList.map { it.id }, animationSettings)
-                        .filter { includePrivate || !it.isPrivate }
-                        .map { it.snapshotCopy() } to canvasSnapshot()
-                }
+            val snapshot = withState { captureComposite(includePrivate) }
             return withContext(Dispatchers.Default) { renderFrozen(snapshot.first, snapshot.second, includeHidden, applyAdjustments) }
+        }
+
+        private fun captureComposite(includePrivate: Boolean): Pair<List<LayerData>, CanvasDocument> {
+            markRastersShared()
+            return withPinnedFrames(activeFrame, currentLayers(), frameList.map { it.layers }, frameList.map { it.id }, animationSettings)
+                .filter { includePrivate || !it.isPrivate }
+                .map { it.snapshotCopy() } to canvasSnapshot()
         }
 
         /** [region] limits rendering to part of the canvas; its layers then hold cropped pixels. */

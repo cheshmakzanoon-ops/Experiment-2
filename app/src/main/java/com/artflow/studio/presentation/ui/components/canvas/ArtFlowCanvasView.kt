@@ -15,9 +15,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
-import com.artflow.studio.core.animation.AnimationTimeline
-import com.artflow.studio.core.animation.OnionSkin
-import com.artflow.studio.core.animation.OnionSkinTint
+import com.artflow.studio.core.animation.OnionSkinMemory
 import com.artflow.studio.core.canvas.MotionFilter
 import com.artflow.studio.core.canvas.MouseInput
 import com.artflow.studio.core.canvas.MousePress
@@ -45,6 +43,7 @@ import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.AreaSample
 import com.artflow.studio.core.pixels.Channels
+import com.artflow.studio.core.pixels.ImportMemoryBudget
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerTransform
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -63,6 +62,7 @@ import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.CloneStampState
 import com.artflow.studio.core.tool.FillTool
 import com.artflow.studio.core.tool.GradientTool
+import com.artflow.studio.core.tool.LiquifyFreezeState
 import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
@@ -524,11 +524,45 @@ class ArtFlowCanvasView
 
         private var liquifyReference: LiquifyReference? = null
         private var liquifyContextVersion = 0L
+        private var liquifyFreeze by mutableStateOf<LiquifyFreezeState?>(null)
+        private var gestureLiquifyFreeze: LiquifyFreezeState? = null
+
+        val liquifyFrozenPercent: Int get() = currentLiquifyFreeze()?.frozenPercent ?: 0
+        val hasLiquifyFrozenAreas: Boolean get() = currentLiquifyFreeze()?.hasFrozenPixels == true
+
+        private fun currentLiquifyFreeze(): LiquifyFreezeState? = liquifyFreeze?.takeIf { it.owner == freezeOwner() }
 
         private fun resetLiquifyReference() {
             liquifyContextVersion++
             liquifyReference = null
+            liquifyFreeze = null
             clearLiquifyAdjust()
+        }
+
+        /** Coverage is temporary tool state, so clearing it does not change artwork or undo history. */
+        fun clearLiquifyFreeze() {
+            cancelActiveGesture()
+            liquifyFreeze = null
+            onStatusMessage?.invoke("Frozen areas cleared")
+        }
+
+        /** Clear the tool's transient state before Reset undoes its artwork changes. */
+        fun resetLiquifyState() {
+            cancelActiveGesture()
+            resetLiquifyReference()
+        }
+
+        private fun freezeOwner(): LiquifyFreezeState.Owner {
+            val size = canvasRepository.getCanvasSize()
+            return LiquifyFreezeState.Owner(
+                canvasRepository.projectId(),
+                activeLayerId,
+                canvasRepository.timeline.value.activeFrame
+                    ?.id,
+                canvasRepository.contentRevision,
+                size.width,
+                size.height,
+            )
         }
 
         private var gestureLiquifyReference: LiquifyReference? = null
@@ -734,6 +768,7 @@ class ArtFlowCanvasView
             cloneStroke = null
             healingSession = null
             liquifySession = null
+            gestureLiquifyFreeze = null
             gestureLiquifyReference = null
             cancelLiquifyPreview()
         }
@@ -763,6 +798,7 @@ class ArtFlowCanvasView
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
+            if (newInput.liquify.mode != input.liquify.mode) cancelActiveGesture()
             if (newInput.tool != input.tool) cloneSourcePending = false
             if (newInput.clone.aligned != input.clone.aligned) {
                 cancelActiveGesture()
@@ -1523,6 +1559,8 @@ class ArtFlowCanvasView
         }
 
         private var onionJob: Job? = null
+        private var onionRequest = 0L
+        private val onionPreview by lazy { OnionSkinPreview(canvasRepository, { renderer.onionAllocationBytes }) }
         private var ghostSettingsSeen: AnimationSettings? = null
 
         /** The animation settings the current ghosts were made with. */
@@ -1531,6 +1569,7 @@ class ArtFlowCanvasView
 
         private fun refreshOnionSkins() {
             if (onionEnabled && !onionDirty) return
+            val requestId = ++onionRequest
             onionJob?.cancel()
             if (!onionEnabled) {
                 onionDirty = false
@@ -1539,47 +1578,57 @@ class ArtFlowCanvasView
                 return
             }
             onionDirty = false
+            val request = onionPreview.capture()
+            onionSettings = request.timeline.settings
+            onionProfile = request.profile
             onionJob =
                 coroutineScope.launch {
-                    val state = canvasRepository.timeline.value
-                    onionSettings = state.settings
-                    val profile = canvasRepository.getColorProfile()
-                    onionProfile = profile
-                    val active = state.activeIndex
-                    val neighbours = AnimationTimeline.onionGhosts(state)
-                    val entries = neighbours.previous.asReversed() + neighbours.next.asReversed()
-                    val previewEdge =
-                        kotlin.math
-                            .sqrt(Runtime.getRuntime().maxMemory().toDouble() / (32 * entries.size.coerceAtLeast(1)))
-                            .toFloat()
-                            .coerceIn(64f, 1024f)
-                    val ghosts = mutableListOf<Pair<PixelBuffer, Float>>()
-                    for ((index, opacity) in entries) {
-                        val frame = canvasRepository.compositeOnionFrame(index) ?: continue
-                        val ratio = (previewEdge / maxOf(frame.width, frame.height)).coerceAtMost(1f)
-                        val preview =
-                            if (ratio < 1f) {
-                                withContext(Dispatchers.Default) {
-                                    frame.scaled(
-                                        (frame.width * ratio).toInt().coerceAtLeast(1),
-                                        (frame.height * ratio).toInt().coerceAtLeast(1),
-                                    )
-                                }
-                            } else {
-                                frame
-                            }
-                        val tint = OnionSkin.tint(state.settings, index - active)
-                        val ghost =
-                            if (tint == null) {
-                                preview
-                            } else {
-                                withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint, profile) }
-                            }
-                        ghosts += ghost to opacity
+                    try {
+                        val result = onionPreview.render(request) { onionEnabled && requestId == onionRequest }
+                        if (result == null || requestId != onionRequest || !onionPreview.isCurrent(request)) {
+                            retryOnionSkins(requestId)
+                            return@launch
+                        }
+                        result.requirePublicationFits(ImportMemoryBudget.currentBytes(), renderer.onionAllocationBytes)
+                        renderer.setOnionSkins(result.frames, result.primaryAlpha)
+                        requestRender()
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: IllegalArgumentException) {
+                        reportOnionFailure(request, requestId, error)
+                    } catch (error: IllegalStateException) {
+                        reportOnionFailure(request, requestId, error)
+                    } catch (error: OutOfMemoryError) {
+                        reportOnionFailure(request, requestId, error)
                     }
-                    renderer.setOnionSkins(ghosts, if (ghosts.isEmpty()) 1f else OnionSkin.primaryOpacity(state.settings))
-                    requestRender()
                 }
+        }
+
+        private fun retryOnionSkins(requestId: Long) {
+            if (onionEnabled && requestId == onionRequest) {
+                // A committed edit can invalidate a suspended build after its last invalidation
+                // was consumed. Queue the current frame so it does not remain without ghosts.
+                onionDirty = true
+                refreshOnionSkins()
+            }
+        }
+
+        private fun reportOnionFailure(
+            request: OnionSkinPreview.Request,
+            requestId: Long,
+            error: Throwable,
+        ) {
+            if (!onionEnabled || requestId != onionRequest || !onionPreview.isCurrent(request)) return
+            renderer.clearOnionSkins()
+            requestRender()
+            Timber.w(error, "Could not render onion skins")
+            val message =
+                if (error is OutOfMemoryError || error.message == OnionSkinMemory.LIMIT_MESSAGE) {
+                    OnionSkinMemory.LIMIT_MESSAGE
+                } else {
+                    "Could not update onion skins. Try fewer ghost frames or a smaller canvas."
+                }
+            onStatusMessage?.invoke(message)
         }
 
         private fun reportHistory() {
@@ -2931,7 +2980,10 @@ class ArtFlowCanvasView
                                 rasterBase
                             }
                     }
-                    initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection, tilt, orientation)
+                    if (!initToolSession(tool, session.buffer, x, y, pressure, gestureInput, gestureSelection, tilt, orientation)) {
+                        cancelPixelInteraction()
+                        return@launch
+                    }
                     // These tools report exactly what each sample changed, so previews redraw only that.
                     if (tool in DAMAGE_TRACKED_TOOLS) canvasRepository.trackPreviewDamage(session)
                     rasterBuffer = session.buffer
@@ -2989,7 +3041,7 @@ class ArtFlowCanvasView
             selection: SelectionMask?,
             tilt: Float,
             orientation: Float,
-        ) {
+        ): Boolean {
             val alphaLocked = rasterSession?.alphaLocked == true
             when (tool) {
                 ToolType.SMUDGE -> {
@@ -3036,26 +3088,33 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.LIQUIFY -> {
-                    liquifySession =
-                        LiquifyTool.beginSession(
-                            x = x,
-                            y = y,
-                            settings =
+                    val owner = freezeOwner()
+                    val frozen = liquifyFreeze?.forOwner(owner) ?: LiquifyFreezeState(owner)
+                    liquifyFreeze = frozen
+                    try {
+                        liquifySession =
+                            frozen.beginSession(
+                                x,
+                                y,
                                 gestureInput.liquify.copy(
                                     size = gestureInput.brushParams.size,
                                     pressure = pressure,
                                     mask = selection,
                                     alphaLock = alphaLocked,
                                 ),
-                            width = buffer.width,
-                            height = buffer.height,
-                        )
+                            )
+                        gestureLiquifyFreeze = frozen
+                    } catch (rejected: IllegalArgumentException) {
+                        onStatusMessage?.invoke(rejected.message ?: "Liquify coverage could not be prepared")
+                        return false
+                    }
                 }
 
                 else -> {
                     Unit
                 }
             }
+            return true
         }
 
         private fun queuePixelSample(
@@ -3100,6 +3159,7 @@ class ArtFlowCanvasView
             when (pixelTool) {
                 ToolType.LIQUIFY -> {
                     liquifySession?.dragTo(x, y, pressure)
+                    if (liquifySession?.settings?.editsFreezeMask == true) return
                     previewLiquify(buffer)
                 }
 
@@ -3220,6 +3280,7 @@ class ArtFlowCanvasView
             val description = pixelCommitDescription
             val finalClone = cloneStroke
             val finalLiquify = liquifySession
+            val finalFreeze = gestureLiquifyFreeze
             val reference = gestureLiquifyReference
             val original = rasterBase
             val finalQuad = transformPreviewQuad.takeIf { pixelTool == ToolType.TRANSFORM }
@@ -3242,12 +3303,14 @@ class ArtFlowCanvasView
             cloneStroke = null
             healingSession = null
             liquifySession = null
+            gestureLiquifyFreeze = null
             gestureLiquifyReference = null
             // A preview still rendering must not paste over the committed pixels.
             cancelLiquifyPreview()
             coroutineScope.launch {
                 try {
                     if (!cancelled) {
+                        if (finishLiquifyGesture(finalLiquify, finalFreeze, original, reference, session.buffer)) return@launch
                         // The preview is throttled and may omit the final drag sample or a large canvas.
                         // Commit the complete map off the UI thread, never the last partial preview.
                         if (transform != null) {
@@ -3295,16 +3358,6 @@ class ArtFlowCanvasView
                                 }
                             }
                         }
-                        if (finalLiquify != null && original != null) {
-                            withContext(Dispatchers.Default) {
-                                // Momentum carries the distortion on after the pen lifts.
-                                finalLiquify.release()
-                                finalLiquify
-                                    .render(original, reference?.original)
-                                    .pixels
-                                    .copyInto(session.buffer.pixels)
-                            }
-                        }
                         val group = listOf(session) + companions.sessions
                         val changed =
                             original == null ||
@@ -3315,6 +3368,7 @@ class ArtFlowCanvasView
                                 }
                         if (changed) {
                             if (canvasRepository.commitRasterEdits(group, description)) {
+                                advanceLiquifyFreeze(finalFreeze)
                                 if (finalClone != null) cloneState = cloneState.afterStroke(finalClone)
                                 if (transform != null) {
                                     transform.quad = finalQuad ?: transform.quad
@@ -3350,6 +3404,47 @@ class ArtFlowCanvasView
             }
         }
 
+        /** Returns true for a mask-only gesture, which must never publish a raster or history entry. */
+        private suspend fun finishLiquifyGesture(
+            session: LiquifyTool.Session?,
+            frozen: LiquifyFreezeState?,
+            original: PixelBuffer?,
+            reference: LiquifyReference?,
+            target: PixelBuffer,
+        ): Boolean {
+            if (session == null) return false
+            if (session.settings.editsFreezeMask) {
+                acceptLiquifyFreeze(session, frozen)
+                return true
+            }
+            if (original != null) {
+                withContext(Dispatchers.Default) {
+                    session.release()
+                    session.render(original, reference?.original).pixels.copyInto(target.pixels)
+                }
+            }
+            return false
+        }
+
+        private fun advanceLiquifyFreeze(frozen: LiquifyFreezeState?) {
+            if (frozen != null && liquifyFreeze === frozen) {
+                liquifyFreeze = frozen.afterRasterCommit(canvasRepository.contentRevision)
+            }
+        }
+
+        private suspend fun acceptLiquifyFreeze(
+            session: LiquifyTool.Session,
+            frozen: LiquifyFreezeState?,
+        ) {
+            if (frozen == null || liquifyFreeze !== frozen) return
+            if (frozen.owner != freezeOwner()) return
+            val accepted = withContext(Dispatchers.Default) { frozen.afterMaskGesture(session) }
+            if (liquifyFreeze !== frozen || frozen.owner != freezeOwner()) return
+            liquifyFreeze = accepted
+            val amount = if (hasLiquifyFrozenAreas && liquifyFrozenPercent == 0) "less than 1" else liquifyFrozenPercent.toString()
+            onStatusMessage?.invoke("Frozen area: $amount% of canvas")
+        }
+
         private fun rememberForAdjust(
             gesture: LiquifyTool.Session,
             original: PixelBuffer,
@@ -3380,8 +3475,12 @@ class ArtFlowCanvasView
                         return@launch
                     }
                     val reference = liquifyReference
+                    val frozen = liquifyFreeze
                     if (canvasRepository.applyRasterEdit(last.layerId, "Liquify") { adjusted.pixels.copyInto(it.pixels) }) {
                         last.historyMark = canvasRepository.historyMark
+                        if (frozen != null && frozen.owner.revision == revision && liquifyFreeze === frozen) {
+                            liquifyFreeze = frozen.afterRasterCommit(canvasRepository.contentRevision)
+                        }
                         if (reference != null && reference.revision == revision) {
                             liquifyReference = reference.copy(revision = canvasRepository.contentRevision)
                         }
