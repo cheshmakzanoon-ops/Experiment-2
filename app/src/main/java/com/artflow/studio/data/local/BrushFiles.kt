@@ -95,9 +95,26 @@ object BrushFiles {
         text: String,
         memoryBudgetBytes: Long,
         decodeTile: (String) -> ByteArray = { Base64.getDecoder().decode(it) },
+    ): Pair<List<SavedBrush>, Map<String, CustomGrains.Tile>> =
+        decodeWithBudget(
+            text,
+            { JsonReadBudget(memoryBudgetBytes, "These brushes need too much memory. Import fewer brushes.") },
+            decodeTile,
+        )
+
+    internal fun decode(
+        text: String,
+        budget: JsonReadBudget,
+        decodeTile: (String) -> ByteArray = { Base64.getDecoder().decode(it) },
+    ): Pair<List<SavedBrush>, Map<String, CustomGrains.Tile>> = decodeWithBudget(text, { budget }, decodeTile)
+
+    private fun decodeWithBudget(
+        text: String,
+        createBudget: () -> JsonReadBudget,
+        decodeTile: (String) -> ByteArray,
     ): Pair<List<SavedBrush>, Map<String, CustomGrains.Tile>> {
         require(text.length <= MAX_BYTES && utf8Bytes(text) <= MAX_BYTES) { "This brush file is too large" }
-        val budget = JsonReadBudget(memoryBudgetBytes, "These brushes need too much memory. Import fewer brushes.")
+        val budget = createBudget()
         budget.check(text, jsonLimits)
         val file = json.decodeFromString(BrushFile.serializer(), text)
         require(file.format == FORMAT) { "This is not an ArtFlow brush file" }

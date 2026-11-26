@@ -270,8 +270,10 @@ exports and clears the prior result without deleting completed export files.
   The follow-up shares the existing Java-resource notice source with instrumentation while
   preserving the exact-byte artifact gate. The
   [Android build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45806956107)
-  remained in its JVM/instrumentation step when the follow-up was prepared; no complete JVM report
-  or device pass was available. Source review found JVM grain fixtures still reaching Android
+  was cancelled as an incomplete attempt when the repaired candidate replaced it. Its complete
+  log records eight observed grain-fixture failures; the retained artifact contains no JUnit XML,
+  so no completed JVM total is claimed. No device tests ran. Source review found JVM grain
+  fixtures still reaching Android
   descriptor stubs and manually queued photo tests lacking failure-safe child cleanup. Those
   boundaries require explicit fixture repair and another exact-source qualification.
   The repair gives ten JVM fixtures an explicit real NIO directory-sync boundary and obtains
@@ -286,6 +288,42 @@ exports and clears the prior result without deleting completed export files.
   execution. Independent source review found no additional blocker. All 14 changed Kotlin/KTS
   files passed ktlint; full main/unit/device detekt passed with the unchanged baseline, along
   with whitespace checks. The next candidate still requires actual packaging and Android execution.
+- `8ab642ca446b40a9e411bdfe3ac3d899ef3b4e1f` publishes the notice packaging and explicit
+  grain-fixture boundaries, with tree `9d1b55275a50ce030b660277df128c2bf4e88315`.
+  [Optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45811172871),
+  [ordinary release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45811172839), and
+  [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45811172809)
+  all passed their original attempts. Independent archive checks verify all 71 selected optimized
+  identities without skips/duplicates, installed APK bytes and both notices; 157 unchanged normal
+  release payload entries and 4,096 independently decoded matching artwork pixels; and the scoped
+  historical-source upgrade's matching signers, version 3 to 4, Room 1 to 2 and 11 preserved
+  stopped-data file records. The
+  [Android build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45811172850)
+  completed **2,857 JVM tests in 443 classes: 2,856 passed, one failed, zero errors or skips**,
+  as independently counted from digest-verified original XML. The sole failure is
+  `LegacyBrushLibraryAdmissionTest.ordinaryLegacyLibraryBelowTheExistingCharacterCapStillReads`:
+  its dense valid library was rejected by the byte allowance derived from live heap headroom.
+  The device matrix did not execute and this candidate remains failed overall.
+  The test, parser and memory-budget source are unchanged from checkpoint 08. With the same
+  fixture and unmodified decoder in separate 512 MiB JVMs, an allowance of 178,956,970 bytes admits
+  the library, while controlled retained-heap pressure reduces the sampled allowance to 67,108,672
+  bytes and reproduces the exact rejection. Independent token counting confirms 531,333 charged
+  tokens and a 74,078,202-byte admission estimate for the unchanged 3,033,789-character document.
+  This is a legitimate pressure rejection, not evidence that the production limits should rise.
+  The correction gives the dense compatibility/accounting fixtures explicit, heap-bounded
+  admission snapshots and retains every original fixture, length, decoded equality and short-budget
+  assertion. The production constructor still samples current headroom, applies the same minimum
+  allowance and charges the same bytes; production has no snapshot-factory call sites. BrushFiles
+  retains size rejection before constructing its normal budget and shares its existing decode body.
+  Three additional cases verify insufficient available memory, clamping, exhaustion and the process
+  heap ceiling. **47 tests across six focused classes** passed with assertions enabled. Separate
+  512 MiB probes confirm unchanged healthy/pressured default-decoder behavior, and all five corrected
+  dense-library cases pass under held pressure using their controlled snapshots. No GC request,
+  test retry, heap increase, fixture reduction or admission-limit change is used. Independent source
+  review and scoped formatting/static checks passed without baseline expansion. The initial full
+  local detekt process was killed by the environment; it supplies no full-scan pass. A subsequent
+  complete main/unit/device scan using a 512 MiB tool heap passed with the same configuration and
+  baseline. This changes no application or test-worker heap setting.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android

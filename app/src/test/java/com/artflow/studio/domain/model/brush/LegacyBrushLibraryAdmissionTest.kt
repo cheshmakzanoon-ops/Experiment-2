@@ -12,14 +12,20 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Dense schema-v1 documents verified against the captured pre-admission writer and reader. */
+/**
+ * Dense schema-v1 documents verified against the captured pre-admission writer and reader.
+ * Explicit headroom snapshots keep compatibility/accounting independent of earlier tests' garbage.
+ */
 class LegacyBrushLibraryAdmissionTest {
     @Test
     fun ordinaryLegacyLibraryBelowTheExistingCharacterCapStillReads() {
         val fixture = legacyLibrary(dual = false, auxiliaryCurves = 25)
         assertEquals(3_033_789, fixture.wire.length)
         assertTrue(fixture.wire.length < BrushLibraryCodec.MAX_CHARACTERS)
-        assertEquals(fixture.brushes, BrushLibraryCodec.decode(fixture.wire))
+        val requiredBytes = fixture.wire.length * 2L + ORDINARY_TOKENS * 128L
+        val budget = JsonReadBudget.fromSnapshot(requiredBytes, requiredBytes)
+        assertEquals(fixture.brushes, BrushLibraryCodec.decode(fixture.wire, budget))
+        assertEquals(0L, budget.remainingBytes)
     }
 
     @Test
@@ -27,7 +33,19 @@ class LegacyBrushLibraryAdmissionTest {
         val fixture = legacyLibrary(dual = true, auxiliaryCurves = 0)
         assertEquals(2_991_421, fixture.wire.length)
         assertTrue(fixture.wire.length < BrushLibraryCodec.MAX_CHARACTERS)
-        assertEquals(fixture.brushes, BrushLibraryCodec.decode(fixture.wire))
+        val requiredBytes = fixture.wire.length * 2L + DUAL_TOKENS * 128L
+        val budget = JsonReadBudget.fromSnapshot(requiredBytes, requiredBytes)
+        assertEquals(fixture.brushes, BrushLibraryCodec.decode(fixture.wire, budget))
+        assertEquals(0L, budget.remainingBytes)
+    }
+
+    @Test
+    fun aCompatibleLegacyLibraryStillRejectsInsufficientAvailableMemory() {
+        val fixture = legacyLibrary(dual = false, auxiliaryCurves = 25)
+        val requiredBytes = fixture.wire.length * 2L + ORDINARY_TOKENS * 128L
+        val budget = JsonReadBudget.fromSnapshot(requiredBytes, requiredBytes - 1)
+        val failure = assertThrows(JsonLimitException::class.java) { BrushLibraryCodec.decode(fixture.wire, budget) }
+        assertEquals("This file needs too much memory. Try a smaller file.", failure.message)
     }
 
     @Test
@@ -35,13 +53,16 @@ class LegacyBrushLibraryAdmissionTest {
         val fixture = legacyLibrary(dual = true, auxiliaryCurves = 0)
         // The original writer's token inventory includes container, object-key and value tokens.
         val requiredBytes = fixture.wire.length * 2L + DUAL_TOKENS * 128L
-        val exact = JsonReadBudget(requiredBytes)
+        val exact = JsonReadBudget.fromSnapshot(requiredBytes, requiredBytes)
         assertEquals(fixture.brushes, BrushLibraryCodec.decode(fixture.wire, exact))
         assertEquals(0L, exact.remainingBytes)
 
         val failure =
             assertThrows(JsonLimitException::class.java) {
-                BrushLibraryCodec.decode(fixture.wire, JsonReadBudget(requiredBytes - 1, "Token memory exhausted"))
+                BrushLibraryCodec.decode(
+                    fixture.wire,
+                    JsonReadBudget.fromSnapshot(requiredBytes - 1, requiredBytes, "Token memory exhausted"),
+                )
             }
         assertEquals("Token memory exhausted", failure.message)
     }
@@ -58,11 +79,15 @@ class LegacyBrushLibraryAdmissionTest {
         val libraryBytes = fixture.wire.length * 2L + DUAL_TOKENS * 128L
         // The outer object, its two keys and its two string values add five charged tokens.
         val combinedBytes = libraryBytes + sharedFile.length * 2L + 5L * 128
-        val restored = BrushFiles.decode(sharedFile, combinedBytes)
+        val budget = JsonReadBudget.fromSnapshot(combinedBytes, combinedBytes)
+        val restored = BrushFiles.decode(sharedFile, budget)
         assertEquals(fixture.brushes, restored.first)
         assertTrue(restored.second.isEmpty())
+        assertEquals(0L, budget.remainingBytes)
 
-        assertThrows(JsonLimitException::class.java) { BrushFiles.decode(sharedFile, libraryBytes) }
+        assertThrows(JsonLimitException::class.java) {
+            BrushFiles.decode(sharedFile, JsonReadBudget.fromSnapshot(libraryBytes, combinedBytes))
+        }
     }
 
     private fun legacyLibrary(
@@ -99,6 +124,7 @@ class LegacyBrushLibraryAdmissionTest {
 
     private companion object {
         val legacyJson = Json { encodeDefaults = true }
+        const val ORDINARY_TOKENS = 531_333L
         const val DUAL_TOKENS = 524_933L
     }
 }

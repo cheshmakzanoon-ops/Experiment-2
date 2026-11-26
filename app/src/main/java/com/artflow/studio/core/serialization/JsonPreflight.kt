@@ -30,11 +30,17 @@ internal class JsonLimitException(
  * copied during this scan; strings, numbers and arrays are never materialized. The estimate is
  * for this operation's text/token/declared payload work, not the whole process heap.
  */
-internal class JsonReadBudget(
-    maximumBytes: Long = ImportMemoryBudget.currentBytes(),
-    private val message: String = "This file needs too much memory. Try a smaller file.",
+internal class JsonReadBudget private constructor(
+    maximumBytes: Long,
+    private val message: String,
+    availableBytes: Long?,
 ) {
-    val maximumBytes = minOf(maximumBytes, ImportMemoryBudget.currentBytes())
+    constructor(
+        maximumBytes: Long = ImportMemoryBudget.currentBytes(),
+        message: String = DEFAULT_MESSAGE,
+    ) : this(maximumBytes, message, null)
+
+    val maximumBytes = minOf(maximumBytes, availableBytes ?: ImportMemoryBudget.currentBytes())
     private var reserved = 0L
     val remainingBytes: Long get() = maximumBytes - reserved
 
@@ -241,10 +247,21 @@ internal class JsonReadBudget(
         }
     }
 
-    private companion object {
-        const val MAX_DEPTH = 16
-        const val MAX_KEY_CHARACTERS = 128
-        const val MAX_NUMBER_CHARACTERS = 128
-        const val TOKEN_BYTES = 128L
+    companion object {
+        /** Explicit bounded admission snapshot; the ordinary constructor samples current headroom. */
+        fun fromSnapshot(
+            maximumBytes: Long,
+            availableBytes: Long,
+            message: String = DEFAULT_MESSAGE,
+        ): JsonReadBudget {
+            require(availableBytes in 1..(Runtime.getRuntime().maxMemory() / 3)) { "Invalid JSON reading allowance" }
+            return JsonReadBudget(maximumBytes, message, availableBytes)
+        }
+
+        private const val DEFAULT_MESSAGE = "This file needs too much memory. Try a smaller file."
+        private const val MAX_DEPTH = 16
+        private const val MAX_KEY_CHARACTERS = 128
+        private const val MAX_NUMBER_CHARACTERS = 128
+        private const val TOKEN_BYTES = 128L
     }
 }

@@ -77,6 +77,26 @@ class JsonPreflightTest {
     }
 
     @Test
+    fun explicitSnapshotsStillClampRequestsAndChargeEveryDocument() {
+        for ((requested, available) in listOf(1024L to 512L, 512L to 1024L)) {
+            val budget = JsonReadBudget.fromSnapshot(requested, available, "Sampled headroom exhausted")
+            assertEquals(512L, budget.maximumBytes)
+            budget.check("[0,1]", limits)
+            assertEquals(118L, budget.remainingBytes)
+            val failure = assertThrows(JsonLimitException::class.java) { budget.check("[0,1]", limits) }
+            assertEquals("Sampled headroom exhausted", failure.message)
+        }
+    }
+
+    @Test
+    fun explicitSnapshotsCannotWidenTheProcessHeapCeiling() {
+        val heapCeiling = Runtime.getRuntime().maxMemory() / 3
+        for (available in listOf(-1L, 0L, heapCeiling + 1)) {
+            assertThrows(IllegalArgumentException::class.java) { JsonReadBudget.fromSnapshot(1024, available) }
+        }
+    }
+
+    @Test
     fun genericScanningKeepsItsOriginalTokenBoundary() {
         val defaults =
             object : JsonReadLimits {
