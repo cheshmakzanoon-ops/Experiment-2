@@ -12,6 +12,7 @@ import android.view.MotionEvent
 import android.view.animation.DecelerateInterpolator
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.math.MathUtils
 import com.artflow.studio.core.animation.AnimationTimeline
