@@ -158,11 +158,15 @@ class ArtworkWorkflowTest {
 
     private fun inspectBrushStudio(expectedPixels: IntArray) {
         val depth = runBlocking(Dispatchers.Main) { canvas.undoDepth }
+        // Give Paint a distinct preset so applying a Smudge brush must preserve both tool slots.
+        compose.onNodeWithContentDescription("Paint").assertIsOn().performClick()
+        selectStudioPreset("Graphite point")
+        compose.onNodeWithText("Use brush").performClick()
         compose.onNodeWithContentDescription("Smudge").performClick().assertIsOn()
         // As in Procreate, tapping the active Smudge tool again opens the brush library.
         compose.onNodeWithContentDescription("Smudge").performClick()
         compose.onNodeWithText("Brush studio").assertIsDisplayed()
-        selectFineLiner()
+        selectStudioPreset("Fine liner")
         TestEvidence.screenshot("artwork-workflow-brush-studio-ready.png")
         tapDrawingPadThroughWindow()
         compose
@@ -178,16 +182,31 @@ class ArtworkWorkflowTest {
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
         compose.onNodeWithContentDescription("Smudge").performClick()
-        selectFineLiner()
+        assertStudioPreset("Graphite point")
+        selectStudioPreset("Fine liner")
         compose.onNodeWithText("Use brush").assertIsDisplayed().performClick()
+        compose.onNodeWithContentDescription("Smudge").assertIsOn()
+        compose.onNodeWithContentDescription("Paint").assertIsOff()
+        compose.onNodeWithContentDescription("Smudge").performClick()
+        assertStudioPreset("Fine liner")
+        compose.onNodeWithContentDescription("Cancel brush changes").performClick()
+        compose.onNodeWithContentDescription("Paint").performClick().assertIsOn()
+        compose.onNodeWithContentDescription("Paint").performClick()
+        assertStudioPreset("Graphite point")
+        compose.onNodeWithContentDescription("Cancel brush changes").performClick()
         compose.onNodeWithContentDescription("Paint").assertIsOn()
         assertArrayEquals(expectedPixels, pixels())
         assertEquals(depth, runBlocking(Dispatchers.Main) { canvas.undoDepth })
     }
 
-    private fun selectFineLiner() {
-        compose.onNodeWithText("Search brushes").performTextInput("fine liner")
-        compose.onNode(hasText("Fine liner") and hasClickAction()).performClick().assertIsSelected()
+    private fun assertStudioPreset(name: String) {
+        compose.onNodeWithText("Search brushes").performTextReplacement(name)
+        compose.onNode(hasText(name) and hasClickAction()).assertIsSelected()
+    }
+
+    private fun selectStudioPreset(name: String) {
+        compose.onNodeWithText("Search brushes").performTextReplacement(name)
+        compose.onNode(hasText(name) and hasClickAction()).performClick().assertIsSelected()
         compose.onNodeWithText("Search brushes").assertIsNotFocused()
         // Selecting a preset dismisses the IME and repositions this Dialog on small phones.
         // Compose idleness alone does not wait for that platform window transition: an immediate
