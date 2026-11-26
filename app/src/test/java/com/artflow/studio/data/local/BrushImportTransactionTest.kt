@@ -320,7 +320,7 @@ class BrushImportTransactionTest {
         val dao = ControlledDao()
         val store = BrushLibraryStore(dao)
 
-        fun transaction() = GrainStorage.ImportTransaction(registry)
+        fun transaction() = jvmGrainImport(registry)
 
         suspend fun import(bytes: ByteArray): Int? = BrushImports.importInto(directory, bytes, transaction(), store::importAll)
 

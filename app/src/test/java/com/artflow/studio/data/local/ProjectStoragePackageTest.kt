@@ -19,7 +19,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.spy
 import org.mockito.Mockito.`when`
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -39,7 +41,8 @@ class ProjectStoragePackageTest {
         val sourceContext = mock(Context::class.java).apply { `when`(filesDir).thenReturn(sourceDir) }
         val targetContext = mock(Context::class.java).apply { `when`(filesDir).thenReturn(targetDir) }
         sourceStorage = ProjectStorage(sourceContext)
-        targetStorage = ProjectStorage(targetContext)
+        targetStorage = spy(ProjectStorage(targetContext))
+        doAnswer { jvmGrainImport() }.`when`(targetStorage).beginGrainImport()
     }
 
     @Test

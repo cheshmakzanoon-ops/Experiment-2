@@ -708,12 +708,15 @@ class ProjectStorage
                 }
             }
 
+        /** The same texture owner crosses file installation and repository publication. */
+        internal fun beginGrainImport(): GrainStorage.ImportTransaction = GrainStorage.ImportTransaction()
+
         private inline fun <T> withGrainImport(
             supplied: GrainStorage.ImportTransaction?,
             block: (GrainStorage.ImportTransaction) -> T,
         ): T {
             if (supplied != null) return block(supplied)
-            return GrainStorage.ImportTransaction().use { owned ->
+            return beginGrainImport().use { owned ->
                 block(owned).also { owned.commit() }
             }
         }

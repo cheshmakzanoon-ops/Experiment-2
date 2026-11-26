@@ -73,7 +73,7 @@ class GrainCapacityStorageTest {
     fun oversizedBatchCannotWriteOrRegisterItsEarlierTiles() {
         val registry = registry()
         val directory = File(temporary.root, "grains")
-        GrainStorage.ImportTransaction(registry).use { transaction ->
+        jvmGrainImport(registry).use { transaction ->
             assertThrows(IllegalArgumentException::class.java) {
                 transaction.install(directory, linkedMapOf(FIRST to tile(10), SECOND to tile(20)))
             }
@@ -86,8 +86,8 @@ class GrainCapacityStorageTest {
     fun concurrentPreparedImportsKeepTheirCapacityUntilRollback() {
         val registry = registry()
         val directory = File(temporary.root, "grains")
-        GrainStorage.ImportTransaction(registry).use { second ->
-            GrainStorage.ImportTransaction(registry).use { first ->
+        jvmGrainImport(registry).use { second ->
+            jvmGrainImport(registry).use { first ->
                 first.prepare(listOf(FIRST))
                 assertThrows(IllegalArgumentException::class.java) { second.prepare(listOf(SECOND)) }
             }
@@ -105,16 +105,16 @@ class GrainCapacityStorageTest {
         val registry = registry(bufferedTiles = 4)
         val directory = temporary.newFolder("grains")
         val original = tile(10)
-        GrainStorage.ImportTransaction(registry).use { first ->
+        jvmGrainImport(registry).use { first ->
             first.install(directory, mapOf(FIRST to original))
-            GrainStorage.ImportTransaction(registry).use { second ->
+            jvmGrainImport(registry).use { second ->
                 second.install(directory, mapOf(FIRST to tile(10)))
                 second.commit()
             }
         }
         assertSame(original, registry.get(FIRST))
         assertArrayEquals(original.values, grainFile(directory, FIRST).readBytes())
-        GrainStorage.ImportTransaction(registry).use { retry -> retry.install(directory, mapOf(FIRST to tile(10))) }
+        jvmGrainImport(registry).use { retry -> retry.install(directory, mapOf(FIRST to tile(10))) }
         assertSame(original, registry.get(FIRST))
     }
 
@@ -122,12 +122,12 @@ class GrainCapacityStorageTest {
     fun cancellationClosesTheUnpublishedBatchReservation() {
         val registry = registry()
         assertThrows(CancellationException::class.java) {
-            GrainStorage.ImportTransaction(registry).use { transaction ->
+            jvmGrainImport(registry).use { transaction ->
                 transaction.prepare(listOf(FIRST))
                 throw CancellationException("Import cancelled before payload read")
             }
         }
-        GrainStorage.ImportTransaction(registry).use { transaction -> transaction.prepare(listOf(SECOND)) }
+        jvmGrainImport(registry).use { transaction -> transaction.prepare(listOf(SECOND)) }
         assertEquals(emptyList<String>(), registry.ids())
     }
 

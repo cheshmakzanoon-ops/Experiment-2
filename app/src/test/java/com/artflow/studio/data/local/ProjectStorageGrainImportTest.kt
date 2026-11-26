@@ -15,7 +15,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.spy
 import org.mockito.Mockito.`when`
 import java.io.File
 import java.io.IOException
@@ -35,7 +37,8 @@ class ProjectStorageGrainImportTest {
         grainDir = GrainStorage.directory(filesDir)
         val context = mock(Context::class.java)
         `when`(context.filesDir).thenReturn(filesDir)
-        storage = ProjectStorage(context)
+        storage = spy(ProjectStorage(context))
+        doAnswer { jvmGrainImport() }.`when`(storage).beginGrainImport()
     }
 
     @After
@@ -114,7 +117,7 @@ class ProjectStorageGrainImportTest {
             val files = packageFiles(linkedMapOf(existing to original.values.copyOf(), added to tile(110).values))
             val failure =
                 runCatching {
-                    GrainStorage.ImportTransaction().use { grains ->
+                    jvmGrainImport().use { grains ->
                         importPackage(files, true, grains)
                         assertTrue(grainFile(added).isFile)
                         assertTrue(CustomGrains.get(added) != null)
@@ -140,9 +143,9 @@ class ProjectStorageGrainImportTest {
     fun aSuccessfulConcurrentImportRetainsAssetsWhenTheFirstImportFails() {
         val id = newId()
         val incoming = tile(130)
-        GrainStorage.ImportTransaction().use { first ->
+        jvmGrainImport().use { first ->
             first.install(grainDir, mapOf(id to incoming))
-            GrainStorage.ImportTransaction().use { second ->
+            jvmGrainImport().use { second ->
                 second.install(grainDir, mapOf(id to tile(130)))
                 second.commit()
             }
@@ -154,8 +157,8 @@ class ProjectStorageGrainImportTest {
     fun sharedProvisionalAssetsDisappearOnlyAfterBothImportsFail() {
         val id = newId()
         val incoming = tile(140)
-        GrainStorage.ImportTransaction().use { second ->
-            GrainStorage.ImportTransaction().use { first ->
+        jvmGrainImport().use { second ->
+            jvmGrainImport().use { first ->
                 first.install(grainDir, mapOf(id to incoming))
                 second.install(grainDir, mapOf(id to tile(140)))
             }

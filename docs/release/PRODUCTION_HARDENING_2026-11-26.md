@@ -254,6 +254,38 @@ exports and clears the prior result without deleting completed export files.
   total device identities. Scoped formatting, detekt with the unchanged baseline and whitespace
   checks passed. Local injected-sync tests had not compiled that Android helper; this failure
   remains a failed source checkpoint, and the repair requires its own hosted execution.
+- `a4c2546b6c18634f7712dda653333212e208593f` publishes the public Android directory API
+  repair and native rejection cases, with tree `d58c9a1b7aa3ab99fd799139b45d7324bb06cf01`.
+  [Normal release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45806956036)
+  passed its one original test with zero skips. Independent artifact checks matched all 157 APK
+  payload entries after disposable signing and all 4,096 saved/reopened pixels, including 801
+  painted pixels, across fresh app processes. The
+  [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45806956143)
+  passed its original scoped campaign from rebuilt historical source `ca9ce535` to this candidate,
+  version 3 to 4, matching disposable signers, Room 1 to 2 and retained edited-pixel identity.
+  This is historical-source engineering evidence, not publisher signing or distribution evidence.
+  [Optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45806956023)
+  compiled successfully but failed artifact preflight: its instrumentation APK lacked the required
+  GPL and Unicode notices. The application APK passed; no optimized device attempt occurred.
+  The follow-up shares the existing Java-resource notice source with instrumentation while
+  preserving the exact-byte artifact gate. The
+  [Android build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45806956107)
+  remained in its JVM/instrumentation step when the follow-up was prepared; no complete JVM report
+  or device pass was available. Source review found JVM grain fixtures still reaching Android
+  descriptor stubs and manually queued photo tests lacking failure-safe child cleanup. Those
+  boundaries require explicit fixture repair and another exact-source qualification.
+  The repair gives ten JVM fixtures an explicit real NIO directory-sync boundary and obtains
+  native-package transactions through their existing storage dependency. The production factory
+  still creates the same strict Android transaction; repository publication and rollback ownership
+  remain unchanged. Both queued photo fixtures now retain and drain their child continuation on
+  assertion failure. A source-extracted failure probe with assertions enabled reproduced the old
+  `runBlocking` hang, bounded and terminated after retaining a thread dump; the corrected probe
+  returned a JUnit failure in 0.930 seconds with the original injected I/O error and suppressed
+  cache-state check. All **29 tests in four pure grain suites** passed with real JVM directory sync
+  and a throwing Android-boundary sentinel. These checks do not replace hosted Mockito/Android
+  execution. Independent source review found no additional blocker. All 14 changed Kotlin/KTS
+  files passed ktlint; full main/unit/device detekt passed with the unchanged baseline, along
+  with whitespace checks. The next candidate still requires actual packaging and Android execution.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android

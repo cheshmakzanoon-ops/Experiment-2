@@ -44,7 +44,7 @@ class ProjectStorageGrainBudgetTest {
             val archive = temporary.newFile("capacity.artflow").apply { writeBytes(ArtflowPackage.write("Capacity", files)) }
             val counted = CountingZipFile(archive)
             ArtflowPackage.StreamContents("Capacity", files.keys, counted).use { contents ->
-                GrainStorage.ImportTransaction(registry).use { transaction ->
+                jvmGrainImport(registry).use { transaction ->
                     val failure = runCatching { storage.importProjectStream(PROJECT, contents, transaction) }.exceptionOrNull()
                     assertTrue(failure is IllegalArgumentException)
                     assertEquals(GrainRegistry.CAPACITY_MESSAGE, failure?.message)
@@ -60,7 +60,7 @@ class ProjectStorageGrainBudgetTest {
     fun inMemoryPackageCannotPublishFilesWhenTheGrainBatchExceedsCapacity() =
         runBlocking {
             val registry = registry()
-            GrainStorage.ImportTransaction(registry).use { transaction ->
+            jvmGrainImport(registry).use { transaction ->
                 val files = packageFiles(linkedMapOf(FIRST to byteArrayOf(1), SECOND to byteArrayOf(2)))
                 val failure = runCatching { storage.importProject(PROJECT, files, transaction) }.exceptionOrNull()
                 assertEquals(GrainRegistry.CAPACITY_MESSAGE, failure?.message)
@@ -79,7 +79,7 @@ class ProjectStorageGrainBudgetTest {
             val archive = temporary.newFile("accepted.artflow").apply { writeBytes(ArtflowPackage.write("Accepted", files)) }
             val grainFile = requireNotNull(GrainStorage.fileFor(GrainStorage.directory(filesDir), FIRST))
             ArtflowPackage.openFile(archive).use { contents ->
-                GrainStorage.ImportTransaction(registry).use { transaction ->
+                jvmGrainImport(registry).use { transaction ->
                     storage.importProjectStream(PROJECT, contents, transaction)
                     assertArrayEquals(bytes, registry.get(FIRST)!!.values)
                     assertArrayEquals(bytes, grainFile.readBytes())
@@ -87,7 +87,7 @@ class ProjectStorageGrainBudgetTest {
             }
             assertNull(registry.get(FIRST))
             assertFalse(grainFile.exists())
-            GrainStorage.ImportTransaction(registry).use { next -> next.prepare(listOf(SECOND)) }
+            jvmGrainImport(registry).use { next -> next.prepare(listOf(SECOND)) }
         }
 
     @Test
@@ -95,7 +95,7 @@ class ProjectStorageGrainBudgetTest {
         runBlocking {
             val registry = registry()
             val files = packageFiles(emptyMap()) + ("grains/$FIRST" to ByteArray(TILE_BYTES))
-            GrainStorage.ImportTransaction(registry).use { transaction ->
+            jvmGrainImport(registry).use { transaction ->
                 val failure = runCatching { storage.importProject(PROJECT, files, transaction) }.exceptionOrNull()
                 assertTrue(failure is IllegalArgumentException)
                 assertTrue(failure?.message.orEmpty().contains("Invalid brush grain"))

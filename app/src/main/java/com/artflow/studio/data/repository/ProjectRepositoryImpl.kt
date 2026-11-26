@@ -155,7 +155,7 @@ class ProjectRepositoryImpl
         ): ProjectRepository.ImportedPackage {
             var importedId: Long? = null
             var completed = false
-            val grains = GrainStorage.ImportTransaction()
+            val grains = storage.beginGrainImport()
             return completeWithCleanup(
                 action = {
                     val outcome =

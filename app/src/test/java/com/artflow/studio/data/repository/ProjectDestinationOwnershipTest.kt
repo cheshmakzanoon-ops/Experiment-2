@@ -10,6 +10,7 @@ import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.local.entity.ProjectEntity
+import com.artflow.studio.data.local.jvmGrainImport
 import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -64,6 +65,7 @@ class ProjectDestinationOwnershipTest {
             `when`(context.filesDir).thenReturn(files)
             `when`(context.cacheDir).thenReturn(temporary.newFolder("cache"))
             storage = spy(ProjectStorage(context))
+            doAnswer { jvmGrainImport() }.`when`(storage).beginGrainImport()
             dao = mock(ProjectDao::class.java)
             database = mock(ArtFlowDatabase::class.java)
             `when`(database.transactionExecutor).thenReturn(Executor { it.run() })

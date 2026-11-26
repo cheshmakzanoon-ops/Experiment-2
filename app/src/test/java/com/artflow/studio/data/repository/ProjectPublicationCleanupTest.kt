@@ -10,6 +10,7 @@ import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
 import com.artflow.studio.data.local.entity.ProjectEntity
+import com.artflow.studio.data.local.jvmGrainImport
 import com.artflow.studio.domain.model.layer.Layer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -29,6 +30,7 @@ import org.mockito.Mockito.anyLong
 import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
+import org.mockito.Mockito.spy
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.`when`
 import java.io.File
@@ -55,7 +57,8 @@ class ProjectPublicationCleanupTest {
             val context = mock(Context::class.java)
             `when`(context.filesDir).thenReturn(filesDir)
             `when`(context.cacheDir).thenReturn(temporary.newFolder("cache"))
-            storage = ProjectStorage(context)
+            storage = spy(ProjectStorage(context))
+            doAnswer { jvmGrainImport() }.`when`(storage).beginGrainImport()
             dao = mock(ProjectDao::class.java)
             val database = mock(ArtFlowDatabase::class.java)
             `when`(database.transactionExecutor).thenReturn(Executor { it.run() })

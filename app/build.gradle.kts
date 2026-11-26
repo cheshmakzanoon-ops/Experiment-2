@@ -135,7 +135,11 @@ android {
             manifest.srcFile("src/deviceTestHost/AndroidManifest.xml")
         }
     }
-    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    sourceSets.getByName("androidTest") {
+        assets.srcDir("$projectDir/schemas")
+        // Keep the required distribution notices in instrumentation APKs as well.
+        resources.srcDir("src/main/resources")
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

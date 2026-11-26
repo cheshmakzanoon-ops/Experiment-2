@@ -10,6 +10,7 @@ import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.dao.ProjectDao
 import com.artflow.studio.data.local.database.ArtFlowDatabase
+import com.artflow.studio.data.local.jvmGrainImport
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.repository.ProjectRepository
 import kotlinx.coroutines.CancellationException
@@ -99,7 +100,7 @@ class ByteArrayPackageImportTest {
                 try {
                     runBlocking {
                         ArtflowPackage.StreamContents("Capacity", files.keys, counted).use { contents ->
-                            GrainStorage.ImportTransaction(registry).use { transaction ->
+                            jvmGrainImport(registry).use { transaction ->
                                 storage.importProjectStream(20, contents, transaction)
                             }
                         }

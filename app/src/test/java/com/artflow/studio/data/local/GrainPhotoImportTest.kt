@@ -1,5 +1,6 @@
 package com.artflow.studio.data.local
 
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.core.render.CustomGrains
 import com.artflow.studio.core.render.GrainRegistry
 import kotlinx.coroutines.CancellationException
@@ -7,6 +8,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
@@ -112,12 +114,12 @@ class GrainPhotoImportTest {
                 async(ui, start = CoroutineStart.UNDISPATCHED) {
                     GrainPhotoImport.importInto(fixture.directory, fixture.transaction(), { image }) { accepted = true }
                 }
-            val completedInstallation = ui.next()
-            assertArrayEquals(image.values, fixture.file(id).readBytes())
-            assertArrayEquals(image.values, requireNotNull(fixture.registry.get(id)).values)
-            importing.cancel(CancellationException("Brush Studio closed before UI delivery"))
-            completedInstallation.run()
-            while (!importing.isCompleted) ui.next().run()
+            withCleanup({ ui.cancelAndDrain(importing) }) {
+                ui.awaitNext()
+                assertArrayEquals(image.values, fixture.file(id).readBytes())
+                assertArrayEquals(image.values, requireNotNull(fixture.registry.get(id)).values)
+                importing.cancel(CancellationException("Brush Studio closed before UI delivery"))
+            }
 
             assertTrue(importing.isCancelled)
             assertFalse(accepted)
@@ -224,10 +226,10 @@ class GrainPhotoImportTest {
                             throw AssertionError("A cancelled photo must not be applied")
                         }
                     }
-                val completedInstallation = ui.next()
-                importing.cancel()
-                completedInstallation.run()
-                while (!importing.isCompleted) ui.next().run()
+                withCleanup({ ui.cancelAndDrain(importing) }) {
+                    ui.awaitNext()
+                    importing.cancel()
+                }
                 assertTrue(importing.isCancelled)
                 assertSame(image, fixture.registry.get(id))
                 assertArrayEquals(image.values, fixture.file(id).readBytes())
@@ -258,7 +260,7 @@ class GrainPhotoImportTest {
         val directory = File(temporary.newFolder(), "grains")
         val registry = GrainRegistry(TILE_BYTES * 4L, TILE_BYTES * 8L)
 
-        fun transaction() = GrainStorage.ImportTransaction(registry)
+        fun transaction() = jvmGrainImport(registry)
 
         fun file(id: String): File = requireNotNull(GrainStorage.fileFor(directory, id))
 
@@ -280,6 +282,7 @@ class GrainPhotoImportTest {
 
     private class QueuedUi : CoroutineDispatcher() {
         private val resumes = LinkedBlockingQueue<Runnable>()
+        private var pending: Runnable? = null
 
         override fun dispatch(
             context: CoroutineContext,
@@ -288,7 +291,21 @@ class GrainPhotoImportTest {
             resumes.add(block)
         }
 
-        fun next(): Runnable = requireNotNull(resumes.poll(10, TimeUnit.SECONDS)) { "The photo operation did not resume" }
+        fun awaitNext() {
+            check(pending == null) { "A photo continuation is already pending" }
+            // Keep ownership after acquisition so a failed assertion cannot strand this child.
+            pending = requireNotNull(resumes.poll(10, TimeUnit.SECONDS)) { "The photo operation did not resume" }
+        }
+
+        fun cancelAndDrain(job: Job) {
+            job.cancel()
+            while (!job.isCompleted) {
+                if (pending == null) awaitNext()
+                val continuation = requireNotNull(pending)
+                pending = null
+                continuation.run()
+            }
+        }
     }
 
     private fun tile(seed: Int) = CustomGrains.Tile(CustomGrains.TILE, ByteArray(TILE_BYTES) { (seed + it * 31 + it / 257).toByte() })
