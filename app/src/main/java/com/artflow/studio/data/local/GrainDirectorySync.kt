@@ -11,8 +11,15 @@ import java.io.IOException
 internal object GrainDirectorySync {
     fun sync(directory: File) {
         try {
-            val descriptor = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_DIRECTORY or OsConstants.O_NOFOLLOW, 0)
-            withCleanup({ Os.close(descriptor) }) { Os.fsync(descriptor) }
+            // O_DIRECTORY is not part of Android's public SDK. Check the opened descriptor,
+            // retaining no-follow semantics and avoiding a wait if an unexpected FIFO is opened.
+            val descriptor = Os.open(directory.path, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or OsConstants.O_NONBLOCK, 0)
+            withCleanup({ Os.close(descriptor) }) {
+                if (!OsConstants.S_ISDIR(Os.fstat(descriptor).st_mode)) {
+                    throw IOException("Brush texture storage is not a directory")
+                }
+                Os.fsync(descriptor)
+            }
         } catch (failure: ErrnoException) {
             throw IOException("Could not save brush texture storage", failure)
         }

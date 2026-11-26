@@ -237,6 +237,23 @@ exports and clears the prior result without deleting completed export files.
   tasks 093 onward diagnose each before correction. Normal release UI passed its single actual
   paint/save/process-death/reopen/share attempt with retained pixel evidence.
   These source-revision failures remain failed attempts.
+- `a68ab92d502a829fb1d3eab835afcf89c88540a8` publishes the remaining tasks 087–100,
+  the shared-copy test import correction and all 100 completed task records. Its frozen 38-file
+  tree matches `f21d4b452fa22f3f33cf1fb02965ef8ba19cf56b`. The
+  [Android build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45805733375),
+  [optimized build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45805733439),
+  [normal release build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45805733441), and
+  [installed-upgrade build](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45805733427)
+  all failed Kotlin compilation because Android's public SDK does not expose `O_DIRECTORY` used
+  by the new directory-sync helper. No JVM or device result from this candidate qualifies it.
+  The follow-up uses the public descriptor/stat API to require a directory before synchronization,
+  preserving no-follow opening, checked closure and failure propagation; nonblocking opening
+  prevents an unexpected FIFO from waiting for a writer. Three additional native cases require
+  ordinary/missing-path, symlink and bounded FIFO rejection while preserving existing targets.
+  The unchanged inventory parser recognizes all four directory-publication methods and **416**
+  total device identities. Scoped formatting, detekt with the unchanged baseline and whitespace
+  checks passed. Local injected-sync tests had not compiled that Android helper; this failure
+  remains a failed source checkpoint, and the repair requires its own hosted execution.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android
