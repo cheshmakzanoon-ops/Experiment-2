@@ -1,6 +1,7 @@
 package com.artflow.studio.data.export
 
 import android.content.Context
+import com.artflow.studio.core.lifecycle.assertOriginalFailure
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -12,7 +13,6 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -76,7 +76,7 @@ class TimelapseRetentionTest {
             val source = PixelBuffer.filled(24, 16, INK)
             val pixels = source.pixels.copyOf()
 
-            assertSame(failure, runCatching { recorder.capture(PROJECT, source) }.exceptionOrNull())
+            assertOriginalFailure(failure, runCatching { recorder.capture(PROJECT, source) }.exceptionOrNull())
 
             assertTrue(reachedCommit)
             assertRecording(originals)

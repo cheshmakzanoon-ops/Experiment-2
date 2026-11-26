@@ -101,7 +101,8 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   Dirty regions, copy-on-write snapshots, caches, and bounded undo reduce work and memory.
 - **Display:** [`ArtFlowCanvasView`](app/src/main/java/com/artflow/studio/presentation/ui/components/canvas/ArtFlowCanvasView.kt)
   creates a GLES2 context; `OpenGLCanvasRenderer` presents the CPU-composited image. The active
-  `TileCache` retains a full-sized buffer and tracks computed regions.
+  `TileCache` stores per-tile arrays with LRU eviction and assembles requested regions. Tiles
+  covering the current request remain retained, so one large request can exceed its cache budget.
 - **Storage:** [`ProjectStorage`](app/src/main/java/com/artflow/studio/data/local/ProjectStorage.kt)
   publishes a manifest after its raster generations are durable. Recovery protection is independent
   of whether its dialog is visible. Packages have separate bounded archive handling. Import and
@@ -116,6 +117,12 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
 
 ## Capability boundaries
 
+- **Editor windows:** one editor activity and one editable artwork repository are supported per
+  process. The window can resize and share the display with another app; independent simultaneous
+  artwork windows are not implemented. External Open with/Share to requests return to the existing
+  editor and wait in its incoming-file queue until the artist returns to the gallery. See
+  [editor window ownership](docs/verification/editor-window-ownership.md) for the launch policy
+  and its verification limits.
 - **Large canvases:** the dimension ceiling is 8,192 pixels per edge and 40 million pixels total.
   Device heap limits are stricter. One 40 MP ARGB plane alone needs 160 MB before masks, history,
   preview, and exports. These ceilings are not certified interactive workloads.
@@ -169,7 +176,9 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   preserves artwork, saved images, ordinary exports, timelapse snapshots and current sharing requests;
   it can reclaim owned preparations abandoned by a previous process. New brush shares no longer
   expire silently after 24 hours. Older unmarked share folders and legacy brush UUID folders remain
-  outside this cleanup because their ownership cannot be established safely.
+  outside this cleanup because their ownership cannot be established safely. Deleting an artwork
+  also removes its app-held export/share copies, so links to those copies stop opening. Files already
+  saved by a recipient remain outside the app's control.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance
@@ -196,10 +205,14 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   glTF accessors are refused with guidance to export dense accessors. Import extracts supported
   geometry and textures; it does not preserve editable animation, rigs or complete material/scene
   authoring structures. See the [model input boundary record](docs/verification/model-input-allocation.md).
-- **Timelapse:** recording captures downscaled JPEG snapshots while enabled. Quick edits can be
-  combined into one frame, repeated frames can be omitted, and long recordings are reduced to a
-  coarser sequence. Full-length export uses all retained frames; it is not a complete edit history
-  or a replacement for saving artwork. Private layers are excluded from captured composites.
+- **Timelapse:** Actions → Video → Time-lapse Recording pauses or resumes capture for the open
+  artwork. Settings → Saving → Allow time-lapse recording is the master switch for all artworks;
+  enabling it preserves each artwork's separate paused state. Clear recording removes retained
+  recording frames without deleting the artwork. Capture uses downscaled JPEG snapshots while
+  enabled. Quick edits can be combined into one frame, repeated frames can be omitted, and long
+  recordings are reduced to a coarser sequence. Full-length export uses all retained frames; it is
+  not a complete edit history or a replacement for saving artwork. Private layers are excluded
+  from captured composites.
 - **PDF:** pages contain raster artwork; vector typography/shapes and PDF/A remain unimplemented.
 - **Brush/input fidelity:** some imported auxiliary curves remain unused. The physical touch-major
   palm helper is separate from active contact-size/hover filtering. Physical stylus qualification

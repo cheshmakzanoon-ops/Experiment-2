@@ -40,8 +40,10 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.ColorUtils
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.MeshPicker
@@ -75,6 +77,8 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -363,6 +367,56 @@ class ModelEditorUiTest {
         assertStoredPixels(original)
         assertModelHeaderVisible()
         TestEvidence.screenshot("model-material-committed.png")
+    }
+
+    @Test fun hostStopCancelsModelPaintAndResumeRequiresAFreshPointerDown() {
+        tapAt(modelChip("Paint"))
+        val view = modelView()
+        val path = seamPath(view)
+        val beforeHistory = compose.runOnIdle { canvas.historyMark }
+        val beforeUndo = compose.runOnIdle { canvas.undoDepth }
+        beginAcrossSeam(view, path)
+        val preview = runBlocking(Dispatchers.Main) { requireNotNull(canvas.compositePreview()).pixels.copyOf() }
+        assertSeamPaint(preview)
+        assertStoredPixels(original)
+
+        withCleanup({ compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED) }) {
+            // Do not synthesize UP/CANCEL or call ModelView.onPause: the real host lifecycle
+            // must cancel a gesture whose final pointer event never arrived.
+            compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+            runBlocking(Dispatchers.Main) {
+                assertTrue("This regression stops the host without removing its model view", view.isAttachedToWindow)
+                assertFalse("A stopped model cannot accept painting", view.isPreviewAvailable)
+                assertArrayEquals(original, requireNotNull(canvas.layerPixels(layer)).pixels)
+                assertArrayEquals(
+                    "Host stop clears every provisional seam segment",
+                    original,
+                    requireNotNull(canvas.compositePreview()).pixels,
+                )
+                assertEquals(beforeHistory, canvas.historyMark)
+                assertEquals(beforeUndo, canvas.undoDepth)
+            }
+        }
+
+        awaitModel()
+        assertSame("Ordinary stop/start must retain the actual model view", view, modelView())
+        compose.waitUntil(10_000) { view.isPreviewAvailable }
+        awaitModelPixels(painted = false, path = path)
+        send(view, MotionEvent.ACTION_MOVE, path.right.point)
+        send(view, MotionEvent.ACTION_UP, path.right.point)
+        assertCancelled(beforeHistory, beforeUndo)
+
+        send(view, MotionEvent.ACTION_DOWN, path.left.point)
+        send(view, MotionEvent.ACTION_UP, path.right.point)
+        val committed = runBlocking(Dispatchers.Main) { requireNotNull(canvas.layerPixels(layer)).pixels.copyOf() }
+        assertSeamPaint(committed)
+        compose.runOnIdle {
+            assertEquals(beforeUndo + 2, canvas.undoDepth)
+            assertTrue(canvas.undo())
+            assertTrue(canvas.undo())
+        }
+        assertStoredPixels(original)
+        awaitModelPixels(painted = false, path = path)
     }
 
     private fun assertCancelled(

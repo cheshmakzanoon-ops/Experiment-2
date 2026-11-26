@@ -5,6 +5,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.viewModelScope
 import com.artflow.studio.R
 import com.artflow.studio.core.gallery.GalleryShareRequests
+import com.artflow.studio.core.lifecycle.assertOriginalFailure
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.ShareExportFiles
 import com.artflow.studio.domain.model.Project
@@ -13,21 +14,24 @@ import com.artflow.studio.domain.repository.ProjectRepository
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -70,14 +74,25 @@ class GalleryShareTest {
                 val context = context()
                 // Fail before FileProvider or the platform chooser can run on this JVM.
                 `when`(context.packageName).thenThrow(SecurityException("Sharing unavailable"))
+                val messagePrepared = CompletableDeferred<Unit>()
+                `when`(context.getString(R.string.gallery_share_failed)).thenAnswer {
+                    messagePrepared.complete(Unit)
+                    SHARE_FAILED
+                }
                 val snackbar = SnackbarHostState()
                 val operation = async { shareProjects(viewModel, projects, context, snackbar) }
 
-                runCurrent()
-
-                assertEquals(SHARE_FAILED, snackbar.currentSnackbarData?.visuals?.message)
-                snackbar.currentSnackbarData?.dismiss()
-                operation.await()
+                try {
+                    // Cleanup uses real IO. Wait for its actual completion before observing the
+                    // snackbar, rather than assuming one test-dispatcher turn includes IO return.
+                    messagePrepared.await()
+                    assertEquals(SHARE_FAILED, snackbar.currentSnackbarData?.visuals?.message)
+                    snackbar.currentSnackbarData?.dismiss()
+                    operation.await()
+                } finally {
+                    snackbar.currentSnackbarData?.dismiss()
+                    withContext(NonCancellable) { operation.cancelAndJoin() }
+                }
             }
         }
 
@@ -99,7 +114,7 @@ class GalleryShareTest {
 
                 val failure = runCatching { shareProjects(viewModel, listOf(project), context, snackbar) }.exceptionOrNull()
 
-                assertSame(cancellation, failure)
+                assertOriginalFailure(cancellation, failure)
                 assertNull(snackbar.currentSnackbarData)
             }
         }
@@ -192,7 +207,7 @@ class GalleryShareTest {
                     }.exceptionOrNull()
 
                 if (cancelled) {
-                    assertSame(expected, failure)
+                    assertOriginalFailure(expected, failure)
                     verifyNoInteractions(snackbar)
                 } else {
                     assertNull(failure)
@@ -246,7 +261,7 @@ class GalleryShareTest {
                     shareProjects(viewModel, (1L..3L).map(::project), context(), snackbar)
                 }.exceptionOrNull()
 
-            assertSame(expected, failure)
+            assertOriginalFailure(expected, failure)
             assertTrue(expected.suppressed.any { it is IOException })
             verifyNoInteractions(snackbar)
             assertArrayEquals(byteArrayOf(1), blocked.readBytes())

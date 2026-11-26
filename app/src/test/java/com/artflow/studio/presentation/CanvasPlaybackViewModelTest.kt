@@ -23,6 +23,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.Assert.*
 import org.junit.Test
+import org.mockito.Mockito.RETURNS_DEFAULTS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -266,7 +267,9 @@ class CanvasPlaybackViewModelTest {
                 projects,
                 settings,
                 mock(ArtworkExporter::class.java),
-                mock(TimelapseRecorder::class.java),
+                mock(TimelapseRecorder::class.java) { call ->
+                    if (call.method.name == "isRecording") true else RETURNS_DEFAULTS.answer(call)
+                },
             )
 
         fun animationSettings() = repository.timeline.value.settings

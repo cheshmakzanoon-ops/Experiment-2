@@ -4,6 +4,7 @@ This work starts from `main` at `9f8c0604fc0bfd28f2e31db701cca4d907e56901`.
 The requested scope is a production-quality Android painting application. The session uses
 successive specialist tasks with three concurrent workers and one integrator. Task count is a
 record of work, not a substitute for application, artifact, or physical-device evidence.
+All 100 requested specialist tasks completed; their distinct scopes and findings are recorded below.
 
 ## Release decision
 
@@ -102,6 +103,20 @@ complete Procreate interchange, GPU painting, or physical pen-latency qualificat
 | 084 | Stable export preview layout | Diagnose the retained tablet failure as a late preview moving the result by 137 pixels. Reserve the bounded preview viewport and caption from first composition; show an honest unavailable state for absent/invalid data. Two controlled Compose regressions keep result/control bounds and scroll geometry fixed across delayed decode, aspect changes, removal and failure after one scroll. Preserve the original workflow's single action and exact pixel assertions. |
 | 085 | Gallery share/delete transactions | Register each share batch, synchronously reserve a deleted artwork, cancel overlapping preparations and drain their cleanup before deleting files. Preserve unrelated requests, release reservations even before a cancelled job body starts, and reject stale cards against the database before touching directories. Six pure interleaving tests passed; two actual-caller regressions and existing FileProvider workflows await hosted execution. A filesystem deletion failure can still leave orphaned bytes after its database row is removed; this patch does not claim durable deletion recovery. |
 | 086 | Per-artwork timelapse screen wiring | Find the Video switch still using the global setting while the per-artwork ViewModel method had no production caller. Connect that method/state, retain global permission as a separate Settings control, and explain/disable the artwork switch when the master is Off. Preserve existing global choices and individual pause markers. Two actual app-navigation workflows cover legacy resume, failed persistence, artwork independence and Settings recovery; platform execution remains pending. No additional defect found in task 080's recorder ownership/clear implementation. |
+| 087 | Quad-transform sampling support | Reproduce lost transparent-edge pixels on fractionally moved thin marks and enlarged quads. Use separate source-axis interpolation footprints and project their expanded support into bounded destination scan ranges. Preserve exact identity and source pixels for invalid mappings; use a canvas-bounded fallback when expanded support crosses a projective horizon. The old code failed seven of eight analytical methods; the corrected four-class batch passed 42 tests. Warp-mesh support remains a separate review. |
+| 088 | Brush-photo import ownership | Keep a provisional grain transaction until the current Shape/Grain control accepts its texture. Roll back cancelled/replaced requests, preserve other owners, and retain an accepted texture even if cancellation follows immediately. Cancel an older decode when a newer non-null picker result arrives. Eight real-file/registry tests passed; a source-extracted former body failed six. Startup/library ownership review was otherwise clear. Completed assets remain retained; directory-publication durability is a separate review in 092. |
+| 089 | Model host lifecycle wiring | Find the model view's pause/recovery methods unconnected to ordinary Activity stop/start. Bind the actual view to its lifecycle owner, pause an initially stopped owner and remove the observer on disposal; retain final release separately. Add an actual ActivityScenario regression for a stopped attached view, cancelled seam-spanning provisional pixels, unchanged history, recovery and a fresh required pointer DOWN. Other texture/frame ownership paths were review-clear; runtime execution remains pending. |
+| 090 | Warp interpolation support | Reproduce the same thin-mark coverage loss in the actual triangulated Warp path. Preserve its existing interior tessellation and first-write ownership, then add a bounded exterior filter-support ring that linearly continues boundary cells. Validate geometry before clearing selected pixels and clip scans before integer conversion. The prior implementation failed six of nine analytical methods; the corrected four-class batch passed 36 tests. Added traversal helpers are inlined to avoid boxed triangle-index calls. |
+| 091 | Physical-paint coverage work | Skip coverage lookup outside the existing dab circle and stop before immutable grain sampling when mark, selection or alpha lock already gives zero coverage. Preserve retained-sample arithmetic, random sequence and material behavior. For one defined 80-pixel-radius wetness/impasto dab, evaluations decrease from 52,488 to 40,162 with identical recorded raster/physical fingerprints. Thirty-one tests passed; this is reduced work, not an Android speed or stylus-latency claim. |
+| 092 | Imported grain directory publication | Own each renamed texture before synchronizing the grain directory and its parent; return/register new cache entries only after both succeed. Keep fallible I/O before library/artwork publication and preserve shared/pre-existing assets on failure. Eight injected-boundary tests passed; two actual import regressions and one Android native-sync/reopen case await hosted execution. No power-loss qualification is claimed; the unused legacy replacement helper remains outside this contract. |
+| 093 | Valid recorder fixture contracts | Trace 15 hosted ViewModel/recovery failures to unstubbed suspending Boolean mocks returning erased null. Define the non-null recording answer in the six failing fixtures and one latent recovery-selections fixture, retaining disabled capture and all original assertions/timeouts. A separate JVM diagnostic reproduces the generic-assignment versus Boolean-unboxing difference. No production null fallback was added; corrected fixture runtime results remain pending. |
+| 094 | Sharing lifecycle qualification | Correct nine failing sharing fixtures without changing production code or removing test identities. Observe a controlled real-copy boundary before cancelling UI delivery, retain cleanup diagnostics on the exact original failure, wait for the actual post-cleanup snackbar boundary, and inspect failed brush payloads before requiring their unpublished copies to be removed. Successful brush handoffs retain distinct, decoded payloads and earlier bytes. Actual Android/Mockito/Compose execution remains hosted. |
+| 095 | Coroutine failure identity qualification | Reproduce the hosted failure with assertions and coroutine recovery enabled. Replace three recovered-wrapper identity assumptions with a shared strict helper requiring exact outer type/message and the original throwable object in a cycle-safe cause chain. Preserve file/retention checks and diagnostics on the original exception. The corrected coordinator suite passed all six cases with recovery enabled; actual recorder checks remain hosted. |
+| 096 | SDK-free harness parity | Enable JVM assertions without overriding coroutine debug/recovery settings. Preserve eligible support sources for explicit test selections and fail when a requested class is missing, Android-excluded or pruned. Reproduce the old false-success result of zero executed tests, then verify the real compiler/JUnit launch with corrected coordinator and assertion/AUTO-debug probes. Keep the harness's partial Android-free scope and dependency pins unchanged. |
+| 097 | Runtime and release documentation | Reconcile README and plan with the active single-editor process, queued gallery imports, per-artwork timelapse plus global master setting, and owned shared-copy cleanup. Preserve existing incomplete-feature checkboxes and all release gates. Verify the dated target-API statement against both official Android and Play policy sources; do not treat documentation review as runtime or publisher evidence. |
+| 098 | Independent final integration review | Trace actual transform callers, brush-photo composition ownership, native/brush import publication, and model host lifecycle across tasks 087–092. Find no additional concrete blocker within that bounded source review. Independent analytical expectations and explicit native-versus-injected synchronization boundaries remain intact. This task adds no runtime pass or physical-device qualification. |
+| 099 | Exact-source qualification protocol | Verify that rerunning the build job also reruns its seven dependents and that pinned artifact uploads support duplicate names across attempts. Historical repository evidence shows attempt job listings can copy old results under new IDs: count fresh timestamps, invocation tokens and uploads, not IDs alone. Preserve digest-verified artifacts before repeats; require two complete green attempts and a third actual main API35/16 KB execution on one final SHA. |
+| 100 | Independent product-readiness assessment | Confirm the active CPU painting/GLES presentation architecture, supported feature scope and engineering-candidate designation. Correct stale TileCache documentation to describe per-tile LRU storage and the current request's ability to exceed its eviction budget. Find no additional production-code blocker within this bounded review. Retain final-source CI, physical stylus/performance/ARM64, artist/assistive-use acceptance, publisher and store evidence as distinct unresolved claims; issue no Procreate-parity certification. |
 
 The integrator also binds export completion and cancellation to the initiating artwork/request,
 so an old operation cannot replace a newer result. Opening another artwork cancels pending
@@ -204,6 +219,24 @@ exports and clears the prior result without deleting completed export files.
   data show the result moving below the viewport after a late preview; task 084 addresses stable
   layout. All eight jobs have completed. These two original device attempts and the overall
   Android workflow remain failed; successful lanes do not establish final-revision qualification.
+- `07013320789916a4cf61e9fe120b8a18fd1b5134` publishes tasks 071 and 073–086.
+  Its frozen 79-file tree matches `b1205571195b918c54d87c42921221a10c04cbdf`.
+  Changed-file ktlint checked 69 Kotlin files; full main/unit/device detekt against the frozen
+  source and unchanged baseline, resource validation and whitespace checks passed.
+  [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45799680398),
+  [optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45799680408),
+  [normal release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45799680484), and
+  [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45799680457)
+  started on that exact revision. Optimized qualification and installed upgrade failed during
+  instrumentation compilation: the new shared-copy Settings test imported `assertDoesNotExist`
+  as an extension even though it is a member method. The follow-up removes only that invalid
+  import and preserves its assertions. Android CI then completed **2,820 JVM tests in 438 classes
+  with 27 failures, zero errors and zero skips**; the retained, digest-verified XML report supplies
+  these counts. Its device matrix did not execute. The failing groups concern ViewModel recorder
+  mock contracts, coroutine exception identity/delivery and revised sharing lifecycle fixtures;
+  tasks 093 onward diagnose each before correction. Normal release UI passed its single actual
+  paint/save/process-death/reopen/share attempt with retained pixel evidence.
+  These source-revision failures remain failed attempts.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android
@@ -315,6 +348,54 @@ exports and clears the prior result without deleting completed export files.
   replacement reservation. Actual ViewModel/gallery and FileProvider checks remain hosted.
 - Task 086 passed scoped ktlint/detekt, resource and whitespace checks. Its two actual Activity/
   ViewModel/settings/recorder workflows require hosted compilation and runtime execution.
+- Task 087 passed **42 tests across four pure transform/resampling classes**. The independent
+  prior-source comparison failed seven of its eight new analytical methods. An initial static
+  condition finding was resolved with separate axis guards, leaving the baseline unchanged.
+- Task 088 passed **eight real-file/registry ownership tests** and scoped static analysis. Its
+  focused compilation used the current sources, retained pure dependency graph and a logging-only
+  Timber stub. The source-extracted former import body failed six methods; neither comparison is
+  Android/Compose execution evidence. Task 089's actual Activity stop/start regression remains
+  hosted; its scoped formatting and static checks passed without baseline changes.
+- Task 090 passed **36 tests across four Warp/resampling classes**. Its old-source comparison
+  failed six of nine new methods. Scoped static checks and final bytecode inspection passed;
+  the exterior ring adds 2,176 bytes of primitive vertex payload and 264 triangles for filtered
+  sampling, without per-pixel allocations. Runtime/driver performance remains unqualified.
+- Task 091 passed **31 tests across five physical-paint classes**; both new call-count regressions
+  fail on the prior source. The defined dab performs **23.48% fewer coverage evaluations**, with
+  no evaluations outside its circle and unchanged three-case raster/physical fingerprints.
+  Retained desktop timings vary with JIT/scheduling and do not establish painting latency.
+- Task 092 passed **eight real-file/registry publication tests** using injected synchronization
+  boundaries and a fail-fast sentinel for the Android default. Its source-extracted previous body
+  failed seven methods. Neither run executes native Android directory synchronization; the new
+  actual-platform case remains required. Scoped static checks passed without baseline changes.
+- Task 093's seven fixture changes passed scoped static checks and an automated comparison
+  preserving all original assertion, timeout, scheduler, cancellation and Main-reset lines. Its
+  dynamic-proxy mechanism diagnostic is not execution of the Android-dependent Mockito fixtures.
+- Task 094's source-extracted sharing/dispatch diagnostic passed one JUnit method containing
+  **20 controlled cancellation cycles**, with assertions and coroutine recovery enabled. It uses
+  actual copy/storage/cleanup code but does not execute the complete Android-dependent fixtures.
+  Scoped formatting and static analysis passed; all nine corrected hosted failures still require
+  the next Gradle run.
+- Task 095 reproduced one coordinator failure only when the local JVM used `-ea` and coroutine
+  recovery, then passed **six coordinator tests** with the correction under those same flags.
+  A separate strict-helper diagnostic rejects same-message substitutes and unrelated cycles.
+  The original SDK-free launchers omitted `-ea`; task 096 corrects that reporting/parity boundary.
+- Task 096's seven-case functional diagnostic uses the real Kotlin compiler and JUnit launcher.
+  The corrected coordinator plus mode probes passed **eight tests**; the preserved old identity
+  assertion fails with `-ea` alone. Missing, Android-excluded and dependency-pruned requested
+  classes each return nonzero. The updated temporary integration helper also passed the six
+  coordinator cases. Python syntax and whitespace checks passed; no Android exclusions or pins
+  changed and no coroutine system properties were forced.
+- Task 097's relative-link and whitespace checks passed. Tasks 098 and 099 are source/protocol
+  reviews, not additional application test executions. In historical run `44472316030`, the same
+  named artifact survived as IDs `14506154421` and `14508359018` across attempts under the pinned
+  upload action. Its later attempt listing also copied seven earlier jobs' timestamps under new
+  job IDs, so an eight-row green API response alone cannot establish a second complete execution.
+- Task 100's source/documentation review adds no runtime test result. Its TileCache README/KDoc
+  correction changes no behavior and passed scoped formatting/whitespace checks. The integrated
+  final candidate's other 32 changed Kotlin files passed ktlint; full main/unit/device detekt
+  passed against the unchanged baseline, as did resource checks and the modified harness's
+  Python syntax check. Hosted compilation and execution remain the authority for this candidate.
 - A full local detekt scan across main, unit and Android-test sources passed after task 060,
   without changing the baseline. The historical-app overlay's changed source passed ktlint;
   all **14 build-provenance tests** passed. Overlay compilation/runtime remain hosted gates.
@@ -327,4 +408,12 @@ exports and clears the prior result without deleting completed export files.
 - ktlint and detekt checks are run without expanding the static-analysis baseline. New Android
   and mocked-Android tests require the hosted exact-revision build and emulator matrix.
 
-Further specialist tasks and final exact-revision results will be recorded here as they complete.
+## Final candidate evidence
+
+The 100-task record is complete. Freeze the source containing this record before executing its
+final qualification; changing source afterward requires that new revision's own acceptance.
+The associated [GitHub Actions runs](https://github.com/cheshmakzanoon-ops/Experiment-2/actions?query=branch%3Amain)
+retain source archives, original test reports, installed-artifact identities and verification
+summaries. Assess their exact SHA and actual execution evidence using task 099's protocol and
+the unchanged [release sign-off](RELEASE_SIGNOFF.md). The completed earlier checkpoints above
+remain historical evidence and do not become final-candidate passes by association.

@@ -41,6 +41,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.RETURNS_DEFAULTS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.io.File
@@ -226,7 +227,9 @@ class ExportMemoryUiFlowTest {
                 projects,
                 settings,
                 ArtworkExporter(context, storage, 8L * 1024 * 1024),
-                mock(TimelapseRecorder::class.java),
+                mock(TimelapseRecorder::class.java) { call ->
+                    if (call.method.name == "isRecording") true else RETURNS_DEFAULTS.answer(call)
+                },
             )
 
         suspend fun open() {

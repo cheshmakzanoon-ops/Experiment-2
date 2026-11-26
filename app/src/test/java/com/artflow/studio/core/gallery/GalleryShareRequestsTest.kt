@@ -1,5 +1,6 @@
 package com.artflow.studio.core.gallery
 
+import com.artflow.studio.core.lifecycle.assertOriginalFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -112,7 +113,7 @@ class GalleryShareRequestsTest {
             val requests = GalleryShareRequests()
             assertEquals("published", requests.run(listOf(1)) { "published" })
             val expected = IOException("Provider unavailable")
-            assertSame(expected, runCatching { requests.run(listOf(1)) { throw expected } }.exceptionOrNull())
+            assertOriginalFailure(expected, runCatching { requests.run(listOf(1)) { throw expected } }.exceptionOrNull())
 
             var deleted = false
             requireNotNull(requests.beginDeletion(1)).complete { deleted = true }

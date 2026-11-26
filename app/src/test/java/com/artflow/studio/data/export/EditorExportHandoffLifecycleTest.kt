@@ -3,6 +3,8 @@ package com.artflow.studio.data.export
 import android.content.Context
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportResult
+import com.artflow.studio.core.lifecycle.assertOriginalFailure
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.ShareExportFiles
 import kotlinx.coroutines.CancellationException
@@ -26,9 +28,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.doAnswer
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.spy
 import org.mockito.Mockito.`when`
 import java.io.File
+import java.io.IOException
+import java.nio.file.Path
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.CoroutineContext
@@ -168,10 +175,10 @@ class EditorExportHandoffLifecycleTest {
                         }
                     }.exceptionOrNull()
 
-                assertNotNull(failure)
-                assertEquals(original.javaClass, failure?.javaClass)
-                assertEquals(original.message, failure?.message)
-                assertTrue("Retain cleanup diagnostics across dispatcher stack recovery", requireNotNull(failure).suppressed.isNotEmpty())
+                assertOriginalFailure(original, failure)
+                assertEquals("Retain the one failed finalizer on the exact original failure", 1, original.suppressed.size)
+                assertTrue(original.suppressed.single() is IOException)
+                assertEquals("The shared-copy directory contains other files", original.suppressed.single().message)
                 assertArrayEquals(fixture.bytes, fixture.source.readBytes())
                 assertArrayEquals(byteArrayOf(9, 7, 5), requireNotNull(sibling).readBytes())
             } finally {
@@ -182,51 +189,98 @@ class EditorExportHandoffLifecycleTest {
     @Test
     fun cancellationBeforeUiDeliveryDeletesTheCompletedCopyWithoutLaunching() =
         runBlocking {
-            val resumes = LinkedBlockingQueue<Runnable>()
-            val ui =
-                object : CoroutineDispatcher() {
-                    override fun dispatch(
-                        context: CoroutineContext,
-                        block: Runnable,
-                    ) {
-                        resumes.add(block)
-                    }
-                }
-            Dispatchers.setMain(ui)
             val fixture = Fixture(temporary.newFolder("files"))
+            val gate = CopyDeliveryGate(fixture)
+            Dispatchers.setMain(gate.ui)
             var operation: Deferred<Unit>? = null
             var delivery: Runnable? = null
-            try {
+            withCleanup({
+                withCleanup({ Dispatchers.resetMain() }) {
+                    gate.allowCopy()
+                    operation?.cancel()
+                    delivery?.run()
+                    gate.drain(operation)
+                }
+            }) {
                 fixture.writeSource()
                 var launched = false
                 val pending =
                     async(Dispatchers.Main, start = CoroutineStart.UNDISPATCHED) {
-                        fixture.exporter.launchExport(fixture.result, open = true, isCurrent = { true }) { launched = true }
+                        gate.exporter.launchExport(fixture.result, open = true, isCurrent = { true }) { launched = true }
                     }
                 operation = pending
-                // First return resolves the validated source; the next return owns the completed copy.
-                requireNotNull(resumes.poll(10, TimeUnit.SECONDS)).run()
-                val copied = requireNotNull(resumes.poll(10, TimeUnit.SECONDS))
+                // IO can finish before withContext suspends, so dispatcher-return counts are not
+                // a protocol. Block the real copy first, then capture its completed UI delivery.
+                gate.awaitCopyStart()
+                gate.allowCopy()
+                val copied = gate.next()
                 delivery = copied
                 val staged = File(fixture.directory.listFiles()!!.single { it.isDirectory }, fixture.source.name)
                 assertArrayEquals(fixture.bytes, staged.readBytes())
+                assertFalse(pending.isCompleted)
+                assertFalse(launched)
 
                 pending.cancel(CancellationException("Editor closed before opening the video"))
                 copied.run()
                 delivery = null
-                while (!pending.isCompleted) requireNotNull(resumes.poll(10, TimeUnit.SECONDS)).run()
+                gate.drain(pending)
 
                 assertTrue(pending.isCancelled)
                 assertFalse(launched)
                 assertEquals(listOf(fixture.source), fixture.directory.listFiles()!!.toList())
                 assertArrayEquals(fixture.bytes, fixture.source.readBytes())
-            } finally {
-                operation?.cancel()
-                delivery?.run()
-                while (operation?.isCompleted == false) requireNotNull(resumes.poll(10, TimeUnit.SECONDS)).run()
-                Dispatchers.resetMain()
             }
         }
+
+    /** Real validation and file streaming, with a controlled first-read suspension. */
+    private class CopyDeliveryGate(
+        fixture: Fixture,
+    ) {
+        private val resumes = LinkedBlockingQueue<Runnable>()
+        private val copyStarted = Runnable {}
+        private val continueCopy = CountDownLatch(1)
+        private val storage = spy(fixture.storage)
+        val exporter = ArtworkExporter(fixture.context, storage)
+        val ui =
+            object : CoroutineDispatcher() {
+                override fun dispatch(
+                    context: CoroutineContext,
+                    block: Runnable,
+                ) {
+                    resumes.add(block)
+                }
+            }
+
+        init {
+            doAnswer { invocation ->
+                // Keep exportedFile's actual path/file validation before wrapping its valid result.
+                val validated = invocation.callRealMethod() as File
+                object : File(validated.path) {
+                    override fun toPath(): Path {
+                        resumes.add(copyStarted)
+                        check(continueCopy.await(10, TimeUnit.SECONDS)) { "The test did not release the copy" }
+                        return super.toPath()
+                    }
+                }
+            }.`when`(storage).exportedFile(fixture.result.filePath)
+        }
+
+        fun awaitCopyStart() {
+            var step = next()
+            while (step !== copyStarted) {
+                step.run()
+                step = next()
+            }
+        }
+
+        fun allowCopy() = continueCopy.countDown()
+
+        fun next(): Runnable = requireNotNull(resumes.poll(10, TimeUnit.SECONDS)) { "The expected UI/copy boundary was not reached" }
+
+        fun drain(operation: Deferred<Unit>?) {
+            while (operation?.isCompleted == false) next().run()
+        }
+    }
 
     private class Fixture(
         files: File,

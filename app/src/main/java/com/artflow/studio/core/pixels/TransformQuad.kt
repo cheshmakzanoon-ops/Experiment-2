@@ -485,6 +485,7 @@ object TransformQuad {
      * point to unit-square coordinates (u, v) of the source box, or null for a degenerate quad.
      */
     fun inverseMapping(q: Quad): FloatArray? {
+        if ((0 until CORNERS).any { !q.x(it).isFinite() || !q.y(it).isFinite() }) return null
         val dx1 = q.x1 - q.x2
         val dx2 = q.x3 - q.x2
         val dx3 = q.x0 - q.x1 + q.x2 - q.x3
@@ -519,8 +520,8 @@ object TransformQuad {
         val m21 = b * g - a * h
         val m22 = a * e - b * d
         val det = a * m00 + b * m10 + c * m20
-        if (abs(det) < 1e-9f) return null
-        return floatArrayOf(m00, m01, m02, m10, m11, m12, m20, m21, m22)
+        if (!det.isFinite() || abs(det) < 1e-9f) return null
+        return floatArrayOf(m00, m01, m02, m10, m11, m12, m20, m21, m22).takeIf { values -> values.all { it.isFinite() } }
     }
 
     /**
@@ -549,13 +550,10 @@ object TransformQuad {
             return
         }
         val (floating, blend) = LayerTransform.split(source, target, selection)
-        val x0 = max(0, floor(min(min(quad.x0, quad.x1), min(quad.x2, quad.x3))).toInt() - 1)
-        val x1 = min(target.width - 1, ceil(max(max(quad.x0, quad.x1), max(quad.x2, quad.x3))).toInt() + 1)
-        val y0 = max(0, floor(min(min(quad.y0, quad.y1), min(quad.y2, quad.y3))).toInt() - 1)
-        val y1 = min(target.height - 1, ceil(max(max(quad.y0, quad.y1), max(quad.y2, quad.y3))).toInt() + 1)
         val sampler = Sampler(floating, inverse, bounds, interpolation)
-        for (y in y0..y1) {
-            for (x in x0..x1) {
+        val scan = sampler.destinationBounds(target.width, target.height) ?: return
+        for (y in scan.top..scan.bottom) {
+            for (x in scan.left..scan.right) {
                 val sample = sampler.sample(x + 0.5f, y + 0.5f)
                 if ((sample ushr 24) == 0) continue
                 val i = y * target.width + x
@@ -590,17 +588,77 @@ object TransformQuad {
     ) {
         private val srcW = bounds.width.toFloat()
         private val srcH = bounds.height.toFloat()
-        private val inside = -1f / max(srcW, srcH)..1f + 1f / max(srcW, srcH)
+        private val support =
+            when (interpolation) {
+                Interpolation.NEAREST -> 0f
+                Interpolation.BILINEAR -> 0.5f
+                Interpolation.BICUBIC -> 1.5f
+            }
+
+        // The footprint is measured in source pixels, independently on each axis. Using the
+        // longer dimension for both axes discards valid coverage along a thin mark's short axis.
+        private val insideX = -support / srcW..1f + support / srcW
+        private val insideY = -support / srcH..1f + support / srcH
+
+        /** Project the complete source footprint, which can exceed one destination pixel. */
+        fun destinationBounds(
+            width: Int,
+            height: Int,
+        ): IntBounds? {
+            // The adjugate reverses the inverse map; homogeneous scale cancels on division.
+            // Double products avoid overflow while deriving bounds from finite Float entries.
+            val m = DoubleArray(inverse.size) { inverse[it].toDouble() }
+            val forward =
+                doubleArrayOf(
+                    m[4] * m[8] - m[5] * m[7],
+                    m[2] * m[7] - m[1] * m[8],
+                    m[1] * m[5] - m[2] * m[4],
+                    m[5] * m[6] - m[3] * m[8],
+                    m[0] * m[8] - m[2] * m[6],
+                    m[2] * m[3] - m[0] * m[5],
+                    m[3] * m[7] - m[4] * m[6],
+                    m[1] * m[6] - m[0] * m[7],
+                    m[0] * m[4] - m[1] * m[3],
+                )
+            val us = doubleArrayOf(insideX.start.toDouble(), insideX.endInclusive.toDouble())
+            val vs = doubleArrayOf(insideY.start.toDouble(), insideY.endInclusive.toDouble())
+            val denominators = DoubleArray(CORNERS) { i -> forward[6] * us[i % 2] + forward[7] * vs[i / 2] + forward[8] }
+            // A linear denominator changes sign inside the rectangle exactly when its corner
+            // extrema straddle zero. Its image is then unbounded; the canvas is the safe limit.
+            if (denominators.min() <= 0.0 && denominators.max() >= 0.0) return IntBounds(0, 0, width - 1, height - 1)
+            var minX = Double.POSITIVE_INFINITY
+            var minY = Double.POSITIVE_INFINITY
+            var maxX = Double.NEGATIVE_INFINITY
+            var maxY = Double.NEGATIVE_INFINITY
+            for (i in 0 until CORNERS) {
+                val x = (forward[0] * us[i % 2] + forward[1] * vs[i / 2] + forward[2]) / denominators[i]
+                val y = (forward[3] * us[i % 2] + forward[4] * vs[i / 2] + forward[5]) / denominators[i]
+                minX = min(minX, x)
+                maxX = max(maxX, x)
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+            if (maxX < 0.0 || minX >= width) return null
+            if (maxY < 0.0 || minY >= height) return null
+            // One extra destination pixel covers Float inverse-rounding at the edge. Clamp
+            // before integer conversion so distant finite quads cannot wrap a scan bound.
+            return IntBounds(
+                floor(minX - 1.0).coerceIn(0.0, width - 1.0).toInt(),
+                floor(minY - 1.0).coerceIn(0.0, height - 1.0).toInt(),
+                ceil(maxX + 1.0).coerceIn(0.0, width - 1.0).toInt(),
+                ceil(maxY + 1.0).coerceIn(0.0, height - 1.0).toInt(),
+            )
+        }
 
         fun sample(
             px: Float,
             py: Float,
         ): Int {
             val w = inverse[6] * px + inverse[7] * py + inverse[8]
-            if (abs(w) < 1e-9f) return 0
+            if (!w.isFinite() || abs(w) < 1e-9f) return 0
             val u = (inverse[0] * px + inverse[1] * py + inverse[2]) / w
             val v = (inverse[3] * px + inverse[4] * py + inverse[5]) / w
-            if (u !in inside || v !in inside) return 0
+            if (u !in insideX || v !in insideY) return 0
             val sx = bounds.left + u * srcW
             val sy = bounds.top + v * srcH
             return interpolation.sample(floating, sx, sy)

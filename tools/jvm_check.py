@@ -8,6 +8,9 @@ Android, Compose, Hilt or Room, then compiles the unit tests that still resolve 
 and runs them with JUnitCore. Files that cannot compile without Android are dropped from the run
 (and listed), so the result covers the pixel, render, export, colour, canvas and brush logic and
 nothing else. It does not replace ``./gradlew testDebugUnitTest``; CI remains the authority.
+Test JVM assertions are enabled, matching Gradle's default and coroutine debugging's automatic
+mode. Explicit ``--test`` selections retain eligible shared support sources and fail if any
+requested class cannot reach JUnit; an excluded or pruned requested class is never a passing run.
 
     python3 tools/jvm_check.py setup              # fetch kotlinc and jars into the cache
     python3 tools/jvm_check.py                    # compile everything, run every test
@@ -193,21 +196,30 @@ def main() -> None:
         tests_pure = [path for path in tests_all if not ANDROID_IMPORT.search(path.read_text())]
         if arguments.test:
             wanted = set(arguments.test)
-            tests_pure = [path for path in tests_pure if path.stem in wanted]
+            # Selected classes can depend on shared assertions, fixtures or codec builders.
+            # Retain eligible support sources without running unrelated test classes.
+            tests_pure = [path for path in tests_pure if path.stem in wanted or "@Test" not in path.read_text()]
         print(f"tests: {len(tests_pure)} of {len(tests_all)} files import no Android")
         kept_tests, dropped_tests = compile_pruning(tests_pure, work / "test", str(work / "main"), "tests")
         for path in dropped_tests:
             print(f"  dropped test: {path.relative_to(ROOT)}")
         classes = []
+        class_names = set()
         for path in kept_tests:
             text = path.read_text()
             if "@Test" not in text:
                 continue
             package = re.search(r"^package ([\w.]+)", text, re.M)
             classes.append(f"{package.group(1)}.{path.stem}" if package else path.stem)
+            class_names.add(path.stem)
+        if arguments.test:
+            unavailable = set(arguments.test) - class_names
+            if unavailable:
+                sys.exit("Requested test classes did not reach JUnit (missing, import-excluded or pruned): "
+                         + ", ".join(sorted(unavailable)))
         print(f"tests: running {len(classes)} classes")
         command = [
-            "java", "-cp", f"{work / 'test'}:{work / 'main'}:{ROOT / 'app/src/test/resources'}:{ROOT / 'app/src/main/resources'}:{classpath()}",
+            "java", "-ea", "-cp", f"{work / 'test'}:{work / 'main'}:{ROOT / 'app/src/test/resources'}:{ROOT / 'app/src/main/resources'}:{classpath()}",
             "org.junit.runner.JUnitCore", *classes,
         ]
         result = subprocess.run(command)

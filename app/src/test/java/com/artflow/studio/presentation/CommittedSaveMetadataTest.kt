@@ -40,6 +40,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.RETURNS_DEFAULTS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.io.File
@@ -294,8 +295,12 @@ class CommittedSaveMetadataTest {
             mock(SettingsRepository::class.java).also {
                 `when`(it.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false)))
             }
+        private val timelapse =
+            mock(TimelapseRecorder::class.java) { call ->
+                if (call.method.name == "isRecording") true else RETURNS_DEFAULTS.answer(call)
+            }
         val viewModel =
-            CanvasViewModel(canvas, projects, settings, ArtworkExporter(context, storage), mock(TimelapseRecorder::class.java))
+            CanvasViewModel(canvas, projects, settings, ArtworkExporter(context, storage), timelapse)
 
         suspend fun open() {
             viewModel.open(PROJECT)

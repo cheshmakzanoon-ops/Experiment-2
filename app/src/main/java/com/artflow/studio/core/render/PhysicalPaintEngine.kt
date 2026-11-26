@@ -492,8 +492,8 @@ object PhysicalPaintEngine {
         for (y in minY..maxY) {
             for (x in minX..maxX) {
                 val dist = hypot(x + 0.5f - centerX, y + 0.5f - centerY)
-                val amount = (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
-                if (dist > r || amount <= 0f) continue
+                val amount = if (dist > r) 0f else (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
+                if (amount <= 0f) continue
                 val falloff = (1f - (dist / r).let { it * it }) * amount
                 val nextW = max(plane.wetnessAt(x, y), water * falloff)
                 val nextP = max(plane.pigmentAt(x, y), pigment * falloff)
@@ -532,8 +532,8 @@ object PhysicalPaintEngine {
                 val dx = x + 0.5f - centerX
                 val dy = y + 0.5f - centerY
                 val dist = hypot(dx, dy)
-                val amount = (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
-                if (dist > r || amount <= 0f) continue
+                val amount = if (dist > r) 0f else (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
+                if (amount <= 0f) continue
                 val normR = dist / r
                 val across = (dx * perpX + dy * perpY) / r
                 // Bristle grooves across the brush width + subtle paint ridge heaped along the stroke rim.

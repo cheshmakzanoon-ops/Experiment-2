@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.core.render.BrushTexture
 import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.data.local.GrainPhotoImport
 import com.artflow.studio.data.local.GrainStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.brush.BrushParams
@@ -44,9 +45,11 @@ import com.artflow.studio.domain.model.brush.RenderingMode
 import com.artflow.studio.domain.model.brush.StudioBrushes
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import timber.log.Timber
+import java.io.IOException
 
 /** All settings remain available; the studio can also show one named attribute at a time. */
 @Composable
@@ -1244,20 +1247,40 @@ private fun rememberImageImport(onResult: (String?) -> Unit): () -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val latest by rememberUpdatedState(onResult)
+    var pendingImport by remember { mutableStateOf<Job?>(null) }
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri == null) return@rememberLauncherForActivityResult
-            scope.launch {
-                val id =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            BitmapPixelBridge.decodeUri(context.contentResolver, uri, maxDimension = GRAIN_DECODE_SIZE)?.let { image ->
-                                GrainStorage.save(GrainStorage.directory(context.filesDir), CustomGrains.tileFrom(image))
-                            }
-                        }.getOrNull()
-                    }
-                latest(id)
-            }
+            // A newer accepted choice owns this control even if an older provider is still reading.
+            pendingImport?.cancel()
+            pendingImport =
+                scope.launch {
+                    val imported =
+                        try {
+                            GrainPhotoImport.importInto(
+                                directory = GrainStorage.directory(context.filesDir),
+                                decode = {
+                                    BitmapPixelBridge
+                                        .decodeUri(context.contentResolver, uri, maxDimension = GRAIN_DECODE_SIZE)
+                                        ?.let { CustomGrains.tileFrom(it) }
+                                },
+                                accept = { latest(it) },
+                            )
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (failed: IOException) {
+                            photoImportFailed(failed)
+                        } catch (failed: SecurityException) {
+                            photoImportFailed(failed)
+                        } catch (failed: IllegalArgumentException) {
+                            photoImportFailed(failed)
+                        } catch (failed: IllegalStateException) {
+                            photoImportFailed(failed)
+                        } catch (failed: UnsupportedOperationException) {
+                            photoImportFailed(failed)
+                        }
+                    if (!imported) latest(null)
+                }
         }
     return {
         try {
@@ -1266,4 +1289,9 @@ private fun rememberImageImport(onResult: (String?) -> Unit): () -> Unit {
             latest(null)
         }
     }
+}
+
+private fun photoImportFailed(failure: Exception): Boolean {
+    Timber.w(failure, "Could not import the brush photo")
+    return false
 }

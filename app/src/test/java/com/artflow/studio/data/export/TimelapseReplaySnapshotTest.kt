@@ -1,6 +1,7 @@
 package com.artflow.studio.data.export
 
 import android.content.Context
+import com.artflow.studio.core.lifecycle.assertOriginalFailure
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
 import kotlinx.coroutines.CancellationException
@@ -14,7 +15,6 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -95,7 +95,7 @@ class TimelapseReplaySnapshotTest {
                         }
                     }.exceptionOrNull()
 
-                assertSame(failure, thrown)
+                assertOriginalFailure(failure, thrown)
                 assertTrue(failedFiles.none { it.exists() })
                 assertEquals(1, storage.exportsDir(PROJECT).listFiles()!!.size)
                 assertCopies(originals, first)

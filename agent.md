@@ -14,7 +14,7 @@ Before beginning Phase 1, understand these core principles:
 - **MVVM Pattern**: Model-View-ViewModel for UI architecture
 - **Dependency Injection**: Hilt for all dependency management
 - **Reactive Programming**: Kotlin Flow and StateFlow for reactive data streams
-- **GPU Acceleration**: OpenGL ES for rendering. The current renderer uses OpenGL ES 2.0 (`GLSurfaceView` + `GLES20`); ES 3.x and Vulkan are aspirational targets, not implemented.
+- **Painting and display**: Kotlin CPU rasterisation/compositing supplies an OpenGL ES 2.0 display surface (`GLSurfaceView` + `GLES20`). The separate GPU backend abstractions are not the editor's active painting pipeline; ES 3.x/Vulkan painting remains a future integration.
 - **Native Performance**: C++ via JNI for performance-critical operations. The C++ prototype is retained as source but excluded from the application build; the active render path is Kotlin.
 - **Test-Driven Development**: Write tests before or alongside implementation
 - **Progressive Enhancement**: Build MVP first, then add advanced features
@@ -35,18 +35,25 @@ phase describes · **⛔ unreachable** — the code exists but nothing calls it 
 | 1–8 | Setup, DI, architecture, design system, canvas, input, brush, layers | ✅ The Gradle wrapper, build config, dark-first design system, GL canvas, stylus/gesture input, stroke engine and layer stack all work. Strokes are rasterised by `Compositor` + `StrokeRasterizer`; the live layer state is `CanvasRepositoryImpl`. ktlint and detekt are configured (see *Tooling gaps*). |
 | 9–16 | Advanced brush params, textures, colour dynamics, blend modes, selection, transform, alpha lock, masks | 🟡 Blend modes, jitter/scatter/taper dynamics, the selection engine and layer masks run in the app. Brush textures are 🟡 partial: paper/canvas/charcoal procedural grains are rendered, with scale/rotation controls; imported grains and dual brushes (Multiply, Subtract, Add) are wired, while a user texture library remains absent. The custom pressure response has three editable monotone control points. Transform covers move, scale, rotate, flip, distort, warp and snapping (see phase 14). Masks support reveal/hide painting, selection and layer-alpha sources, and horizontal/vertical/radial gradients, with transactional preview and undo. |
 | 17–24 | Smudge, liquify, clone stamp, healing, gradient, paint bucket, text, shapes | ✅ `PixelBrushes` (smudge/clone/heal) and `LiquifyTool` are driven from `ArtFlowCanvasView`, alongside paint bucket, gradient, text and shapes. Shape drawing lives in `ArtFlowCanvasView`; corner radius and boolean ops are ⬜. |
-| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; explicit Normal and other non-Pass Through modes isolate; masked or faded groups also isolate). 🟡 Persistent linking is part of the November integration; see its verification record. ⬜ Smart objects. |
+| 25–30 | Adjustment layers, layer groups, reference layers, layer linking, filter layers, smart objects | 🟡 Adjustments (`AdjustmentProcessor`) and filter layers (`ImageFilters`, via `addFilterLayer` / `rasterizeFilterLayer`) are wired, and reference layers are set from the layer options. ✅ Layer groups (nested; explicit Normal and other non-Pass Through modes isolate; masked, faded or clipped groups also isolate). 🟡 Persistent linking is part of the November integration; see its verification record. ⬜ Smart objects. |
 | 31–36 | Colour picker, palettes, symmetry, perspective guides, canvas properties, quick menu | ✅ `ColorPanel`, `Palette` with `PaletteCodec` for persistence, `ColorHarmony`, `SymmetryEngine`, `PerspectiveGuide`, `CanvasOperations` and the quick menu. ✅ A fixed hardware-keyboard shortcut table (`core/canvas/KeyboardShortcuts`, 41 bindings, offered to the editor by `MainActivity` before any view sees the key). ⬜ Shortcut remapping. Stylus-button assignments are wired; broad hardware qualification remains open. Palettes can be created, renamed, copied, extended and shared as Procreate `.swatches` (`PaletteEditor`, `ProcreateSwatches`). |
 | 37–42 | Save system, PNG/JPEG export, PSD, PDF, gallery, cloud sync | ✅ Wired: `.artflow` documents (v7: independent material channels, per-layer rasters, frames, timelapse metadata, distinct group scopes and corrected secondary-grain replay; checksum-first v1/v2/v3 migration), autosave with crash recovery, PNG/JPEG/WebP/PDF/PSD export and gallery publishing. ✅ PSD **import**, ⬜ cloud sync. |
 | 43–50 | Animation timeline, animation export, timelapse, performance, tutorials, settings, QA, release | 🟡 Timeline, onion skinning and GIF/MP4/frame-sequence export work; settings, help centre and onboarding exist, and device regressions cover storage, rendering, duplication, exports and selected UI flows. ⬜ analytics/crash reporting, ⬜ benchmark module (`benchmark` is used for a minified launch smoke test, not a performance benchmark), 🟡 broader physical-device and end-to-end coverage. ✅ Signing configuration is validated; production builds can require it with `-PrequireReleaseSigning=true`. CI can build unsigned candidates, which are not approved releases. |
 
 ### Current integration
 
-The [November 18 integration milestone](docs/release/V1_INTEGRATION_2026-11-18.md) supersedes
-older status summaries where they conflict. Follow its continuation instructions and check the
-latest exact-revision CI evidence before starting. Never count an unused helper as a running
-feature. The current document format is v7; keep legacy migration fixtures and checksums intact.
+Current implementation and exact-revision verification are tracked in the
+[November 26 hardening record](docs/release/PRODUCTION_HARDENING_2026-11-26.md), building on the
+[November 18 integration milestone](docs/release/V1_INTEGRATION_2026-11-18.md) and subsequent
+follow-through. Check the current record and exact-revision CI evidence before starting; failed
+checkpoints remain part of that evidence. Never count an unused helper as a running feature.
+The current document format is v7; keep legacy migration fixtures and checksums intact.
 Physical-device/performance and publisher gates remain separate from source publication.
+
+The app supports one editor activity and editable canvas repository per process. A resizable window
+can share the display with another app, but independent simultaneous artwork windows are not
+implemented. External file requests reuse the existing task and queue until gallery return; see
+[editor window ownership](docs/verification/editor-window-ownership.md) for platform limits.
 
 Settings now exposes explicit shared-copy storage cleanup with count/byte refresh and a confirmation
 that old shared links stop opening. Gallery, palette, brush and editor Share/Open copies record
@@ -54,12 +61,16 @@ ownership when acquired and remain protected through chooser launch/cancellation
 to marked, inactive, flat export directories; it preserves artwork, ordinary exports and timelapse
 snapshots and can reclaim preparations abandoned by a prior process. Brush copies no longer expire
 automatically after 24 hours; older unmarked/legacy UUID share directories are conservatively kept.
+Deleting an artwork separately removes its app-held export/share copies and invalidates their links;
+copies already saved by recipients are unaffected.
 
 The [24 October follow-through](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) adds continuous Smudge
 input/dynamics, atomic clipboard transactions and independently paintable 3D material channels.
 Current `.artflow` storage is v7, with checksum-first migration of older color-only documents.
 See the implementation record and exact-revision Actions results for verification; these additions
-are not full Procreate parity or a repair for the unresolved Android 15 / 16 KB runtime crashes.
+do not establish full Procreate parity. Historical Android 15 / 16 KB failures and later lane results
+remain recorded by revision. Final-source repeated qualification and physical-device acceptance
+are still required by [Release sign-off](docs/release/RELEASE_SIGNOFF.md).
 
 ### Known gaps
 
@@ -72,11 +83,11 @@ Some code in `app/src/main` is still unreachable: `CanvasOperations.resampleToDp
 this document listed as dead code — `core/layer`, `core/selection`, `core/transform`,
 `core/shape`, `core/brush`, `domain/usecase`, `data/repository/texture`, `data/renderer/native`,
 `presentation/ui/components/texture`, the seven Hilt modules that only provided them, and the unused
-`domain/model/layer/LayerMask.kt` model — has been deleted. What remains missing is missing
-**functionality**, not orphaned code:
+`domain/model/layer/LayerMask.kt` model — has been deleted. Remaining gaps include incomplete
+functionality and unintegrated modules; source presence alone does not establish a working feature:
 
 - **Layer groups** — ✅ organisational groups (`Layer.isGroup`): group visibility/opacity cascade
-  to members via `LayerGroups`; Normal groups composite their members against transparency. Only opaque, unmasked Pass Through groups let members blend with outside layers. Newly organized groups start as Pass Through, and existing v1/v2 files migrate to preserve their pictures. PSD retains the distinction; native `.procreate` group modes remain unverified.
+  to members via `LayerGroups`; Normal groups composite their members against transparency. Only opaque, unmasked, unclipped Pass Through groups let members blend with outside layers. Newly organized groups start as Pass Through, and existing v1/v2 files migrate to preserve their pictures. PSD retains the distinction; native `.procreate` group modes remain unverified.
 - **Layer linking** — the November integration connects persistent membership and supported transactional transforms; verify current editor and persistence tests before claiming completion.
 - **Transform** — ✅ move, uniform/freeform scale, rotate and flip of a layer or selection
   (`LayerTransform`); distort, Bézier warp and snapping are implemented; a separate perspective mode is not, since distort covers it.
@@ -84,7 +95,11 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
   user texture library remains absent. Mask sources and custom pressure
   controls are implemented; their earlier “not implemented” status was stale.
 - **Native engine** — the C++ prototype remains unintegrated and is excluded from the app build.
-- **Timelapse** — ✅ `TimelapseRecorder` captures a frame per settled edit and exports an MP4 replay.
+- **Timelapse** — ✅ `TimelapseRecorder` retains downscaled snapshots and exports an MP4 replay.
+  Actions → Video controls recording per artwork; Settings → Saving has a master recording switch
+  that preserves individual paused states. Quick edits can share a frame, duplicates can be omitted,
+  and retention can reduce long recordings to a coarser sequence. Full-length export uses retained
+  frames, not a complete edit history. Clearing the recording preserves the artwork.
 - **StreamLine / QuickShape** — ✅ `StrokeStabilizer` applies the brush smoothing setting; `QuickShape`
   snaps held strokes to lines and ellipses.
 - **Cloud sync, smart objects, analytics/crash reporting.**
@@ -96,8 +111,9 @@ this document listed as dead code — `core/layer`, `core/selection`, `core/tran
 
 The phase tasks below are preserved as the original development goals. Repairs do not turn an
 unimplemented phase into a completed one. Check [README.md](README.md) for the active build and
-feature set and [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) for actual validation results
-and outstanding release work.
+feature set, the [current hardening record](docs/release/PRODUCTION_HARDENING_2026-11-26.md) for
+revision-specific validation, and [Release sign-off](docs/release/RELEASE_SIGNOFF.md) for outstanding
+release gates. [docs/RELEASE_READINESS.md](docs/RELEASE_READINESS.md) retains the earlier overview.
 
 The September 2026 reliability work adds JVM rendering/fill/selection/codec regressions and device
 coverage for persistence, recovery, GL output, independent project duplication, exports and selected

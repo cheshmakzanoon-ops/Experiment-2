@@ -255,6 +255,7 @@ class WarpMesh(
         private val SIDES = listOf(SIDE, ADVANCED_SIDE)
         private const val LOCATE_STEPS = 24
         private const val SUBDIVISIONS = 32
+        private const val AREA_EPSILON = 1e-6f
 
         /** An unbent mesh covering [bounds]: evenly spaced control points map the box onto itself. */
         fun fromBounds(
@@ -284,6 +285,8 @@ class WarpMesh(
         /**
          * Renders [source] (only its selected pixels when [selection] is active) so that the box
          * [bounds] follows [mesh]. The patch is cut into small triangles, each filled once.
+         * Filter support outside the box linearly continues its boundary cells; the original
+         * interior is rendered first so an exterior fold cannot replace its pixel ownership.
          */
         fun render(
             source: PixelBuffer,
@@ -298,23 +301,15 @@ class WarpMesh(
                 source.pixels.copyInto(target.pixels)
                 return
             }
+            val vertices = MeshVertices(mesh, bounds, interpolation)
+            // Reject an invalid/collapsed placement before split clears any selected source.
+            if (!vertices.isUsable()) {
+                source.pixels.copyInto(target.pixels)
+                return
+            }
             val (floating, blend) = LayerTransform.split(source, target, selection)
-            val raster = TriangleRaster(floating, target, bounds, blend, interpolation)
-            val n = SUBDIVISIONS
-            for (j in 0..n) {
-                for (i in 0..n) {
-                    val (px, py) = mesh.evaluate(i / n.toFloat(), j / n.toFloat())
-                    raster.setVertex(j * (n + 1) + i, px, py, i / n.toFloat(), j / n.toFloat())
-                }
-            }
-            for (j in 0 until n) {
-                for (i in 0 until n) {
-                    val a = j * (n + 1) + i
-                    val c = a + n + 2
-                    raster.fill(a, a + 1, c)
-                    raster.fill(a, c, c - 1)
-                }
-            }
+            val raster = TriangleRaster(floating, target, bounds, blend, interpolation, vertices)
+            vertices.visitTriangles(raster::fill)
         }
 
         /** One Bézier degree elevation of a row of control points: the same curve with one more point. */
@@ -358,6 +353,117 @@ class WarpMesh(
         ): Float = a + (b - a) * t
     }
 
+    /** Keeps the original tessellation intact and adds at most one exterior filter-support ring. */
+    private class MeshVertices(
+        mesh: WarpMesh,
+        bounds: IntBounds,
+        interpolation: TransformQuad.Interpolation,
+    ) {
+        private val support =
+            when (interpolation) {
+                TransformQuad.Interpolation.NEAREST -> 0f
+                TransformQuad.Interpolation.BILINEAR -> 0.5f
+                TransformQuad.Interpolation.BICUBIC -> 1.5f
+            }
+        private val padding = if (support == 0f) 0 else 1
+        private val side = SUBDIVISIONS + 1 + 2 * padding
+        private val count = side * side
+        val x = FloatArray(count)
+        val y = FloatArray(count)
+        val u = FloatArray(count) { parameter(it % side, support / bounds.width) }
+        val v = FloatArray(count) { parameter(it / side, support / bounds.height) }
+
+        init {
+            for (j in 0..SUBDIVISIONS) {
+                for (i in 0..SUBDIVISIONS) {
+                    val (px, py) = mesh.evaluate(i / SUBDIVISIONS.toFloat(), j / SUBDIVISIONS.toFloat())
+                    val index = (j + padding) * side + i + padding
+                    x[index] = px
+                    y[index] = py
+                }
+            }
+            if (padding != 0) {
+                // Extrapolate the boundary tessellation, rather than a degree-five polynomial
+                // far outside [0,1] for a one-pixel-wide source. Corners continue both axes.
+                for (j in 1 until side - 1) {
+                    val first = j * side
+                    extend(first, first + 1, first + 2, support * SUBDIVISIONS / bounds.width)
+                    extend(first + side - 1, first + side - 2, first + side - 3, support * SUBDIVISIONS / bounds.width)
+                }
+                for (i in 0 until side) {
+                    extend(i, i + side, i + 2 * side, support * SUBDIVISIONS / bounds.height)
+                    val last = (side - 1) * side + i
+                    extend(last, last - side, last - 2 * side, support * SUBDIVISIONS / bounds.height)
+                }
+            }
+        }
+
+        private fun parameter(
+            index: Int,
+            margin: Float,
+        ): Float =
+            when {
+                padding != 0 && index == 0 -> -margin
+                padding != 0 && index == side - 1 -> 1f + margin
+                else -> (index - padding) / SUBDIVISIONS.toFloat()
+            }
+
+        private fun extend(
+            destination: Int,
+            edge: Int,
+            inner: Int,
+            factor: Float,
+        ) {
+            x[destination] = x[edge] + (x[edge] - x[inner]) * factor
+            y[destination] = y[edge] + (y[edge] - y[inner]) * factor
+        }
+
+        fun isUsable(): Boolean {
+            if (x.any { !it.isFinite() } || y.any { !it.isFinite() }) return false
+            var finite = true
+            var hasArea = false
+            visitTriangles { a, b, c ->
+                val area = area(a, b, c)
+                finite = finite && area.isFinite()
+                hasArea = hasArea || abs(area) >= AREA_EPSILON
+            }
+            return finite && hasArea
+        }
+
+        fun area(
+            a: Int,
+            b: Int,
+            c: Int,
+        ): Float = (x[b] - x[a]) * (y[c] - y[a]) - (x[c] - x[a]) * (y[b] - y[a])
+
+        inline fun visitTriangles(fill: (Int, Int, Int) -> Unit) {
+            // Retain the same order and geometry for every original interior triangle.
+            for (j in padding until padding + SUBDIVISIONS) {
+                for (i in padding until padding + SUBDIVISIONS) fillCell(i, j, fill)
+            }
+            if (padding == 0) return
+            for (i in 0 until side - 1) {
+                fillCell(i, 0, fill)
+                fillCell(i, side - 2, fill)
+            }
+            for (j in 1 until side - 2) {
+                fillCell(0, j, fill)
+                fillCell(side - 2, j, fill)
+            }
+        }
+
+        private inline fun fillCell(
+            column: Int,
+            row: Int,
+            fill: (Int, Int, Int) -> Unit,
+        ) {
+            val a = row * side + column
+            val c = a + side + 1
+            fill(a, a + 1, c)
+            fill(a, c, c - 1)
+        }
+    }
+
     /** Fills destination triangles, sampling the source box by interpolated patch coordinates. */
     private class TriangleRaster(
         private val floating: PixelBuffer,
@@ -365,38 +471,34 @@ class WarpMesh(
         private val bounds: IntBounds,
         private val blend: Boolean,
         private val interpolation: TransformQuad.Interpolation,
+        private val vertices: MeshVertices,
     ) {
-        private val count = (SUBDIVISIONS + 1) * (SUBDIVISIONS + 1)
-        private val vx = FloatArray(count)
-        private val vy = FloatArray(count)
-        private val vu = FloatArray(count)
-        private val vv = FloatArray(count)
+        private val vx = vertices.x
+        private val vy = vertices.y
+        private val vu = vertices.u
+        private val vv = vertices.v
         private val written = BitSet(target.width * target.height)
-
-        fun setVertex(
-            index: Int,
-            x: Float,
-            y: Float,
-            u: Float,
-            v: Float,
-        ) {
-            vx[index] = x
-            vy[index] = y
-            vu[index] = u
-            vv[index] = v
-        }
 
         fun fill(
             a: Int,
             b: Int,
             c: Int,
         ) {
-            val area = (vx[b] - vx[a]) * (vy[c] - vy[a]) - (vx[c] - vx[a]) * (vy[b] - vy[a])
-            if (abs(area) < 1e-6f) return
-            val x0 = max(0, floor(min(vx[a], min(vx[b], vx[c]))).toInt())
-            val x1 = min(target.width - 1, ceil(max(vx[a], max(vx[b], vx[c]))).toInt())
-            val y0 = max(0, floor(min(vy[a], min(vy[b], vy[c]))).toInt())
-            val y1 = min(target.height - 1, ceil(max(vy[a], max(vy[b], vy[c]))).toInt())
+            val area = vertices.area(a, b, c)
+            if (abs(area) < AREA_EPSILON) return
+            val minX = min(vx[a], min(vx[b], vx[c]))
+            val maxX = max(vx[a], max(vx[b], vx[c]))
+            val minY = min(vy[a], min(vy[b], vy[c]))
+            val maxY = max(vy[a], max(vy[b], vy[c]))
+            if (maxX < 0f || minX >= target.width) return
+            if (maxY < 0f || minY >= target.height) return
+            // The validated finite geometry can still lie far away from the canvas. Bound
+            // each scan before integer conversion; no wrapped or unbounded loop is possible.
+            val x0 = floor(minX.coerceIn(0f, target.width - 1f)).toInt()
+            val x1 = ceil(maxX.coerceIn(0f, target.width - 1f)).toInt()
+            val y0 = floor(minY.coerceIn(0f, target.height - 1f)).toInt()
+            val y1 = ceil(maxY.coerceIn(0f, target.height - 1f)).toInt()
+            val interior = isInterior(a) && isInterior(b) && isInterior(c)
             for (y in y0..y1) {
                 for (x in x0..x1) {
                     val px = x + 0.5f
@@ -405,20 +507,31 @@ class WarpMesh(
                     val wb = ((vx[c] - px) * (vy[a] - py) - (vx[a] - px) * (vy[c] - py)) / area
                     val wc = 1f - wa - wb
                     val index = y * target.width + x
-                    if (min(wa, min(wb, wc)) < -EDGE_EPSILON || written[index]) continue
-                    write(index, wa * vu[a] + wb * vu[b] + wc * vu[c], wa * vv[a] + wb * vv[b] + wc * vv[c])
+                    if (!covers(wa, wb, wc) || written[index]) continue
+                    write(index, wa * vu[a] + wb * vu[b] + wc * vu[c], wa * vv[a] + wb * vv[b] + wc * vv[c], interior)
                 }
             }
         }
+
+        private fun covers(
+            wa: Float,
+            wb: Float,
+            wc: Float,
+        ): Boolean = wa.isFinite() && wb.isFinite() && min(wa, min(wb, wc)) >= -EDGE_EPSILON
+
+        private fun isInterior(vertex: Int): Boolean = vu[vertex] in 0f..1f && vv[vertex] in 0f..1f
 
         private fun write(
             index: Int,
             u: Float,
             v: Float,
+            interior: Boolean,
         ) {
             written.set(index)
-            val sx = bounds.left + u.coerceIn(0f, 1f) * bounds.width
-            val sy = bounds.top + v.coerceIn(0f, 1f) * bounds.height
+            // Preserve the original interior's clamping/nearest rules exactly. Only the explicit
+            // exterior ring is allowed to sample past the content box into the filter support.
+            val sx = bounds.left + (if (interior) u.coerceIn(0f, 1f) else u) * bounds.width
+            val sy = bounds.top + (if (interior) v.coerceIn(0f, 1f) else v) * bounds.height
             val sample = interpolation.sample(floating, sx, sy)
             if ((sample ushr 24) == 0) return
             target.pixels[index] = if (blend) BlendModes.sourceOver(target.pixels[index], sample) else sample

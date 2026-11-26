@@ -35,6 +35,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
+import org.mockito.Mockito.RETURNS_DEFAULTS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 
@@ -448,7 +449,9 @@ class CanvasMetadataViewModelTest {
                 projects,
                 settings,
                 mock(ArtworkExporter::class.java),
-                mock(TimelapseRecorder::class.java),
+                mock(TimelapseRecorder::class.java) { call ->
+                    if (call.method.name == "isRecording") true else RETURNS_DEFAULTS.answer(call)
+                },
             )
 
         fun close() {

@@ -40,6 +40,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.mockito.Mockito.RETURNS_DEFAULTS
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import java.io.File
@@ -223,7 +224,11 @@ class RecoverySessionSafetyTest {
         ): CanvasViewModel {
             val settings = mock(SettingsRepository::class.java)
             `when`(settings.settings).thenReturn(flowOf(AppSettings(autosaveEnabled = false)))
-            return CanvasViewModel(repository, projects, settings, ArtworkExporter(context, storage), mock(TimelapseRecorder::class.java))
+            val timelapse =
+                mock(TimelapseRecorder::class.java) { call ->
+                    if (call.method.name == "isRecording") true else RETURNS_DEFAULTS.answer(call)
+                }
+            return CanvasViewModel(repository, projects, settings, ArtworkExporter(context, storage), timelapse)
         }
 
         suspend fun prepareRecovery() {

@@ -130,6 +130,74 @@ class BrushImportTransactionTest {
         }
 
     @Test
+    fun failedTextureDirectorySyncCannotReachLibraryPublication(): Unit =
+        runBlocking {
+            for (failParent in listOf(false, true)) {
+                val fixture = Fixture()
+                val shared = tile(24)
+                val added = tile(30)
+                val sharedId = fixture.save(shared)
+                val addedId = CustomGrains.idFor(added)
+                fixture.store.saveCopy("Existing", BrushParams(shapeId = sharedId))
+                val before = fixture.dao.rows.toMap()
+                val writesBefore = fixture.dao.writes
+                val failure = IOException("Injected texture directory sync failure")
+                val synced = mutableListOf<File>()
+                val transaction =
+                    GrainStorage.ImportTransaction(fixture.registry) { directory ->
+                        synced += directory
+                        assertArrayEquals(added.values, fixture.file(addedId).readBytes())
+                        assertNull(fixture.registry.get(addedId))
+                        if (!failParent || directory == fixture.directory.parentFile) throw failure
+                    }
+                val actual =
+                    runCatching {
+                        BrushImports.importInto(fixture.directory, encoded(shared, added), transaction, fixture.store::importAll)
+                    }.exceptionOrNull()
+                assertTrue(actual is IOException)
+                assertEquals(failure.message, actual?.message)
+                assertEquals(if (failParent) listOf(fixture.directory, fixture.directory.parentFile) else listOf(fixture.directory), synced)
+                assertEquals(writesBefore, fixture.dao.writes)
+                assertEquals(before, fixture.dao.rows)
+                assertSame(shared, fixture.registry.get(sharedId))
+                assertArrayEquals(shared.values, fixture.file(sharedId).readBytes())
+                assertNull(fixture.registry.get(addedId))
+                assertFalse(fixture.file(addedId).exists())
+                assertEquals(
+                    listOf("Existing"),
+                    fixture.store.brushes
+                        .first()
+                        .map { it.name },
+                )
+            }
+        }
+
+    @Test
+    fun textureEntriesAndTheirParentAreSyncedBeforeTheLibraryReceivesThem(): Unit =
+        runBlocking {
+            val fixture = Fixture()
+            val first = tile(25)
+            val second = tile(31)
+            val synced = mutableListOf<File>()
+            val transaction =
+                GrainStorage.ImportTransaction(fixture.registry) { directory ->
+                    synced += directory
+                    assertEquals(0, fixture.dao.writes)
+                    assertTrue(fixture.registry.ids().isEmpty())
+                }
+            val count =
+                BrushImports.importInto(fixture.directory, encoded(first, second), transaction) { brushes, onCommitted ->
+                    assertEquals(listOf(fixture.directory, fixture.directory.parentFile), synced)
+                    fixture.store.importAll(brushes, onCommitted)
+                }
+            assertEquals(1, count)
+            assertEquals(1, fixture.dao.writes)
+            assertArrayEquals(first.values, fixture.file(CustomGrains.idFor(first)).readBytes())
+            assertArrayEquals(second.values, fixture.file(CustomGrains.idFor(second)).readBytes())
+            assertEquals(1, BrushLibraryStore(fixture.dao).brushes.first().size)
+        }
+
+    @Test
     fun fullSavedLibraryRejectsTheBatchWithoutKeepingItsAssets() =
         runBlocking {
             val fixture = Fixture()

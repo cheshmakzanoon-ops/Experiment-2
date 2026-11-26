@@ -165,8 +165,11 @@ class StrokeRasterizer(
             val index = y * marks.width + x
             val source = dual?.combine(marks.pixels[index], index, canvasX, canvasY) ?: marks.pixels[index]
             val mark = (source ushr 24) / 255f
+            if (mark <= 0f) return@coverage 0f
             val selected = selection?.let { it.coverageAt(x, y) / 255f } ?: 1f
+            if (selected <= 0f) return@coverage 0f
             val existing = if (alphaLock) (canvas.getSafe(x, y) ushr 24) / 255f else 1f
+            if (existing <= 0f) return@coverage 0f
             val textureFactor =
                 how?.let {
                     val grain = it.texture?.coverage(canvasX - it.grain.first, canvasY - it.grain.second) ?: 1f

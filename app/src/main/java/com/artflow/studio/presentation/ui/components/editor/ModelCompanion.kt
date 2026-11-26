@@ -27,6 +27,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.artflow.studio.R
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.Mesh
@@ -76,6 +80,25 @@ fun ModelCompanion(
     val sentMaps = remember { arrayOfNulls<Map<MaterialChannel, Bitmap>>(1) }
     val sentMesh = remember { arrayOfNulls<Mesh>(1) }
     var previewMessage by remember { mutableStateOf<String?>(null) }
+    var modelView by remember { mutableStateOf<ModelView?>(null) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, modelView) {
+        val view = modelView
+        val lifecycle = lifecycleOwner.lifecycle
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> view?.onResume()
+                    Lifecycle.Event.ON_STOP -> view?.onPause()
+                    else -> Unit
+                }
+            }
+        // Adding an observer to a started owner dispatches ON_START. A view composed while
+        // stopped must also pause now, rather than waiting for a stop event that already happened.
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) view?.onPause()
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     BoxWithConstraints(modifier.fillMaxSize().padding(8.dp)) {
         val side = minOf(maxWidth, maxHeight, 360.dp)
         Surface(
@@ -114,8 +137,17 @@ fun ModelCompanion(
                 }
                 Box(Modifier.weight(1f)) {
                     AndroidView(
-                        factory = { context -> ModelView(context) },
-                        onRelease = { view -> view.release() },
+                        factory = { context ->
+                            // Remembered delivery identities belong to this actual AndroidView.
+                            sentMesh[0] = null
+                            sentMaps[0] = null
+                            sent[0] = null
+                            ModelView(context).also { modelView = it }
+                        },
+                        onRelease = { view ->
+                            if (modelView === view) modelView = null
+                            view.release()
+                        },
                         update = { view ->
                             view.onPreviewMessage = { previewMessage = it }
                             view.gesturesEnabled = interactive

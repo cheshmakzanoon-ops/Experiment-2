@@ -10,8 +10,9 @@ import kotlin.math.min
  * stays the same. The live preview keeps the layers below the one being painted here, so each
  * frame of a stroke composites only that layer and those above it instead of the whole stack.
  *
- * Only tiles that have actually been requested are allocated, and least-recently-used tiles are
- * evicted once [maxBytes] is exceeded so large canvases never pin a full-canvas buffer in RAM.
+ * Tiles are allocated for rendered request regions. Least-recently-used tiles outside the current
+ * request are evicted once [maxBytes] is exceeded. The current request's tiles remain retained,
+ * so a large request can exceed that budget and also allocates its assembled result.
  */
 class TileCache(
     private val tileSize: Int = DEFAULT_TILE,
@@ -210,7 +211,7 @@ class TileCache(
     companion object {
         const val DEFAULT_TILE = 128
 
-        /** 16 MiB default cap — plenty for active stroke tiles without pinning full 4K–8K canvases. */
+        /** 16 MiB eviction budget; tiles covering the current request can exceed it. */
         const val DEFAULT_MAX_BYTES = 16L * 1024L * 1024L
 
         private const val INITIAL_MAP_CAPACITY = 64

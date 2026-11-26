@@ -119,7 +119,10 @@ object GrainStorage {
         return id
     }
 
-    /** Atomically writes and registers [tile] under an explicit custom [id]. */
+    /**
+     * Legacy explicit replacement helper. Active artwork/brush imports use [ImportTransaction]
+     * so their directory entries are synchronized before the caller publishes its references.
+     */
     fun save(
         directory: File,
         id: String,
@@ -144,11 +147,13 @@ object GrainStorage {
     }
 
     /**
-     * Owns only newly installed assets until the project's database transaction commits. Shared
+     * Owns only newly installed assets until the importing caller accepts them. Shared
      * claims let concurrent imports reuse one tile without a failed import removing another's data.
+     * Installation syncs names before returning; commit only retains ownership after publication.
      */
     class ImportTransaction internal constructor(
         private val registry: GrainRegistry,
+        private val syncDirectory: (File) -> Unit = GrainDirectorySync::sync,
     ) : Closeable {
         constructor() : this(CustomGrains.registry)
 
@@ -199,6 +204,14 @@ object GrainStorage {
                         pendingFiles[target]?.takeIf { it.bytes.contentEquals(tile.values) }
                     }
                 if (claim != null && files.add(claim)) claim.users++
+            }
+            if (incoming.isNotEmpty()) {
+                // Own every new name before syncing: a failed sync must still be rolled back by
+                // this transaction, without removing an existing or independently claimed tile.
+                // The parent also needs syncing because this may be the first grains directory,
+                // or a retry after an earlier failed attempt created it without publishing it.
+                syncDirectory(directory)
+                syncDirectory(requireNotNull(directory.parentFile))
             }
             incoming.forEach { (id, tile) ->
                 val existing = reservation.registerIfAbsent(id, tile)

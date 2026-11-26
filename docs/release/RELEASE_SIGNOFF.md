@@ -58,8 +58,9 @@ Commit any required version change before freezing the final source and repeat t
 required qualification. Do not relabel an earlier APK or reuse an earlier SHA's passing record
 after changing the packaged version, signing configuration, dependencies or application code.
 Minimum API 26 and target API 36 remain the configured platform contract. Google's
-[target API requirements](https://developer.android.com/google/play/requirements/target-sdk),
-checked November 19, 2026, require API 36 for new phone/tablet apps and updates from August 31, 2026;
+[target API requirements](https://developer.android.com/google/play/requirements/target-sdk) and
+[Play Console policy](https://support.google.com/googleplay/android-developer/answer/11926878),
+checked November 26, 2026, require API 36 for new phone/tablet apps and updates from August 31, 2026;
 recheck the applicable publishing policy at submission.
 
 ## External release gates
