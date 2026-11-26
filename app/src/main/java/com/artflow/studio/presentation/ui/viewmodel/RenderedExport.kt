@@ -36,6 +36,12 @@ internal suspend fun renderedExport(
     require(order.isNotEmpty()) { "No visible animated frames in the playback range" }
     val sourceFrames = order.distinct().associateWith { snapshot.frames[it] }
     val region = ExportRegion.resolve(sourceFrames.values.toList(), snapshot.selection, resolved.area)
+    // Feathering belongs to the completed stack. Applying it independently to overlapping layers
+    // produces a different alpha/color when another editor composites those layers again.
+    val renderedSelection =
+        resolved.area == ExportArea.SELECTION &&
+            (resolved.format == ExportFormat.PSD || resolved.format == ExportFormat.PROCREATE) &&
+            snapshot.selection?.coverage?.any { (it.toInt() and 0xFF) in 1..254 } == true
     if (region != null && !allFrames && !resolved.format.requiresAnimation) {
         exporter.checkStillMemory(
             sourceFrames.getValue(order.first()),
@@ -46,6 +52,7 @@ internal suspend fun renderedExport(
             snapshot.layerMasks,
             snapshot.materialMaps,
             region,
+            renderedSelection,
         )
     }
     val cropped = sourceFrames.mapValues { (_, pixels) -> ExportRegion.apply(pixels, snapshot.selection, resolved.area, region) }
@@ -74,6 +81,7 @@ internal suspend fun renderedExport(
                 snapshot.groups,
                 layerMasks,
                 snapshot.materialMaps,
+                renderedSelection,
             )
         }
     val is3dExport = resolved.format == ExportFormat.MODEL_OBJ || resolved.format == ExportFormat.MODEL_GLB

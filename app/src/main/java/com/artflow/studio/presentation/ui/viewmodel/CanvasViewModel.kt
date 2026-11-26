@@ -288,6 +288,8 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            exportController.reset()
+            canvasPreview.reset()
             recoveryController.onProjectOpening(projectId)
             imports.cancel()
             cancelText()
@@ -1533,11 +1535,24 @@ class CanvasViewModel
         /** The selection, ready to be baked into a new layer or used by a filter. */
         fun activeSelection(): SelectionMask? = canvasRepository.selection()
 
-        fun previewComposite() {
-            // Compositing happens in the canvas view; this exists so the export dialog can force a
-            // fresh composite before it opens with a thumbnail.
-            viewModelScope.launch(editorErrors) { canvasRepository.compositeBuffer() }
-        }
+        /** A bounded current-artwork preview; panel cancellation owns its suspended work. */
+        suspend fun exportPreview(
+            projectId: Long,
+            revision: Long,
+        ): ByteArray? =
+            try {
+                currentArtworkPreview(canvasRepository, projectId, revision, {
+                    currentProjectId == projectId && (_uiState.value as? CanvasUiState.Ready)?.projectId == projectId
+                })
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: IllegalArgumentException) {
+                Timber.w(failure, "Artwork preview unavailable")
+                null
+            } catch (failure: IllegalStateException) {
+                Timber.w(failure, "Artwork preview unavailable")
+                null
+            }
 
         fun palettesFor(category: String? = null): List<Palette> =
             if (category == null) _palettes.value else _palettes.value.filter { it.category == category }

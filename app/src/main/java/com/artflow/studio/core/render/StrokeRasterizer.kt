@@ -108,6 +108,7 @@ class StrokeRasterizer(
                 random = random,
                 canvas = target,
                 physicalPlane = physicalPlane,
+                physicalCoverage = if (physicalPlane == null) null else physicalCoverage(target, buffer, strokeAlpha, mask, alphaLock),
             )
             dual = params.dual?.let { drawDual(target, stroke, it, reach) }
             depositCoverage(
@@ -123,6 +124,21 @@ class StrokeRasterizer(
             scratchPool.release(buffer)
         }
     }
+
+    /** Physical paint must obey the same selection, alpha lock and opacity as its visible marks. */
+    private fun physicalCoverage(
+        canvas: PixelBuffer,
+        marks: PixelBuffer,
+        opacity: Float,
+        selection: SelectionMask?,
+        alphaLock: Boolean,
+    ): (Int, Int) -> Float =
+        { x, y ->
+            val mark = (marks.getSafe(x, y) ushr 24) / 255f
+            val selected = selection?.let { it.coverageAt(x, y) / 255f } ?: 1f
+            val existing = if (alphaLock) (canvas.getSafe(x, y) ushr 24) / 255f else 1f
+            mark * opacity * selected * existing
+        }
 
     /** How a stroke's coverage becomes paint on its layer. */
     private class Deposit(
@@ -449,6 +465,7 @@ class StrokeRasterizer(
         random: Random,
         canvas: PixelBuffer? = null,
         physicalPlane: PhysicalPaintPlane? = null,
+        physicalCoverage: ((Int, Int) -> Float)? = null,
     ) {
         if (canUseCapsule(params, points) && physicalPlane == null) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
@@ -460,7 +477,19 @@ class StrokeRasterizer(
             if (params.taperStart > 0f || params.taperEnd > 0f) stroke.calculateLength() else 0f
 
         val context =
-            DabContext(target, stroke, params, totalLength, alphaLock, mask, random, tipFor(params, random), canvas, physicalPlane)
+            DabContext(
+                target,
+                stroke,
+                params,
+                totalLength,
+                alphaLock,
+                mask,
+                random,
+                tipFor(params, random),
+                canvas,
+                physicalPlane,
+                physicalCoverage,
+            )
         val walk = DabWalk()
         walkSegments(context, points, 1, walk)
         stampEnd(context, points, walk)
@@ -609,6 +638,8 @@ class StrokeRasterizer(
         val canvas: PixelBuffer?,
         /** Optional sparse physical paint plane for watercolor wetness & 3D impasto ridges. */
         val physicalPlane: PhysicalPaintPlane? = null,
+        /** Visible stamp coverage; kept separate from scratch-buffer stamping restrictions. */
+        val physicalCoverage: ((Int, Int) -> Float)? = null,
     )
 
     private fun drawDabAt(
@@ -730,7 +761,9 @@ class StrokeRasterizer(
                         centerY = y + offsetY,
                         radius = radius,
                         waterAmount = params.waterAmount,
-                        pigmentLoad = dabOpacity,
+                        // The coverage callback already includes the stamp's flow and alpha.
+                        pigmentLoad = 1f,
+                        coverage = context.physicalCoverage,
                     )
                 }
                 if (params.impastoThickness > 0f) {
@@ -742,6 +775,7 @@ class StrokeRasterizer(
                         thickness = params.impastoThickness * pressure.coerceIn(0.2f, 1f),
                         dirX = dirX,
                         dirY = dirY,
+                        coverage = context.physicalCoverage,
                     )
                 }
             }

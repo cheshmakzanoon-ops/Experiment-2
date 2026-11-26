@@ -209,8 +209,21 @@ fun ExportSheet(
 
 @Composable
 private fun ExportPreview(bytes: ByteArray?) {
-    val bitmap = remember(bytes) { bytes?.let { BitmapPixelBridge.fromEncodedBytes(it) }?.let { BitmapPixelBridge.toBitmap(it) } }
-    DisposableEffect(bitmap) { onDispose { bitmap?.recycle() } }
+    val bitmap by produceState<android.graphics.Bitmap?>(null, bytes) {
+        value = null
+        var decoded: android.graphics.Bitmap? = null
+        var published = false
+        try {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                decoded = bytes?.let { BitmapPixelBridge.fromEncodedBytes(it) }?.let { BitmapPixelBridge.toBitmap(it) }
+            }
+            value = decoded
+            published = true
+            awaitDispose { decoded?.recycle() }
+        } finally {
+            if (!published) decoded?.recycle()
+        }
+    }
     bitmap?.let {
         Image(
             it.asImageBitmap(),
@@ -218,6 +231,7 @@ private fun ExportPreview(bytes: ByteArray?) {
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
         )
+        Text(stringResource(R.string.export_preview_description), style = MaterialTheme.typography.labelSmall)
     }
 }
 
@@ -337,12 +351,7 @@ private fun LabeledSlider(
 }
 
 /** Preview bytes for the export sheet: a scaled PNG of the flattened canvas. */
-fun previewBytesFor(buffer: com.artflow.studio.core.pixels.PixelBuffer?): ByteArray? {
-    if (buffer == null) return null
-    val (width, height) = CanvasOperations.fitInside(buffer.width, buffer.height, 512, 512)
-    val scaled = if (width == buffer.width && height == buffer.height) buffer else buffer.scaled(width, height)
-    return BitmapPixelBridge.toPngBytes(scaled)
-}
+fun previewBytesFor(buffer: com.artflow.studio.core.pixels.PixelBuffer?): ByteArray? = buffer?.let { ArtworkPreview.encode(it) }
 
 /** Human-readable frame timing summary, used by the animation export section. */
 fun frameSummary(frames: List<AnimationFrame>): String =

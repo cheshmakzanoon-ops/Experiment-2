@@ -166,6 +166,8 @@ import com.artflow.studio.presentation.ui.components.export.rememberExportAction
 import com.artflow.studio.presentation.ui.viewmodel.CanvasImportController
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
+import com.artflow.studio.presentation.ui.viewmodel.ExportUiState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -551,9 +553,14 @@ fun CanvasScreen(
         if (ready?.recoveryAvailable == true) showRecoveryDialog = true
     }
 
-    // Refresh the export preview whenever the canvas changes size or the export panel opens.
-    LaunchedEffect(panel, ready?.width, ready?.height) {
-        if (panel == EditorPanel.EXPORT) previewBytes = null
+    // A new edit, document or export cancels the previous preview and never displays stale bytes.
+    val exportRunning = exportState is ExportUiState.Running
+    LaunchedEffect(panel, projectId, ready?.projectId, contentRevision, ready?.recoveryAvailable, exportRunning) {
+        previewBytes = null
+        if (panel != EditorPanel.EXPORT || exportRunning) return@LaunchedEffect
+        if (ready == null || ready.projectId != projectId || ready.recoveryAvailable) return@LaunchedEffect
+        delay(EXPORT_PREVIEW_SETTLE_MS)
+        previewBytes = viewModel.exportPreview(projectId, contentRevision)
     }
 
     val dismissPanel = {
@@ -2453,6 +2460,8 @@ private fun ErrorState(
 
 /** Room the Page Assist strip takes along the bottom of the canvas. */
 private val PAGE_ASSIST_HEIGHT = 150.dp
+
+private const val EXPORT_PREVIEW_SETTLE_MS = 150L
 
 /** What the editor's Back handler closes, most specific first. */
 private enum class BackTarget { PANEL, CROP, OPACITY, QUICK_MENU, REFERENCE, FOCUS, LEAVE }

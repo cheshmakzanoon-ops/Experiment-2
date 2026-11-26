@@ -10,6 +10,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.domain.repository.canvas.SavedCanvas
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
@@ -26,7 +27,14 @@ internal class CanvasExportController(
     private val onDocumentSaved: suspend (SavedCanvas) -> Unit,
     private val onSaveFinished: suspend (SavedCanvas) -> Unit = {},
 ) {
+    private var generation = 0L
+    private var activeExport: Job? = null
+
+    /** A result and any suspended work belong to the document that started them. */
     fun reset() {
+        generation++
+        activeExport?.cancel()
+        activeExport = null
         state.value = ExportUiState.Idle
     }
 
@@ -80,34 +88,53 @@ internal class CanvasExportController(
         operation: suspend () -> Result<ExportResult>,
     ) {
         if (projectId == 0L || state.value is ExportUiState.Running) return
+        val request = ++generation
         state.value = ExportUiState.Running
-        scope.launch {
-            try {
-                state.value =
-                    operation().fold(
-                        onSuccess = { ExportUiState.Done(it) },
-                        onFailure = { ExportUiState.Failed(it.message ?: failureMessage) },
-                    )
-            } catch (cancelled: CancellationException) {
-                state.value = ExportUiState.Idle
-                throw cancelled
-            } catch (error: IOException) {
-                fail(error, failureMessage)
-            } catch (error: IllegalArgumentException) {
-                fail(error, failureMessage)
-            } catch (error: IllegalStateException) {
-                fail(error, failureMessage)
-            } catch (error: SecurityException) {
-                fail(error, failureMessage)
+        activeExport =
+            scope.launch {
+                try {
+                    if (!ownsResult(projectId, request)) return@launch
+                    val result =
+                        operation().fold(
+                            onSuccess = { ExportUiState.Done(it) },
+                            onFailure = { ExportUiState.Failed(it.message ?: failureMessage) },
+                        )
+                    publish(projectId, request, result)
+                } catch (cancelled: CancellationException) {
+                    publish(projectId, request, ExportUiState.Idle)
+                    throw cancelled
+                } catch (error: IOException) {
+                    fail(projectId, request, error, failureMessage)
+                } catch (error: IllegalArgumentException) {
+                    fail(projectId, request, error, failureMessage)
+                } catch (error: IllegalStateException) {
+                    fail(projectId, request, error, failureMessage)
+                } catch (error: SecurityException) {
+                    fail(projectId, request, error, failureMessage)
+                }
             }
-        }
+    }
+
+    private fun ownsResult(
+        projectId: Long,
+        request: Long,
+    ): Boolean = generation == request && currentProject().first == projectId
+
+    private fun publish(
+        projectId: Long,
+        request: Long,
+        result: ExportUiState,
+    ) {
+        if (ownsResult(projectId, request)) state.value = result
     }
 
     private fun fail(
+        projectId: Long,
+        request: Long,
         error: Exception,
         message: String,
     ) {
         Timber.e(error, message)
-        state.value = ExportUiState.Failed(error.message ?: message)
+        publish(projectId, request, ExportUiState.Failed(error.message ?: message))
     }
 }

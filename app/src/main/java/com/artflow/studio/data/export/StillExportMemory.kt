@@ -24,6 +24,7 @@ internal data class StillExportInput(
     val masks: Map<Long, PixelBuffer> = emptyMap(),
     val materials: Map<MaterialChannel, PixelBuffer> = emptyMap(),
     val crop: IntBounds? = null,
+    val renderedSelection: Boolean = false,
 )
 
 /**
@@ -204,6 +205,7 @@ internal object StillExportMemory {
             budget.temporary(deferredMaskWorkspace)
             val rendered =
                 input.hasAdjustmentLayers ||
+                    input.renderedSelection ||
                     resizedMasks ||
                     if (psd) {
                         input.layers.any { it.layer.blendContract == LayerBlendContract.PROCREATE_DARKEN_19 }

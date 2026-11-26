@@ -35,6 +35,17 @@ class CanvasPreviewController(
 
     private var pendingMode: Mode? = null
 
+    /** Drop the previous artwork immediately and invalidate its queued or suspended renders. */
+    fun reset() {
+        generation++
+        growing = false
+        pendingMode = null
+        _preview.value = null
+        _materialMaps.value = emptyMap()
+        // Keep one worker: a slow old render must finish before another full-size render begins.
+        // Its ownership checks below prevent it from publishing or starting further material work.
+    }
+
     /** Ordinary Reference updates retain the existing settle delay. */
     fun refresh() {
         submit(Mode.SETTLED)
@@ -66,7 +77,7 @@ class CanvasPreviewController(
         if (shouldIncrement) generation++
         growing = effectiveMode == Mode.PROVISIONAL
         pendingMode = effectiveMode
-        requests.trySend(Request(effectiveMode, generation))
+        requests.trySend(Request(effectiveMode, generation, repository.contentRevision, repository.activeFrameIndex()))
         if (worker?.isActive == true) return
         worker = scope.launch { processRequests() }
     }
@@ -80,32 +91,45 @@ class CanvasPreviewController(
             if (pendingMode == request.mode) {
                 pendingMode = null
             }
-            if (request.generation != generation && request.mode == Mode.PROVISIONAL) continue
-            val frame =
-                if (request.mode == Mode.PROVISIONAL) {
-                    repository.compositePreview()
-                } else {
-                    repository.compositeFrame(repository.activeFrameIndex())
-                }
-            if (frame != null) {
-                val preview = withContext(renderDispatcher) { shrink(frame) }
-                if (request.mode != Mode.PROVISIONAL || request.generation == generation) {
-                    _preview.value = preview
-                }
-            }
-            val maps = mutableMapOf<MaterialChannel, PixelBuffer>()
-            MaterialChannel.entries.filter { it.isScalar }.forEach { channel ->
-                repository.compositeMaterial(channel, request.mode == Mode.PROVISIONAL)?.let { pixels ->
-                    maps[channel] = withContext(renderDispatcher) { shrink(pixels) }
-                }
-            }
-            if (request.mode != Mode.PROVISIONAL || request.generation == generation) {
-                _materialMaps.value = maps
-            }
-            // One serial worker bounds raster work; a burst of moves retains only the latest request.
-            if (request.mode == Mode.PROVISIONAL && request.generation == generation) delay(PROVISIONAL_INTERVAL_MS)
+            renderAndPublish(request)
         }
     }
+
+    private suspend fun renderAndPublish(request: Request) {
+        if (!isCurrent(request)) return
+        val frame =
+            if (request.mode == Mode.PROVISIONAL) {
+                repository.compositePreview()
+            } else {
+                repository.compositeFrame(request.frameIndex)
+            }
+        if (!isCurrent(request)) return
+        val preview = frame?.let { withContext(renderDispatcher) { shrink(it) } }
+        val maps = renderMaterials(request) ?: return
+        if (!isCurrent(request)) return
+        // Color and material outputs must all belong to this same frame/revision. Holding
+        // color until material rendering completes avoids showing a partly stale model.
+        _preview.value = preview
+        _materialMaps.value = maps
+        // One serial worker bounds raster work; a burst of moves retains only the latest request.
+        if (request.mode == Mode.PROVISIONAL && request.generation == generation) delay(PROVISIONAL_INTERVAL_MS)
+    }
+
+    private suspend fun renderMaterials(request: Request): Map<MaterialChannel, PixelBuffer>? {
+        val maps = mutableMapOf<MaterialChannel, PixelBuffer>()
+        for (channel in MaterialChannel.entries.filter { it.isScalar }) {
+            if (!isCurrent(request)) return null
+            val pixels = repository.compositeMaterial(channel, request.mode == Mode.PROVISIONAL)
+            if (!isCurrent(request)) return null
+            if (pixels != null) maps[channel] = withContext(renderDispatcher) { shrink(pixels) }
+        }
+        return maps
+    }
+
+    private fun isCurrent(request: Request): Boolean =
+        request.generation == generation &&
+            request.revision == repository.contentRevision &&
+            request.frameIndex == repository.activeFrameIndex()
 
     private fun shrink(source: PixelBuffer): PixelBuffer {
         val factor = SIZE.toFloat() / max(source.width, source.height)
@@ -127,5 +151,7 @@ class CanvasPreviewController(
     private data class Request(
         val mode: Mode,
         val generation: Long,
+        val revision: Long,
+        val frameIndex: Int,
     )
 }

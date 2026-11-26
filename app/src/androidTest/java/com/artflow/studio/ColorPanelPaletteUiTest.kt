@@ -6,15 +6,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -101,6 +105,7 @@ class ColorPanelPaletteUiTest {
 
                 val redSwatch = context.getString(R.string.palettes_swatch, ColorHarmony.toHex(RED))
                 compose.onNodeWithContentDescription(redSwatch).performScrollTo().performTouchInput { longClick() }
+                compose.onNodeWithText("Remove swatch").performClick()
                 compose.waitUntil(5_000) { snackbar.currentSnackbarData?.visuals?.message == RETRY_MESSAGE }
                 compose.onNodeWithText(RETRY_MESSAGE).assertIsDisplayed()
                 assertEquals(
@@ -117,6 +122,7 @@ class ColorPanelPaletteUiTest {
                     displayed.value = repository.current().customPalettes.single()
                 }
                 compose.onNodeWithContentDescription(redSwatch).performScrollTo().performTouchInput { longClick() }
+                compose.onNodeWithText("Remove swatch").performClick()
                 awaitColors(repository, listOf(BLUE, GREEN, BLACK))
                 repository.removePalette(initial.id)
                 compose.onNodeWithContentDescription(ADD_COLOR).performScrollTo().performClick()
@@ -134,6 +140,90 @@ class ColorPanelPaletteUiTest {
                 database.close()
             }
         }
+
+    @Test
+    fun paletteManagementCommandsPersistThroughTheActualPanel() =
+        runBlocking {
+            val context = ApplicationProvider.getApplicationContext<Context>()
+            val database = Room.inMemoryDatabaseBuilder(context, ArtFlowDatabase::class.java).build()
+            val repository = SettingsRepositoryImpl(database.settingsDao())
+            val editorJob = SupervisorJob()
+            val scope = CoroutineScope(editorJob + Dispatchers.Main.immediate)
+            val failures = mutableListOf<Throwable>()
+            try {
+                val initial = Palette(id = 31, name = "Working", colors = listOf(RED, BLUE))
+                repository.addPalette(initial)
+                val currentColor = mutableIntStateOf(GREEN)
+                val actions = PaletteActions(repository, scope, CoroutineExceptionHandler { _, error -> failures += error }) {}
+                compose.setContent {
+                    val preferences by repository.settings.collectAsState(initial = repository.current())
+                    MaterialTheme {
+                        ColorPanel(
+                            color = currentColor.intValue,
+                            recentColors = emptyList(),
+                            palettes = preferences.customPalettes,
+                            onColorSelected = { currentColor.intValue = it },
+                            onClearRecents = {},
+                            onSavePalette = actions::addFromColors,
+                            palettesEdit = PaletteEdits.from(actions, defaultName = preferences.defaultPaletteName),
+                        )
+                    }
+                }
+                compose.onNodeWithText("Palettes").performScrollTo().performClick()
+                compose.onNodeWithContentDescription("Set Working as default").performScrollTo().performClick()
+                compose.waitUntil(5_000) { repository.current().defaultPaletteName == "Working" }
+                paletteCommand("Working", "Rename")
+                enterPaletteName("Study")
+                compose.waitUntil(5_000) {
+                    repository
+                        .current()
+                        .customPalettes
+                        .single()
+                        .name == "Study"
+                }
+                assertEquals("Study", repository.current().defaultPaletteName)
+
+                val redSwatch = context.getString(R.string.palettes_swatch, ColorHarmony.toHex(RED))
+                compose.onNodeWithContentDescription(redSwatch).performScrollTo().performTouchInput { longClick() }
+                compose.onNodeWithText("Replace with the current colour").performClick()
+                awaitColors(repository, listOf(GREEN, BLUE))
+                paletteCommand("Study", "Duplicate")
+                compose.waitUntil(5_000) { repository.current().customPalettes.size == 2 }
+                val copied = repository.current().customPalettes.first()
+                assertEquals("Study copy", copied.name)
+                assertEquals(listOf(GREEN, BLUE), copied.colors)
+                assertTrue(copied.id != initial.id)
+                assertEquals("Study copy", repository.current().defaultPaletteName)
+
+                paletteCommand("Study copy", "Delete")
+                compose.waitUntil(5_000) { repository.current().customPalettes.size == 1 }
+                assertEquals("", repository.current().defaultPaletteName)
+                compose.onNodeWithText("New palette").performScrollTo().performClick()
+                enterPaletteName("Sky")
+                compose.waitUntil(5_000) { repository.current().customPalettes.size == 2 }
+                val reopened = SettingsRepositoryImpl(database.settingsDao()).settings.first()
+                assertEquals("Sky", reopened.defaultPaletteName)
+                assertEquals(listOf("Sky", "Study"), reopened.customPalettes.map { it.name })
+                assertEquals(listOf(emptyList<Int>(), listOf(GREEN, BLUE)), reopened.customPalettes.map { it.colors })
+                assertTrue(failures.toString(), failures.isEmpty())
+            } finally {
+                editorJob.cancelAndJoin()
+                database.close()
+            }
+        }
+
+    private fun paletteCommand(
+        name: String,
+        command: String,
+    ) {
+        compose.onNodeWithContentDescription("Palette actions for $name").performScrollTo().performClick()
+        compose.onNodeWithText(command).performClick()
+    }
+
+    private fun enterPaletteName(name: String) {
+        compose.onNode(hasSetTextAction()).performTextReplacement(name)
+        compose.onNodeWithText("OK").performClick()
+    }
 
     private fun awaitColors(
         repository: SettingsRepositoryImpl,

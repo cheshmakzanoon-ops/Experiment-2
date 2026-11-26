@@ -84,7 +84,7 @@ interface SettingsRepository {
     /** Adds a separate palette, choosing an unused identity if the requested id already exists. */
     suspend fun addPalette(palette: Palette)
 
-    /** Creates and optionally moves the new palette to the front in the same durable update. */
+    /** Creates and optionally selects the new default palette in the same durable update. */
     suspend fun addPalette(
         palette: Palette,
         makeDefault: Boolean,
@@ -97,7 +97,7 @@ interface SettingsRepository {
         name: String,
     )
 
-    /** Replaces the palette with the same id where it stands (or adds it); [makeDefault] moves it to the front. */
+    /** Replaces the palette with the same id where it stands (or adds it); [makeDefault] selects it and moves it to the front. */
     suspend fun updatePalette(
         palette: Palette,
         makeDefault: Boolean = false,

@@ -36,7 +36,7 @@
     <string name="export_timelapse_body">Export an MP4 replay of recorded snapshots. Time-lapse Recording must be on to capture new frames. Quick edits can share a frame, and long recordings keep fewer frames.</string>
     <string name="export_timelapse_action">Export time-lapse</string>
     <string name="export_timelapse_clear">Clear recording</string>
-    <string name="export_preview_description">Export preview</string>
+    <string name="export_preview_description">Current artwork preview</string>
     <string name="export_quality">Quality</string>
     <string name="export_dpi">DPI</string>
     <string name="export_pdf_page">PDF page</string>

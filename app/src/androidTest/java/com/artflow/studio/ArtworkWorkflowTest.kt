@@ -201,12 +201,12 @@ class ArtworkWorkflowTest {
 
     private fun assertStudioPreset(name: String) {
         compose.onNodeWithText("Search brushes").performTextReplacement(name)
-        compose.onNode(hasText(name) and hasClickAction()).assertIsSelected()
+        compose.onNode(studioPreset(name)).assertIsSelected()
     }
 
     private fun selectStudioPreset(name: String) {
         compose.onNodeWithText("Search brushes").performTextReplacement(name)
-        compose.onNode(hasText(name) and hasClickAction()).performClick().assertIsSelected()
+        compose.onNode(studioPreset(name)).performClick().assertIsSelected()
         compose.onNodeWithText("Search brushes").assertIsNotFocused()
         // Selecting a preset dismisses the IME and repositions this Dialog on small phones.
         // Compose idleness alone does not wait for that platform window transition: an immediate
@@ -223,6 +223,10 @@ class ArtworkWorkflowTest {
         }
         compose.waitForIdle()
     }
+
+    /** The search field contains the same text; only a brush choice has the RadioButton role. */
+    private fun studioPreset(name: String): SemanticsMatcher =
+        hasText(name) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
 
     /**
      * Exercise one physical touch through the Android window, retaining the event route and geometry.

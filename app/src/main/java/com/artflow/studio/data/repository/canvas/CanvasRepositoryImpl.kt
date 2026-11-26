@@ -23,6 +23,7 @@ import com.artflow.studio.core.render.LayerGroups
 import com.artflow.studio.core.render.LayerStrokeRenderer
 import com.artflow.studio.core.render.PhysicalPaintEngine
 import com.artflow.studio.core.render.PhysicalPaintPlane
+import com.artflow.studio.core.render.PhysicalPaintSnapshot
 import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.render.TileCache
 import com.artflow.studio.core.symmetry.SymmetryEngine
@@ -351,6 +352,7 @@ class CanvasRepositoryImpl
             height: Int,
             dpi: Int,
         ): CanvasState? {
+            var primaryLoadFailed = false
             val loaded =
                 try {
                     loadCanvas(projectId)
@@ -360,7 +362,10 @@ class CanvasRepositoryImpl
                     // The saved generation is unreadable. If a recovery generation exists it must stay
                     // reachable: open the same protected placeholder used when no saved document exists, so
                     // the recovery prompt is offered and save/export cannot overwrite the only healthy copy.
-                    if (!storage.hasUnsavedRecovery(projectId)) throw primaryFailure
+                    // Metadata timestamps cannot decide whether recovery is needed after a missing or
+                    // undecodable raster has already made the saved generation unusable.
+                    if (!storage.hasAutosave(projectId)) throw primaryFailure
+                    primaryLoadFailed = true
                     Timber.w(primaryFailure, "Saved generation of project %d is unreadable; offering its recovery", projectId)
                     null
                 }
@@ -370,7 +375,9 @@ class CanvasRepositoryImpl
                 currentProjectId = projectId
                 // A crash can leave the first autosave before any explicit document exists.
                 // The blank fallback must not authorize save/export to discard that only copy.
-                if (storage.hasUnsavedRecovery(projectId)) {
+                val recoveryAvailable =
+                    if (primaryLoadFailed) storage.hasAutosave(projectId) else storage.hasUnsavedRecovery(projectId)
+                if (recoveryAvailable) {
                     unresolvedRecoveryProjects.add(projectId)
                 } else {
                     unresolvedRecoveryProjects.remove(projectId)
@@ -394,10 +401,11 @@ class CanvasRepositoryImpl
                 stateSnapshot()
             }
 
-        override suspend fun hasRecovery(projectId: Long): Boolean = storage.hasUnsavedRecovery(projectId)
+        override suspend fun hasRecovery(projectId: Long): Boolean =
+            hasUnresolvedRecovery(projectId) || storage.hasUnsavedRecovery(projectId)
 
         override suspend fun hasUnresolvedRecovery(projectId: Long): Boolean =
-            projectId in unresolvedRecoveryProjects && storage.hasUnsavedRecovery(projectId)
+            projectId in unresolvedRecoveryProjects && storage.hasAutosave(projectId)
 
         override suspend fun recoverAutosave(projectId: Long): CanvasState? =
             withState {
@@ -1139,6 +1147,14 @@ class CanvasRepositoryImpl
         override suspend fun layerPixels(layerId: Long): PixelBuffer? =
             withState { layerById(layerId)?.let { rawLayerPixels(it, canvasWidth, canvasHeight)?.copy() } }
 
+        override suspend fun physicalPaintSource(layerId: Long): PhysicalPaintSnapshot =
+            withState { layerById(layerId)?.let(::retainPhysicalSource) ?: PhysicalPaintSnapshot.EMPTY }
+
+        private fun retainPhysicalSource(layer: LayerData): PhysicalPaintSnapshot {
+            layer.physicalPlaneOwned = false
+            return PhysicalPaintSnapshot(layer.physicalPlane, rasterBudget.heapBytes / 3)
+        }
+
         override suspend fun layerAt(
             x: Int,
             y: Int,
@@ -1172,7 +1188,15 @@ class CanvasRepositoryImpl
                     return@withState null
                 }
                 val buffer = rawLayerPixels(layer, canvasWidth, canvasHeight)?.copy() ?: PixelBuffer(canvasWidth, canvasHeight)
-                val session = CanvasRepository.RasterEditSession(layerId, buffer, ++rasterEditToken, editRevision, layer.isAlphaLocked)
+                val session =
+                    CanvasRepository.RasterEditSession(
+                        layerId,
+                        buffer,
+                        ++rasterEditToken,
+                        editRevision,
+                        layer.isAlphaLocked,
+                        retainPhysicalSource(layer),
+                    )
                 pendingEdits[session.snapshotToken] = PendingEdit(currentProjectId, layer, layer.raster, layer.strokes.toList(), session)
                 session
             }
@@ -1192,6 +1216,13 @@ class CanvasRepositoryImpl
                 val layers = sessions.map { takeCommittable(it) }
                 if (!unchanged || sessions.isEmpty() || layers.any { it == null }) return@withState false
                 if (!canRasterize(layers.filterNotNull())) return@withState false
+                val physicalDelta =
+                    sessions.zip(layers.filterNotNull()).sumOf { (session, layer) ->
+                        val changed = session.transformedPhysical ?: return@sumOf 0
+                        physicalPlaneEquivalents(changed.plane) - physicalPlaneEquivalents(layer)
+                    }
+                val prospective = retainedRasterPlanes() + newRasterPlanes(layers.filterNotNull()) + physicalDelta
+                if (!rasterBudget.allows(canvasWidth, canvasHeight, prospective)) return@withState false
                 // A session is provisional until here: cancellation cannot remove someone else's undo
                 // entry, and autosave/export can never publish half a drag or a failed tool operation.
                 pushUndo()
@@ -1199,6 +1230,12 @@ class CanvasRepositoryImpl
                     layer.raster = session.buffer.copy()
                     layer.strokes.clear()
                     layer.rasterFile = null
+                    session.transformedPhysical?.let {
+                        layer.physicalPlane = it.plane
+                        layer.physicalPaintFile = null
+                        // The transform retains this immutable source for Reset and later placement.
+                        layer.physicalPlaneOwned = false
+                    }
                     reconcilePhysicalPlane(layer)
                     dirtyRasters += layer.id
                 }
@@ -1221,6 +1258,7 @@ class CanvasRepositoryImpl
                     layer.raster === pending.original &&
                     layer.canPaint() &&
                     layer.strokes == pending.originalStrokes &&
+                    (session.transformedPhysical == null || layer.physicalPlane === session.physicalSource.plane) &&
                     layer.isAlphaLocked == session.alphaLocked &&
                     session.buffer.width == canvasWidth &&
                     session.buffer.height == canvasHeight
@@ -3498,6 +3536,10 @@ class CanvasRepositoryImpl
                     layer.snapshotCopy().also { copy ->
                         pendingEdits.values.firstOrNull { provisional && it.layer === layer }?.let { pending ->
                             copy.raster = pending.session.buffer.copy()
+                            if (pending.session.geometricPreview) {
+                                // Never light the moved pixels with an unmoved physical plane.
+                                copy.physicalPlane = pending.session.transformedPhysical?.plane
+                            }
                         }
                     }
                 }
@@ -4351,8 +4393,10 @@ class CanvasRepositoryImpl
          * A dense physical plane keeps three float arrays per pixel, three times a colour plane. Count the
          * allocated tiles in colour-plane units so watercolor and impasto layers cannot exceed the budget unseen.
          */
-        private fun physicalPlaneEquivalents(layer: LayerData): Int {
-            val bytes = layer.physicalPlane?.estimatedBytes() ?: return 0
+        private fun physicalPlaneEquivalents(layer: LayerData): Int = physicalPlaneEquivalents(layer.physicalPlane)
+
+        private fun physicalPlaneEquivalents(plane: PhysicalPaintPlane?): Int {
+            val bytes = plane?.estimatedBytes() ?: return 0
             val colourPlane = canvasWidth.toLong() * canvasHeight * Int.SIZE_BYTES
             return ((bytes + colourPlane - 1) / colourPlane).toInt()
         }

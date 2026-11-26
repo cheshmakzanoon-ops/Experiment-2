@@ -175,7 +175,9 @@ class PaletteIdentitySafetyTest {
             runCurrent()
 
             assertTrue(failures.toString(), failures.isEmpty())
-            assertEquals(listOf(edited, first), SettingsRepositoryImpl(dao).settings.first().customPalettes)
+            val reopened = SettingsRepositoryImpl(dao).settings.first()
+            assertEquals(listOf(edited, first), reopened.customPalettes)
+            assertEquals("Renamed", reopened.defaultPaletteName)
         }
 
     @Test

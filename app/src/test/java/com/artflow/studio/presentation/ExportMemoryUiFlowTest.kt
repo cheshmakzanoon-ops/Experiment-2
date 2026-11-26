@@ -57,6 +57,36 @@ class ExportMemoryUiFlowTest {
     @Test
     fun selectedCropThrownFailureReportsMemoryAndAllowsSmallerRetry() = refusalRetry(selected = true)
 
+    @Test
+    fun openingAnotherArtworkClearsTheOldResultAndPreservesItsExportedFile() =
+        runTest {
+            Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+            val fixture = Fixture(temporary.newFolder("files"))
+            try {
+                fixture.open()
+                fixture.viewModel.export(ExportOptions(ExportFormat.TIFF))
+                val previous = await { fixture.viewModel.exportState.first { it is ExportUiState.Done || it is ExportUiState.Failed } }
+                assertTrue(previous.toString(), previous is ExportUiState.Done)
+                val previousFile = File((previous as ExportUiState.Done).result.filePath)
+                val previousBytes = previousFile.readBytes()
+
+                fixture.viewModel.open(OTHER_PROJECT)
+                assertEquals(ExportUiState.Idle, fixture.viewModel.exportState.value)
+                val opened = await { fixture.viewModel.uiState.first { it is CanvasUiState.Ready || it is CanvasUiState.Error } }
+                assertTrue(opened.toString(), opened is CanvasUiState.Ready)
+                assertEquals(OTHER_PROJECT, (opened as CanvasUiState.Ready).projectId)
+
+                fixture.viewModel.export(ExportOptions(ExportFormat.TIFF))
+                val next = await { fixture.viewModel.exportState.first { it is ExportUiState.Done || it is ExportUiState.Failed } }
+                assertTrue(next.toString(), next is ExportUiState.Done)
+                assertFalse(previousFile.path == (next as ExportUiState.Done).result.filePath)
+                assertArrayEquals(previousBytes, previousFile.readBytes())
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     private fun refusalRetry(selected: Boolean) =
         runTest {
             Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -183,7 +213,8 @@ class ExportMemoryUiFlowTest {
         private val projects =
             object : ProjectRepository by mock(ProjectRepository::class.java) {
                 override suspend fun getProjectById(projectId: Long): Project? =
-                    Project(PROJECT, "Memory review", "", null, 16, 16, 72, 1L, 1L).takeIf { it.id == projectId }
+                    Project(projectId, "Memory review", "", null, 16, 16, 72, 1L, 1L)
+                        .takeIf { projectId == PROJECT || projectId == OTHER_PROJECT }
             }
         private val settings =
             mock(SettingsRepository::class.java).also {
@@ -237,6 +268,7 @@ class ExportMemoryUiFlowTest {
 
     private companion object {
         const val PROJECT = 17L
+        const val OTHER_PROJECT = 18L
         const val INK = 0xFF235A91.toInt()
 
         suspend fun <T> await(block: suspend () -> T): T = withContext(Dispatchers.Default) { withTimeout(5_000L) { block() } }

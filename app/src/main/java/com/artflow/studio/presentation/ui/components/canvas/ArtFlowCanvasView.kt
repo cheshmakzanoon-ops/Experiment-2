@@ -54,6 +54,7 @@ import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
 import com.artflow.studio.core.pixels.combine
 import com.artflow.studio.core.render.BrushPatch
+import com.artflow.studio.core.render.PhysicalPaintSnapshot
 import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
@@ -1163,6 +1164,7 @@ class ArtFlowCanvasView
             var revision: Long,
             /** Layers multi-selected in the Layers panel, moving with this one. */
             val companions: List<TransformCompanions.Layer> = emptyList(),
+            val physicalSource: PhysicalPaintSnapshot = PhysicalPaintSnapshot.EMPTY,
         ) {
             /** Control points while warping; null keeps the plain [quad] placement. */
             var mesh: WarpMesh? = null
@@ -1240,6 +1242,7 @@ class ArtFlowCanvasView
             coroutineScope.launch {
                 val revision = canvasRepository.contentRevision
                 val pixels = canvasRepository.layerPixels(layerId)
+                val physical = canvasRepository.physicalPaintSource(layerId)
                 val extra = companions.load(canvasRepository, layerId, selection)
                 if (extra == null) {
                     clearTransformSession()
@@ -1258,7 +1261,7 @@ class ArtFlowCanvasView
                 }
                 val size = canvasRepository.getCanvasSize()
                 val base = pixels ?: PixelBuffer(size.width, size.height)
-                val session = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra)
+                val session = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra, physical)
                 transformSession = session
                 publishTransformQuad()
                 onReady?.invoke(session)
@@ -1285,7 +1288,17 @@ class ArtFlowCanvasView
                     return false
                 }
                 val revision = canvasRepository.contentRevision
-                current = TransformSession(layerId, base, selection, bounds, Quad.fromBounds(bounds), revision, extra)
+                current =
+                    TransformSession(
+                        layerId,
+                        base,
+                        selection,
+                        bounds,
+                        Quad.fromBounds(bounds),
+                        revision,
+                        extra,
+                        rasterSession?.physicalSource ?: PhysicalPaintSnapshot.EMPTY,
+                    )
                 transformSession = current
             }
             if (!companions.open(canvasRepository, current.companions)) return false
@@ -1349,8 +1362,18 @@ class ArtFlowCanvasView
                             return@launch
                         }
                         val ids = listOf(session.layerId) + session.companions.map { it.layerId }
+                        PhysicalPaintSnapshot.requireTransformCapacity(
+                            listOf(session.physicalSource) + session.companions.map { it.physicalSource },
+                        )
                         val placed =
-                            canvasRepository.applyRasterEdits(ids, "Transform") { id, buffer ->
+                            canvasRepository.applyRasterEdits(ids, "Transform", preparePhysical = { edit ->
+                                val companion = session.companions.firstOrNull { it.layerId == edit.layerId }
+                                val source = companion?.physicalSource ?: session.physicalSource
+                                val selection = if (companion == null) session.selection else null
+                                edit.transformPhysical(source, selection) { packed, placed ->
+                                    TransformQuad.renderShape(packed, placed, session.bounds, quad, mesh, null, interpolation)
+                                }
+                            }) { id, buffer ->
                                 val companion = session.companions.firstOrNull { it.layerId == id }
                                 val source = if (companion == null) session.base else companion.base
                                 val selection = if (companion == null) session.selection else null
@@ -2787,8 +2810,8 @@ class ArtFlowCanvasView
             cancelPixelInteraction()
             if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) {
                 val layer = canvasRepository.getActiveLayer()
-                if (canvasRepository.selection() != null || layer?.hasMask() == true) {
-                    onStatusMessage?.invoke("Deselect before moving whole layers. For masks, use Whole-layer transform in Tool options.")
+                if (layer?.hasMask() == true) {
+                    onStatusMessage?.invoke("For masks, use Whole-layer transform in Tool options.")
                     return
                 }
             }
@@ -2806,6 +2829,7 @@ class ArtFlowCanvasView
             healingSession = null
             liquifySession = null
             moveStart = x to y
+            moveDelta = 0 to 0
             transformPreviewQuad = null
 
             val layerId = activeLayerId
@@ -2826,6 +2850,7 @@ class ArtFlowCanvasView
                         return@launch
                     }
                     rasterSession = session
+                    if (tool == ToolType.MOVE || tool == ToolType.TRANSFORM) session.markGeometricPreview()
                     rasterBase = session.buffer.copy()
                     if (tool == ToolType.TRANSFORM && !beginTransformGesture(session.layerId, x, y, gestureSelection)) {
                         canvasRepository.cancelRasterEdit(session)
@@ -2868,6 +2893,11 @@ class ArtFlowCanvasView
                     // These tools report exactly what each sample changed, so previews redraw only that.
                     if (tool in DAMAGE_TRACKED_TOOLS) canvasRepository.trackPreviewDamage(session)
                     rasterBuffer = session.buffer
+                    // Retouch tools stamp on DOWN, including a tap released while the source is
+                    // still being captured. Their sessions ignore duplicate stationary samples.
+                    if (tool == ToolType.CLONE_STAMP || tool == ToolType.HEALING) {
+                        applyPixelSample(x, y, pressure, tilt, orientation)
+                    }
                     drainPendingSamples()
                     if (pendingPixelCommit) commitPixelGesture(cancelled = pendingPixelCancel)
                 }
@@ -3042,6 +3072,7 @@ class ArtFlowCanvasView
                     val base = rasterBase ?: return
                     val dx = (x - moveOriginX()).roundToInt()
                     val dy = (y - moveOriginY()).roundToInt()
+                    moveDelta = dx to dy
                     val selection = moveSelection
                     if (selection == null) {
                         buffer.clear()
@@ -3127,6 +3158,7 @@ class ArtFlowCanvasView
         private fun moveOriginY(): Float = moveStart.second
 
         private var moveStart: Pair<Float, Float> = 0f to 0f
+        private var moveDelta: Pair<Int, Int> = 0 to 0
 
         /** Selection in force when a Move gesture began; null moves the whole layer. */
         private var moveSelection: SelectionMask? = null
@@ -3153,6 +3185,8 @@ class ArtFlowCanvasView
             val finalQuad = transformPreviewQuad.takeIf { pixelTool == ToolType.TRANSFORM }
             val finalMesh = transformPreviewMesh.takeIf { pixelTool == ToolType.TRANSFORM }
             val transform = transformSession.takeIf { finalQuad != null || finalMesh != null }
+            val moved = moveDelta.takeIf { pixelTool == ToolType.MOVE }
+            val movedSelection = moveSelection
             val interpolation = input.transformInterpolation
             transformPreviewQuad = null
             transformPreviewMesh = null
@@ -3179,6 +3213,9 @@ class ArtFlowCanvasView
                         if (transform != null) {
                             // Previews are throttled and nearest-neighbour; commit the exact final placement.
                             withContext(Dispatchers.Default) {
+                                PhysicalPaintSnapshot.requireTransformCapacity(
+                                    listOf(transform.physicalSource) + transform.companions.map { it.physicalSource },
+                                )
                                 val quad = finalQuad ?: transform.quad
                                 TransformQuad.renderShape(
                                     transform.base,
@@ -3190,6 +3227,32 @@ class ArtFlowCanvasView
                                     interpolation,
                                 )
                                 companions.render(transform.bounds, quad, finalMesh, interpolation)
+                                session.transformPhysical(transform.physicalSource, transform.selection) { packed, placed ->
+                                    TransformQuad.renderShape(
+                                        packed,
+                                        placed,
+                                        transform.bounds,
+                                        quad,
+                                        finalMesh,
+                                        null,
+                                        interpolation,
+                                    )
+                                }
+                                companions.transformPhysical(transform.bounds, quad, finalMesh, interpolation)
+                            }
+                        }
+                        if (moved != null) {
+                            withContext(Dispatchers.Default) {
+                                PhysicalPaintSnapshot.requireTransformCapacity(
+                                    (listOf(session) + companions.sessions).map { it.physicalSource },
+                                )
+                                val params = LayerTransform.Params(0f, 0f, moved.first.toFloat(), moved.second.toFloat())
+                                session.transformPhysical(selection = movedSelection) { packed, placed ->
+                                    LayerTransform.render(packed, placed, params)
+                                }
+                                companions.sessions.forEach { extra ->
+                                    extra.transformPhysical { packed, placed -> LayerTransform.render(packed, placed, params) }
+                                }
                             }
                         }
                         if (finalLiquify != null && original != null) {
@@ -3206,7 +3269,9 @@ class ArtFlowCanvasView
                         val changed =
                             original == null ||
                                 withContext(Dispatchers.Default) {
-                                    !original.pixels.contentEquals(session.buffer.pixels) || companions.hasChanges()
+                                    !original.pixels.contentEquals(session.buffer.pixels) ||
+                                        session.physicalPaintChanged ||
+                                        companions.hasChanges()
                                 }
                         if (changed) {
                             if (canvasRepository.commitRasterEdits(group, description)) {

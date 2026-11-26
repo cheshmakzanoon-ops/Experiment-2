@@ -25,6 +25,7 @@ object StrokeReach {
     private const val SIZE_PER_SPEED = 0.5f
     private const val IMAGE_TIP_CORNER = 1.4143f
     private const val SCATTER_DIAGONAL = 0.7072f
+    private const val LONGITUDINAL_SCATTER = 0.5f
     private const val COUNT_SPREAD = 0.25f
     private const val MIN_RADIUS = 0.35f
     private const val MAX_SCATTER = 4f
@@ -37,6 +38,14 @@ object StrokeReach {
                 (1f + SIZE_PER_SPEED * (-params.velocityToSize).coerceAtLeast(0f))
         val radius = max(MIN_RADIUS, max(params.size, 1f) * growth / 2f) * if (params.shapeId != null) IMAGE_TIP_CORNER else 1f
         val scatter = params.scatter.coerceIn(0f, MAX_SCATTER) * params.size * SCATTER_DIAGONAL
+        // Imported longitudinal jitter is added to the ordinary two-axis scatter, not substituted
+        // for it. Omission here clips committed marks and leaves the live scratch buffer uncleared.
+        val longitudinal =
+            if ("dynamicsPressurePlotJitterLongitudinalCurve" in params.importedAuxiliaryCurves) {
+                params.scatter.coerceIn(0f, MAX_SCATTER) * params.size * LONGITUDINAL_SCATTER
+            } else {
+                0f
+            }
         val spread = if (params.count > 1) params.size * COUNT_SPREAD else 0f
         // Wet mix reads the canvas up to a pulled distance behind a dab and up to a blur radius around it.
         val canvasRead =
@@ -45,7 +54,7 @@ object StrokeReach {
                     params.wetPull.coerceIn(0f, 1f) * PULL_SIZES +
                         params.wetBlur.coerceIn(0f, 1f) * BLUR_SIZES * (1f + params.wetBlurJitter.coerceIn(0f, 1f))
                 )
-        return max(radius + scatter + spread + canvasRead, params.dual?.let { of(it.params) } ?: 0f)
+        return max(radius + scatter + longitudinal + spread + canvasRead, params.dual?.let { of(it.params) } ?: 0f)
     }
 
     /** Pixels of a [width] × [height] buffer that [points] painted with [params] can reach; may be empty. */

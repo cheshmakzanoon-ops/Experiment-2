@@ -135,13 +135,40 @@ class RenderedProcreateMaskExportTest {
                 SelectionMask(8, 6, ByteArray(48) { if (it % 8 in 2..5 && it / 8 in 1..4) 128.toByte() else 0 }),
             )
             val (result, document) = export(ExportOptions(format = ExportFormat.PROCREATE, area = ExportArea.SELECTION))
-            assertNull(result.warning)
+            assertTrue(requireNotNull(result.warning).contains("feathered selection coverage"))
             assertEquals(4, document.width)
             assertEquals(4, document.height)
-            val layer = document.layers().single()
+            val layer = document.layers().single { it.name == "Recoverable ink" }
+            assertFalse(layer.visible)
             assertArrayEquals(IntArray(16) { 0x80FF0000.toInt() }, document.pixels(layer).pixels)
             assertArrayEquals(ByteArray(16) { 128.toByte() }, requireNotNull(document.mask(layer)).coverage)
+            val visible = document.layers().single { it.visible }
+            assertEquals("Artwork (feathered selection)", visible.name)
+            assertArrayEquals(IntArray(16) { 0x40FF0000 }, document.pixels(visible).pixels)
             assertArrayEquals(IntArray(16) { 0x40FF0000 }, requireNotNull(document.composite()).pixels)
+        }
+
+    @Test
+    fun overlappingNativeLayersKeepOnceSelectedColorsAndAlpha() =
+        runTest {
+            fixture(coverage = ByteArray(48) { -1 })
+            val upper = repository.addLayer("Upper blue").id
+            assertTrue(repository.setLayerPixels(upper, PixelBuffer.filled(8, 6, BLUE), "Upper paint"))
+            val coverage = byteArrayOf(64, 128.toByte(), 192.toByte(), -1)
+            repository.setSelection(
+                SelectionMask(8, 6, ByteArray(48) { if (it % 8 in 2..5 && it / 8 in 1..4) coverage[it % 8 - 2] else 0 }),
+            )
+            val expected = IntArray(16) { ((coverage[it % 4].toInt() and 0xFF) shl 24) or 0x0000FF }
+            val (result, document) = export(ExportOptions(ExportFormat.PROCREATE, area = ExportArea.SELECTION))
+            assertTrue(requireNotNull(result.warning).contains("feathered selection coverage"))
+            val visible = document.layers().single { it.visible }
+            assertEquals("Artwork (feathered selection)", visible.name)
+            assertArrayEquals(expected, document.pixels(visible).pixels)
+            assertArrayEquals(expected, requireNotNull(document.composite()).pixels)
+            val sources = document.layers().filterNot { it.visible }
+            assertEquals(setOf("Recoverable ink", "Upper blue"), sources.map { it.name }.toSet())
+            assertArrayEquals(expected, document.pixels(sources.single { it.name == "Upper blue" }).pixels)
+            assertArrayEquals(IntArray(48) { BLUE }, requireNotNull(repository.layerPixels(upper)).pixels)
         }
 
     @Test

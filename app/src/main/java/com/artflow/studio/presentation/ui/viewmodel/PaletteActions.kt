@@ -13,6 +13,17 @@ class PaletteActions(
     private val errors: CoroutineExceptionHandler,
     private val notify: (String) -> Unit,
 ) {
+    private val editor = PaletteEditor(settingsRepository, scope, errors) { settingsRepository.current().customPalettes }
+
+    fun create(name: String) = editor.create(name)
+
+    fun rename(
+        paletteId: Long,
+        name: String,
+    ) = editor.rename(paletteId, name)
+
+    fun duplicate(palette: Palette) = editor.duplicate(palette)
+
     fun addFromColors(
         name: String,
         colors: List<Int>,
@@ -42,13 +53,25 @@ class PaletteActions(
     fun removeColor(
         displayed: Palette,
         index: Int,
+    ) = editColor(displayed, index) { it.withoutColor(index) }
+
+    fun replaceColor(
+        displayed: Palette,
+        index: Int,
+        color: Int,
+    ) = editColor(displayed, index) { it.withColorAt(index, color) }
+
+    private fun editColor(
+        displayed: Palette,
+        index: Int,
+        transform: (Palette) -> Palette,
     ) {
         val expectedColors = displayed.colors.toList()
         edit(displayed.id) { latest ->
             check(latest.colors == expectedColors && index in expectedColors.indices) {
                 "This palette changed. Please select the swatch again."
             }
-            latest.withoutColor(index)
+            transform(latest)
         }
     }
 

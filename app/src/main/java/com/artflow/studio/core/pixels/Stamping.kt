@@ -244,16 +244,34 @@ object Stamping {
         // as before for every tip that is not thin.
         val inner = min(radius * hardness.coerceIn(0f, 1f), radius - 0.75f / minor).coerceAtLeast(0f)
         val edge = max(radius - inner, 0.75f / minor)
+        // A thin tip can lie entirely between pixel centres. Integrate its actual footprint so
+        // fractional movement cannot erase the whole dab or inflate it to a one-pixel-wide brush.
+        val subpixel =
+            if (radius * minor < 0.75f) {
+                SubpixelEllipse(x, y, radius, minor, cosA, sinA, hardness.coerceIn(0f, 1f))
+            } else {
+                null
+            }
+        val subpixelWeight = ((0.75f - radius * minor) / 0.25f).coerceIn(0f, 1f)
         val paintRows = { from: Int, to: Int ->
             for (py in from..to) {
                 for (px in x0..x1) {
+                    if (subpixel != null && subpixelWeight >= 1f) {
+                        applyPixel(target, py * target.width + px, color, subpixel.coverage(px, py) * strength, mode, alphaLock, mask)
+                        continue
+                    }
                     val dx = px + 0.5f - x
                     val dy = py + 0.5f - y
                     val along = dx * cosA + dy * sinA
                     val across = (-dx * sinA + dy * cosA) / minor
                     val distance = sqrt(along * along + across * across)
-                    if (distance > radius) continue
-                    val falloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                    val baseFalloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
+                    // Fade into the established large-tip transfer without a density jump when
+                    // pressure changes the short radius across the integration threshold.
+                    val falloff =
+                        subpixel?.let { baseFalloff + (it.coverage(px, py) - baseFalloff) * subpixelWeight }
+                            ?: baseFalloff
+                    if (falloff <= 0f) continue
                     applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
                 }
             }

@@ -15,6 +15,9 @@ import kotlin.math.sqrt
  * rasterisation happens in `data/renderer/TextLayerRenderer` on the device.
  */
 object TextLayout {
+    private val GRAPHEME = Regex("\\X")
+    private val WRAP_SEGMENTS = Regex("[ \t]*[^ \t]+|[ \t]+$")
+
     @kotlinx.serialization.Serializable
     enum class Alignment(
         val displayName: String,
@@ -158,8 +161,9 @@ object TextLayout {
     }
 
     /**
-     * Greedy word wrap. Words longer than the line box are broken at the character level so a
-     * single long token can never overflow the box.
+     * Greedy word wrap preserving authored spaces and tabs within each line. Separator whitespace
+     * is consumed only at a soft line break. Overlong words break between grapheme clusters;
+     * a single cluster wider than the box stays intact rather than becoming damaged text.
      */
     fun wrap(
         paragraph: String,
@@ -170,8 +174,7 @@ object TextLayout {
         if (paragraph.isEmpty()) return listOf("")
         if (maxWidth <= 0f) return listOf(paragraph)
 
-        val words = paragraph.split(' ').filter { it.isNotEmpty() }.toMutableList()
-        if (words.isEmpty()) return listOf("")
+        val segments = WRAP_SEGMENTS.findAll(paragraph).map { it.value }
 
         val lines = mutableListOf<String>()
         var current = StringBuilder()
@@ -183,14 +186,16 @@ object TextLayout {
             }
         }
 
-        words.forEach { word ->
-            val candidate = if (current.isEmpty()) word else "$current $word"
+        segments.forEach { segment ->
+            val candidate = "$current$segment"
             if (measureWidth(candidate) <= maxWidth) {
                 current = StringBuilder(candidate)
                 return@forEach
             }
 
-            // The word does not fit: close the current line, then break the word if needed.
+            // Only the separator at a wrap boundary is consumed. Indentation at the beginning
+            // of a paragraph and repeated spacing that fits on a line remain as authored.
+            val word = if (current.isNotEmpty()) segment.trimStart(' ', '\t') else segment
             flush()
             if (measureWidth(word) <= maxWidth) {
                 current = StringBuilder(word)
@@ -198,11 +203,11 @@ object TextLayout {
             }
 
             var fragment = StringBuilder()
-            word.forEach { character ->
-                val attempt = StringBuilder(fragment).append(character).toString()
+            glyphs(word).forEach { glyph ->
+                val attempt = StringBuilder(fragment).append(glyph).toString()
                 if (measureWidth(attempt) > maxWidth && fragment.isNotEmpty()) {
                     lines += fragment.toString()
-                    fragment = StringBuilder().append(character)
+                    fragment = StringBuilder(glyph)
                 } else {
                     fragment = StringBuilder(attempt)
                 }
@@ -220,18 +225,13 @@ object TextLayout {
         targetWidth: Float,
         startX: Float,
     ): List<PositionedText> {
-        val words = lineText.split(' ').filter { it.isNotEmpty() }
+        val words = Regex("[^ \\t]+").findAll(lineText).toList()
         if (words.size < 2) return listOf(PositionedText(lineText, startX, 0f, measureWidth(lineText)))
 
-        val wordsWidth = words.sumOf { measureWidth(it).toDouble() }.toFloat()
-        val naturalGap = (measureWidth(lineText) - wordsWidth) / (words.size - 1)
-        val gap = ((targetWidth - wordsWidth) / (words.size - 1)).coerceAtLeast(naturalGap)
-        var cursor = startX
-        return words.map { word ->
-            val width = measureWidth(word)
-            val positioned = PositionedText(word, cursor, 0f, width)
-            cursor += width + gap
-            positioned
+        val extraGap = ((targetWidth - measureWidth(lineText)) / (words.size - 1)).coerceAtLeast(0f)
+        return words.mapIndexed { index, word ->
+            val naturalX = measureWidth(lineText.substring(0, word.range.first))
+            PositionedText(word.value, startX + naturalX + index * extraGap, 0f, measureWidth(word.value))
         }
     }
 
@@ -260,8 +260,7 @@ object TextLayout {
         var angle = -totalAngle / 2f
         val direction = if (radius < 0f) -1f else 1f
 
-        return text.map { character ->
-            val glyph = character.toString()
+        return glyphs(text).map { glyph ->
             val glyphWidth = measureWidth(glyph)
             val halfAngle = (glyphWidth / 2f) / arcRadius
             angle += halfAngle
@@ -341,18 +340,8 @@ object TextLayout {
         style: TextStyle,
     ): String = if (style.allCaps) text.uppercase() else text
 
-    /** One string per character, keeping surrogate pairs (emoji) whole, for vertical text. */
-    fun glyphs(text: String): List<String> {
-        val glyphs = mutableListOf<String>()
-        var index = 0
-        while (index < text.length) {
-            val codePoint = text.codePointAt(index)
-            val count = Character.charCount(codePoint)
-            glyphs += text.substring(index, index + count)
-            index += count
-        }
-        return glyphs
-    }
+    /** One extended grapheme per string, so vertical text keeps accents and joined emoji together. */
+    fun glyphs(text: String): List<String> = GRAPHEME.findAll(text).map { it.value }.toList()
 
     /** Word count, shown in the text panel. */
     fun wordCount(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotEmpty() }

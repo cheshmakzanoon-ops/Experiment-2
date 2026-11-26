@@ -319,11 +319,16 @@ object PixelBrushes {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
-            if (distance < 0.01f) return null
+            val firstDab = !stamped
+            if (firstDab) {
+                stamp(lastX, lastY, target, source)
+                stamped = true
+            }
+            if (distance < 0.01f && !firstDab) return null
 
             // Walk in brush-size steps so a fast drag still leaves continuous coverage.
             val step = max(1f, settings.radius * 0.25f)
-            val steps = ceil(distance / step).toInt().coerceAtLeast(1)
+            val steps = if (distance < 0.01f) 0 else ceil(distance / step).toInt().coerceAtLeast(1)
             for (i in 1..steps) {
                 val t = i.toFloat() / steps
                 val px = lastX + dx * t
@@ -331,17 +336,17 @@ object PixelBrushes {
                 stamp(px, py, target, source)
             }
 
+            val changed =
+                IntBounds.aroundRectangle(
+                    min(lastX, x),
+                    min(lastY, y),
+                    max(lastX, x),
+                    max(lastY, y),
+                    padding = ceil(settings.radius).toInt() + 1,
+                )
             lastX = x
             lastY = y
-            stamped = true
-
-            return IntBounds.aroundRectangle(
-                min(targetStartX, x),
-                min(targetStartY, y),
-                max(targetStartX, x),
-                max(targetStartY, y),
-                padding = ceil(settings.radius).toInt() + 1,
-            )
+            return changed
         }
 
         private fun stamp(
@@ -464,6 +469,7 @@ object PixelBrushes {
     ) {
         private var lastX = startX
         private var lastY = startY
+        private var stamped = false
         var offsetX: Float = startX - sourceStartX
             private set
         var offsetY: Float = startY - sourceStartY
@@ -478,24 +484,31 @@ object PixelBrushes {
             val dx = x - lastX
             val dy = y - lastY
             val distance = sqrt(dx * dx + dy * dy)
-            if (distance < 0.01f) return null
+            val firstDab = !stamped
+            if (firstDab) {
+                heal(lastX, lastY, target, source)
+                stamped = true
+            }
+            if (distance < 0.01f && !firstDab) return null
 
             val step = max(1f, settings.radius * 0.3f)
-            val steps = ceil(distance / step).toInt().coerceAtLeast(1)
+            val steps = if (distance < 0.01f) 0 else ceil(distance / step).toInt().coerceAtLeast(1)
             for (i in 1..steps) {
                 val t = i.toFloat() / steps
                 heal(lastX + dx * t, lastY + dy * t, target, source)
             }
 
+            val changed =
+                IntBounds.aroundRectangle(
+                    min(lastX, x),
+                    min(lastY, y),
+                    max(lastX, x),
+                    max(lastY, y),
+                    padding = ceil(settings.radius).toInt() + 1,
+                )
             lastX = x
             lastY = y
-            return IntBounds.aroundRectangle(
-                min(startX, x),
-                min(startY, y),
-                max(startX, x),
-                max(startY, y),
-                padding = ceil(settings.radius).toInt() + 1,
-            )
+            return changed
         }
 
         /** Applies a single healing dab at ([px], [py]). */
@@ -514,6 +527,8 @@ object PixelBrushes {
                 }
 
             val patch = Stamping.readPatch(source, sampleX, sampleY, radius)
+            // No sampled paint is not a healing patch: blending it would erase unlocked artwork.
+            if (isFullyTransparent(patch)) return
             val patchSize = sqrt(patch.size.toFloat()).toInt()
             if (patchSize % 2 == 0) return
 

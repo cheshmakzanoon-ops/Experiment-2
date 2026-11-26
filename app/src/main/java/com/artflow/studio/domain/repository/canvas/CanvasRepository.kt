@@ -8,6 +8,7 @@ import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.LayerMaskSource
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
+import com.artflow.studio.core.render.PhysicalPaintSnapshot
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.PreparedModelImport
 import com.artflow.studio.domain.model.animation.AnimationFrame
@@ -224,7 +225,26 @@ interface CanvasRepository {
         internal val snapshotToken: Long,
         val contentRevision: Long,
         val alphaLocked: Boolean,
-    )
+        val physicalSource: PhysicalPaintSnapshot = PhysicalPaintSnapshot.EMPTY,
+    ) {
+        internal var transformedPhysical: PhysicalPaintSnapshot? = null
+        internal var geometricPreview = false
+
+        fun markGeometricPreview() {
+            geometricPreview = true
+        }
+
+        val physicalPaintChanged: Boolean get() = transformedPhysical?.sameContent(physicalSource) == false
+
+        /** Prepare off the UI thread before committing; failure leaves the live layer unchanged. */
+        fun transformPhysical(
+            source: PhysicalPaintSnapshot = physicalSource,
+            selection: SelectionMask? = null,
+            render: (PixelBuffer, PixelBuffer) -> Unit,
+        ) {
+            transformedPhysical = source.transformed(selection, render)
+        }
+    }
 
     /**
      * Declares that every change the caller makes to [session]'s buffer will be reported through
@@ -240,6 +260,9 @@ interface CanvasRepository {
 
     /** A caller-owned copy of the layer's committed pixels. */
     suspend fun layerPixels(layerId: Long): PixelBuffer?
+
+    /** A copy-on-write physical source that remains unchanged through subsequent edits and Reset. */
+    suspend fun physicalPaintSource(layerId: Long): PhysicalPaintSnapshot = PhysicalPaintSnapshot.EMPTY
 
     /** The topmost visible layer with paint at canvas pixel ([x], [y]), for Layer Select; null when none. */
     suspend fun layerAt(
@@ -269,13 +292,23 @@ interface CanvasRepository {
     suspend fun applyRasterEdits(
         layerIds: List<Long>,
         description: String,
+        preparePhysical: ((RasterEditSession) -> Unit)? = null,
         edit: (Long, PixelBuffer) -> Unit,
     ): Boolean {
         val sessions = layerIds.map { beginRasterEdit(it) }
         return try {
             val open = sessions.filterNotNull()
             if (open.size != layerIds.size) return false
-            withContext(Dispatchers.Default) { open.forEach { edit(it.layerId, it.buffer) } }
+            if (preparePhysical != null) {
+                PhysicalPaintSnapshot.requireTransformCapacity(open.map { it.physicalSource })
+                open.forEach { it.markGeometricPreview() }
+            }
+            withContext(Dispatchers.Default) {
+                open.forEach {
+                    edit(it.layerId, it.buffer)
+                    preparePhysical?.invoke(it)
+                }
+            }
             commitRasterEdits(open, description)
         } finally {
             withContext(NonCancellable) { sessions.filterNotNull().forEach { cancelRasterEdit(it) } }

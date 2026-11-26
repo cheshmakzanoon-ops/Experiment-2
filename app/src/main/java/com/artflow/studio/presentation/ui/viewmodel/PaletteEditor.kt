@@ -46,7 +46,10 @@ class PaletteEditor(
         scope.launch(errors) {
             settings.update { stored ->
                 val palette = stored.customPalettes.firstOrNull { it.id == paletteId && it.category == CUSTOM } ?: return@update stored
-                stored.copy(customPalettes = listOf(palette) + stored.customPalettes.filterNot { it.id == paletteId })
+                stored.copy(
+                    customPalettes = listOf(palette) + stored.customPalettes.filterNot { it.id == paletteId },
+                    defaultPaletteName = palette.name,
+                )
             }
         }
     }

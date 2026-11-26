@@ -18,6 +18,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,7 +42,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -54,29 +60,29 @@ fun PaletteManager(
     palettes: List<Palette>,
     currentColor: Int,
     onColorSelected: (Int) -> Unit,
-    actions: PaletteActions,
+    actions: PaletteEdits,
 ) {
-    // Null while closed; a palette id when renaming, and -1 when creating a new one.
-    var naming by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    // Null while closed; a null palette id means a new palette, without reserving a stored identity.
+    var naming by remember { mutableStateOf<Pair<Long?, String>?>(null) }
     val grouped = remember(palettes) { palettes.groupBy { it.category } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(onClick = { naming = NEW_PALETTE to "" }) { Text(stringResource(R.string.palettes_new)) }
+        OutlinedButton(onClick = { naming = null to "" }) { Text(stringResource(R.string.palettes_new)) }
         grouped.forEach { (category, entries) ->
             SectionTitle(category)
             entries.forEach { palette ->
-                PaletteBlock(palette, currentColor, onColorSelected, actions) { naming = palette.id to palette.name }
+                key(palette.category, palette.id, palette.name) {
+                    PaletteBlock(palette, currentColor, onColorSelected, actions) { naming = palette.id to palette.name }
+                }
             }
         }
     }
     naming?.let { (id, initial) ->
         PaletteNameDialog(initial, onDismiss = { naming = null }) { name ->
-            if (id == NEW_PALETTE) actions.onCreate(name) else actions.onRename(id, name)
+            if (id == null) actions.onCreate(name) else actions.onRename(id, name)
             naming = null
         }
     }
 }
-
-private const val NEW_PALETTE = -1L
 
 @Composable
 private fun SectionTitle(text: String) {
@@ -92,7 +98,7 @@ private fun PaletteBlock(
     palette: Palette,
     currentColor: Int,
     onColorSelected: (Int) -> Unit,
-    actions: PaletteActions,
+    actions: PaletteEdits,
     onRename: () -> Unit,
 ) {
     val editable = palette.category == CUSTOM
@@ -103,15 +109,34 @@ private fun PaletteBlock(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(palette.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            val isDefault = palette.name == actions.defaultName
+            IconButton(onClick = { actions.onToggleDefault(palette.name) }) {
+                Icon(
+                    if (isDefault) Icons.Default.Star else Icons.Default.StarBorder,
+                    contentDescription = if (isDefault) "${palette.name} is the default palette" else "Set ${palette.name} as default",
+                )
+            }
+            IconButton(onClick = { actions.onShare(palette) }) {
+                Icon(Icons.Default.Share, contentDescription = "Share ${palette.name}")
+            }
             PaletteMenu(palette, editable, actions, onRename)
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             itemsIndexed(palette.colors) { index, entry ->
-                SwatchTile(entry, ColorHarmony.distance(entry, currentColor) < NEAR, editable, onColorSelected, palette, index, actions)
+                SwatchTile(
+                    entry,
+                    ColorHarmony.distance(entry, currentColor) < NEAR,
+                    editable,
+                    onColorSelected,
+                    palette,
+                    index,
+                    currentColor,
+                    actions,
+                )
             }
             if (editable) {
                 item {
-                    IconButton(onClick = { actions.onAddSwatch(palette.id) }, modifier = Modifier.size(SWATCH)) {
+                    IconButton(onClick = { actions.onAddColor(palette.id, currentColor) }, modifier = Modifier.size(SWATCH)) {
                         Icon(Icons.Default.Add, contentDescription = stringResource(R.string.palettes_add_current_colour, palette.name))
                     }
                 }
@@ -120,12 +145,12 @@ private fun PaletteBlock(
     }
 }
 
-/** The command menu of one palette: the user's own palettes get all of it, the built-in ones only copy and share. */
+/** Built-in palettes can be copied; rename and deletion apply only to custom palettes. */
 @Composable
 private fun PaletteMenu(
     palette: Palette,
     editable: Boolean,
-    actions: PaletteActions,
+    actions: PaletteEdits,
     onRename: () -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
@@ -145,16 +170,7 @@ private fun PaletteMenu(
             }
             DropdownMenuItem(text = { Text(stringResource(R.string.duplicate)) }, onClick = choose { actions.onDuplicate(palette) })
             if (editable) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.palettes_set_default)) },
-                    onClick = choose { actions.onSetDefault(palette.id) },
-                )
-            }
-            actions.onShare?.let { share ->
-                DropdownMenuItem(text = { Text(stringResource(R.string.export_share)) }, onClick = choose { share(palette) })
-            }
-            if (editable) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = choose { actions.onDelete(palette.id) })
+                DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = choose { actions.onRemove(palette.id) })
             }
         }
     }
@@ -170,9 +186,14 @@ private fun SwatchTile(
     onColorSelected: (Int) -> Unit,
     palette: Palette,
     index: Int,
-    actions: PaletteActions,
+    currentColor: Int,
+    actions: PaletteEdits,
 ) {
-    var menu by remember { mutableStateOf(false) }
+    // Keep the actual displayed selection until the command is chosen. A flow emission while
+    // the menu is open must not silently redirect an indexed edit to another swatch.
+    var selected by remember { mutableStateOf<Pair<Palette, Int>?>(null) }
+    val replaceLabel = stringResource(R.string.palettes_replace_swatch)
+    val removeLabel = stringResource(R.string.palettes_remove_swatch)
     val description = stringResource(R.string.palettes_swatch, ColorHarmony.toHex(color))
     Box {
         Box(
@@ -182,22 +203,40 @@ private fun SwatchTile(
                     .clip(RoundedCornerShape(6.dp))
                     .background(Color(color))
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(6.dp))
-                    .semantics { contentDescription = description }
-                    .combinedClickable(onClick = { onColorSelected(color) }, onLongClick = { if (editable) menu = true }),
+                    .semantics {
+                        contentDescription = description
+                        if (editable) {
+                            customActions =
+                                listOf(
+                                    CustomAccessibilityAction(replaceLabel) {
+                                        actions.onReplaceColor(palette, index, currentColor)
+                                        true
+                                    },
+                                    CustomAccessibilityAction(removeLabel) {
+                                        actions.onRemoveColor(palette, index)
+                                        true
+                                    },
+                                )
+                        }
+                    }.combinedClickable(
+                        onClick = { onColorSelected(color) },
+                        onLongClick = if (editable) ({ selected = palette to index }) else null,
+                        onLongClickLabel = if (editable) "Edit swatch" else null,
+                    ),
         )
-        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+        DropdownMenu(expanded = selected != null, onDismissRequest = { selected = null }) {
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.palettes_replace_swatch)) },
                 onClick = {
-                    menu = false
-                    actions.onReplaceSwatch(palette.id, index)
+                    selected?.let { (displayed, position) -> actions.onReplaceColor(displayed, position, currentColor) }
+                    selected = null
                 },
             )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.palettes_remove_swatch)) },
                 onClick = {
-                    menu = false
-                    actions.onRemoveSwatch(palette.id, index)
+                    selected?.let { (displayed, position) -> actions.onRemoveColor(displayed, position) }
+                    selected = null
                 },
             )
         }
@@ -219,6 +258,7 @@ private fun PaletteNameDialog(
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it.take(MAX_NAME) },
+                label = { Text(stringResource(R.string.palettes_name)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (ready) onName(text) }),

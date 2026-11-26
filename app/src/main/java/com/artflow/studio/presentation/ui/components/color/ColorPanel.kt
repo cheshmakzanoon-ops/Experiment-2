@@ -5,12 +5,10 @@ package com.artflow.studio.presentation.ui.components.color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,9 +17,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -121,12 +116,9 @@ fun ColorPanel(
                     sources.fromFile?.let { OutlinedButton(onClick = it) { Text("Import palette") } }
                     sources.fromPhoto?.let { OutlinedButton(onClick = it) { Text("New from photo") } }
                     sources.fromCamera?.let { OutlinedButton(onClick = it) { Text("From camera") } }
-                    OutlinedButton(onClick = {
-                        val number = palettes.count { it.category == "Custom" } + 1
-                        onSavePalette("Palette $number", listOf(color))
-                    }) { Text("New palette") }
                 }
-                PaletteList(palettes, color, onColorSelected, palettesEdit)
+                PaletteManager(palettes, color, onColorSelected, palettesEdit)
+                NamedColors(onColorSelected)
             }
         }
 
@@ -394,79 +386,8 @@ private fun DefaultPaletteRow(
 }
 
 @Composable
-private fun PaletteList(
-    palettes: List<Palette>,
-    currentColor: Int,
-    onColorSelected: (Int) -> Unit,
-    edits: PaletteEdits,
-) {
-    val grouped = remember(palettes) { palettes.groupBy { it.category } }
+private fun NamedColors(onColorSelected: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        grouped.forEach { (category, entries) ->
-            SectionLabel(category)
-            entries.forEach { palette ->
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(palette.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                        val isDefault = palette.name == edits.defaultName
-                        IconButton(onClick = { edits.onToggleDefault(palette.name) }) {
-                            Icon(
-                                if (isDefault) Icons.Default.Star else Icons.Default.StarBorder,
-                                contentDescription =
-                                    if (isDefault) "${palette.name} is the default palette" else "Set ${palette.name} as default",
-                            )
-                        }
-                        IconButton(onClick = { edits.onShare(palette) }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share ${palette.name}")
-                        }
-                        if (palette.category == "Custom") {
-                            IconButton(onClick = { edits.onRemove(palette.id) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove ${palette.name}")
-                            }
-                        }
-                    }
-                    val editable = palette.category == "Custom"
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        itemsIndexed(palette.colors) { index, entry ->
-                            val closest = ColorHarmony.distance(entry, currentColor) < 24f
-                            val description = stringResource(R.string.palettes_swatch, ColorHarmony.toHex(entry))
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .size(if (closest) 40.dp else 32.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(entry))
-                                        // In your own palettes, touch and hold a swatch to remove it.
-                                        .combinedClickable(
-                                            onClick = { onColorSelected(entry) },
-                                            onLongClick = if (editable) ({ edits.onRemoveColor(palette, index) }) else null,
-                                            onLongClickLabel = if (editable) "Remove colour" else null,
-                                        ).semantics { contentDescription = description },
-                            )
-                        }
-                        if (editable) {
-                            item {
-                                // Tap the empty cell to add the current colour, as in Procreate.
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
-                                            .clickable { edits.onAddColor(palette.id, currentColor) }
-                                            .semantics { contentDescription = "Add the current colour to ${palette.name}" },
-                                    contentAlignment = Alignment.Center,
-                                ) { Text("+", style = MaterialTheme.typography.titleMedium) }
-                            }
-                        }
-                    }
-                }
-            }
-        }
         SectionLabel("Named colours")
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(ColorHarmony.NAMED_COLORS) { (name, value) ->

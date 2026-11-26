@@ -192,6 +192,9 @@ class ProjectStorage
                 decodeDocument(file, projectId)
             }
 
+        /** An older recovery can still be useful when the primary's referenced assets cannot load. */
+        suspend fun hasAutosave(projectId: Long): Boolean = withContext(ioDispatcher) { autosaveFile(projectId).exists() }
+
         private fun decodeDocument(
             file: File,
             projectId: Long,
@@ -223,8 +226,8 @@ class ProjectStorage
 
         /**
          * True when an autosave exists that the artist may need: it is newer than the last explicit save,
-         * there is no saved document, or the saved document cannot be read at all. A damaged primary
-         * generation must never hide a healthy recovery generation.
+         * there is no saved document, or the saved document metadata cannot be read. The canvas loader
+         * also protects an existing [hasAutosave] snapshot when the primary's referenced assets fail to load.
          */
         suspend fun hasUnsavedRecovery(projectId: Long): Boolean =
             withContext(ioDispatcher) {
@@ -374,14 +377,15 @@ class ProjectStorage
             }
         }
 
-        fun normalizeRelativePath(path: String): String =
-            path
-                .replace('\\', '/')
-                .trim()
-                .trimStart('/')
-                .split('/')
-                .filter { it.isNotEmpty() && it != "." }
-                .joinToString("/")
+        /** Use the same lexical target as [resolve], so aliases cannot lose their retention lease. */
+        fun normalizeRelativePath(path: String): String {
+            require('\u0000' !in path) { "Invalid project path" }
+            val normalized = File(path.replace('\\', '/').trimStart('/')).normalize().invariantSeparatorsPath
+            require(normalized.isNotEmpty() && normalized != ".." && !normalized.startsWith("../")) {
+                "Path escapes the project directory"
+            }
+            return normalized
+        }
 
         /**
          * Deletes every pixel file that is not referenced by [keep] or actively pinned.

@@ -114,4 +114,85 @@ class RasterRetentionAndPinningTest {
             assertEquals(1, deleted2)
             assertFalse("Unpinned raster should be pruned on next prune", storage.rasterExists(projectId, inFlightRaster))
         }
+
+    @Test
+    fun savedAndRecoveryAssetsWithParentSegmentsSurvivePruning() =
+        runBlocking {
+            val projectId = 3L
+            val saved = storage.writeRaster(projectId, 1, 1, byteArrayOf(1))
+            val recovered = storage.writeRaster(projectId, 2, 1, byteArrayOf(2))
+            val mask = storage.writeAuxiliaryImage(projectId, 2, "mask", 1, byteArrayOf(3))
+            val paint = storage.writeAuxiliaryBinary(projectId, 2, "paint", 1, "phys", byteArrayOf(4))
+            val stale = storage.writeRaster(projectId, 3, 1, byteArrayOf(5))
+            storage.saveDocument(projectId, document(Layer(id = 1, name = "Saved", index = 0, rasterFile = alias(saved))))
+            storage.saveAutosave(
+                projectId,
+                document(
+                    Layer(
+                        id = 2,
+                        name = "Recoverable",
+                        index = 0,
+                        rasterFile = alias(recovered),
+                        maskFile = alias(mask),
+                        physicalPaintFile = alias(paint),
+                    ),
+                ),
+            )
+
+            assertEquals(1, storage.pruneRasters(projectId, emptySet()))
+
+            listOf(saved, recovered, mask, paint).forEach { path ->
+                assertTrue("A manifest still owns $path", storage.rasterExists(projectId, path))
+                assertTrue("The recorded alias must stay readable", storage.readRaster(projectId, alias(path))!!.isNotEmpty())
+            }
+            assertFalse(storage.rasterExists(projectId, stale))
+        }
+
+    @Test
+    fun aliasedExportPinsShareTheCanonicalReferenceCount() =
+        runBlocking {
+            val projectId = 4L
+            val raster = storage.writeRaster(projectId, 1, 1, byteArrayOf(1))
+            storage.pinRasters(projectId, listOf(raster))
+            storage.pinRasters(projectId, listOf(alias(raster)))
+
+            assertEquals(0, storage.pruneRasters(projectId, emptySet()))
+            storage.unpinRasters(projectId, listOf(raster))
+            assertEquals(0, storage.pruneRasters(projectId, emptySet()))
+            assertTrue(storage.rasterExists(projectId, raster))
+
+            storage.unpinRasters(projectId, listOf(alias(raster)))
+            assertEquals(1, storage.pruneRasters(projectId, emptySet()))
+            assertFalse(storage.rasterExists(projectId, raster))
+        }
+
+    @Test
+    fun activeAliasedRastersRemainRetainedAndInvalidKeepPathsFailBeforeDeletion() =
+        runBlocking {
+            val projectId = 5L
+            val active = storage.writeRaster(projectId, 1, 1, byteArrayOf(1))
+            val stale = storage.writeRaster(projectId, 2, 1, byteArrayOf(2))
+
+            val failure = runCatching { storage.pruneRasters(projectId, setOf("layers/../../outside.png")) }.exceptionOrNull()
+            assertTrue(failure is IllegalArgumentException)
+            assertTrue(storage.rasterExists(projectId, active))
+            assertTrue(storage.rasterExists(projectId, stale))
+
+            assertEquals(1, storage.pruneRasters(projectId, setOf(alias(active))))
+            assertTrue(storage.rasterExists(projectId, active))
+            assertFalse(storage.rasterExists(projectId, stale))
+        }
+
+    private fun alias(path: String) = path.replace("layers/", "layers/unused/../")
+
+    private fun document(layer: Layer) =
+        CanvasDocument(
+            width = 64,
+            height = 64,
+            dpi = 72,
+            backgroundColor = 0,
+            activeLayerId = layer.id,
+            nextLayerId = layer.id + 1,
+            layers = listOf(layer),
+        )
 }

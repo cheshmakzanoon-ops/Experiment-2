@@ -2,11 +2,8 @@ package com.artflow.studio
 
 import android.graphics.Color
 import android.os.Build
-import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
-import android.view.ViewGroup
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.pixels.SelectionMask
@@ -16,20 +13,11 @@ import com.artflow.studio.core.text.TextLayout
 import com.artflow.studio.core.tool.LiquifyTool
 import com.artflow.studio.core.tool.PixelBrushes
 import com.artflow.studio.core.tool.ToolType
-import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.data.renderer.TextRasterizer
-import com.artflow.studio.domain.model.brush.BrushParams
-import com.artflow.studio.domain.repository.canvas.CanvasRepository
-import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
-import com.artflow.studio.presentation.ui.components.canvas.EditorInput
 import com.artflow.studio.presentation.ui.components.canvas.ShapeKind
-import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -38,35 +26,14 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
-import org.junit.Before
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
-import javax.inject.Inject
 
 /** Synthetic MotionEvents drive the real View and document, not a replacement input handler. */
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
-class CanvasInputDeviceTest {
-    @get:Rule val hiltRule = HiltAndroidRule(this)
-
-    @Inject lateinit var repository: CanvasRepository
-
-    @Inject lateinit var storage: ProjectStorage
-    private val brush =
-        EditorInput(
-            brushParams = BrushParams(size = 6f, pressureToSize = 0f, pressureToOpacity = 0f, smoothing = 0f),
-            brushColor = Color.RED,
-            eraserSize = 10f,
-        )
-    private var eventTime = 0L
-    private var downTime = 0L
-
-    @Before fun setUp() {
-        hiltRule.inject()
-    }
-
+class CanvasInputDeviceTest : CanvasInputTestFixture() {
     @Test
     fun penKeepsDrawingWithPalmAndDoesNotAdoptTheRemainingFinger() =
         withCanvas(1) { canvas ->
@@ -436,6 +403,65 @@ class CanvasInputDeviceTest {
             assertEquals(0, image().getSafe(10, 15))
             assertTrue(repository.undo())
             assertArrayEquals(fixture.pixels, image().pixels)
+        }
+
+    @Test
+    fun selectedMoveLeavesOtherPixelsAndLinkedLayersInPlace() =
+        withCanvas(141) { canvas ->
+            val (first, _) = linkedFixture(canvas)
+            val active = requireNotNull(repository.layerPixels(first)).apply { setUnchecked(50, 15, Color.MAGENTA) }
+            assertTrue(repository.setLayerPixels(first, active, "Unselected ink"))
+            repository.setSelection(SelectionMask.rectangle(64, 64, 16f, 16f, 26f, 26f))
+            val before = image().pixels
+            canvas.setEditorInput(brush.copy(tool = ToolType.MOVE))
+            val depth = repository.undoDepth
+
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 20f, 20f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 25f))
+            await { repository.undoDepth == depth + 1 }
+
+            assertEquals(Color.RED, image().getSafe(30, 25))
+            assertEquals(0, image().getSafe(20, 20))
+            assertEquals(Color.MAGENTA, image().getSafe(50, 15))
+            assertEquals(Color.BLUE, image().getSafe(40, 40))
+            assertTrue(repository.undo())
+            assertArrayEquals(before, image().pixels)
+        }
+
+    @Test
+    fun selectedTransformDragAndResetPreserveSoftAlphaThroughSaveAndReopen() =
+        withCanvas(142) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original =
+                PixelBuffer(64, 64).apply {
+                    for (y in 12..35) for (x in 12..35) setUnchecked(x, y, Color.RED)
+                    setUnchecked(50, 50, Color.BLUE)
+                }
+            assertTrue(repository.setLayerPixels(layer, original, "Soft selection fixture"))
+            repository.setSelection(
+                SelectionMask(64, 64).apply {
+                    for (y in 12..35) for (x in 12..35) coverage[y * 64 + x] = 128.toByte()
+                },
+            )
+            var ready = false
+            canvas.onTransformQuadChanged = { ready = it != null }
+            canvas.setEditorInput(brush.copy(tool = ToolType.TRANSFORM, transformInterpolation = TransformQuad.Interpolation.BILINEAR))
+            await { ready }
+            val depth = repository.undoDepth
+
+            send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 24f, 24f))
+            send(canvas, MotionEvent.ACTION_UP, Touch(1, 30f, 27f))
+            await { repository.undoDepth == depth + 1 }
+            assertFalse(original.pixels.contentEquals(requireNotNull(repository.layerPixels(layer)).pixels))
+            assertEquals(Color.BLUE, image().getSafe(50, 50))
+
+            canvas.resetTransform()
+            await { repository.undoDepth == depth + 2 }
+            assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+            val project = repository.projectId()
+            assertNotNull(repository.saveCanvas(project))
+            assertNotNull(repository.loadCanvas(project))
+            assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
         }
 
     @Test
@@ -956,6 +982,75 @@ class CanvasInputDeviceTest {
         }
 
     @Test
+    fun cloneStationaryTapCommitsExactlyOneDabAndCancelLeavesNoPaint() =
+        withCanvas(33) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val overlay = repository.addLayer("Green source overlay").id
+            repository.setLayerPixels(overlay, PixelBuffer.filled(64, 64, Color.GREEN), "Overlay fixture")
+            canvas.setActiveLayerId(layer)
+            val original =
+                PixelBuffer(64, 64).apply {
+                    for (y in 0 until height) {
+                        for (x in 0 until 32) setUnchecked(x, y, Color.RED)
+                    }
+                }
+            for (allLayers in listOf(false, true)) {
+                repository.setLayerPixels(layer, original, "Clone tap fixture")
+                canvas.setEditorInput(
+                    brush.copy(
+                        tool = ToolType.CLONE_STAMP,
+                        brushParams = brush.brushParams.copy(size = 12f),
+                        clone = PixelBrushes.CloneSettings(sampleAllLayers = allLayers, opacity = 0.5f),
+                    ),
+                )
+                if (!allLayers) {
+                    send(canvas, MotionEvent.ACTION_DOWN, Touch(1, 10f, 30f))
+                    send(canvas, MotionEvent.ACTION_UP, Touch(1, 10f, 30f))
+                }
+                val depth = repository.undoDepth
+                val pen = Touch(1, 44f, 30f, MotionEvent.TOOL_TYPE_STYLUS)
+                // Immediate UP also covers asynchronous composite capture with no MOVE events.
+                send(canvas, MotionEvent.ACTION_DOWN, pen)
+                send(canvas, MotionEvent.ACTION_UP, pen)
+                await { repository.undoDepth == depth + 1 }
+                val dab = requireNotNull(repository.layerPixels(layer)).getSafe(44, 30)
+                assertTrue("One half-opacity dab, without accumulation on UP", dab ushr 24 in 127..128)
+                assertEquals(if (allLayers) Color.GREEN and 0xFFFFFF else Color.RED and 0xFFFFFF, dab and 0xFFFFFF)
+                assertTrue(repository.undo())
+                assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+
+                send(canvas, MotionEvent.ACTION_DOWN, pen)
+                send(canvas, MotionEvent.ACTION_CANCEL, pen)
+                awaitRasterIdle(layer)
+                assertEquals(depth, repository.undoDepth)
+                assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+            }
+        }
+
+    @Test
+    fun healingStationaryTapCommitsAnUndoableBlemishRepair() =
+        withCanvas(34) { canvas ->
+            val layer = repository.getActiveLayerId()
+            val original = PixelBuffer.filled(64, 64, Color.GRAY).apply { setUnchecked(32, 32, Color.BLACK) }
+            repository.setLayerPixels(layer, original, "Healing tap fixture")
+            canvas.setEditorInput(
+                brush.copy(
+                    tool = ToolType.HEALING,
+                    brushParams = brush.brushParams.copy(size = 8f),
+                    healing = PixelBrushes.HealingSettings(spotMode = true, strength = 0.5f),
+                ),
+            )
+            val depth = repository.undoDepth
+            val pen = Touch(1, 32f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
+            send(canvas, MotionEvent.ACTION_DOWN, pen)
+            send(canvas, MotionEvent.ACTION_UP, pen)
+            await { repository.undoDepth == depth + 1 }
+            assertNotEquals(Color.BLACK, requireNotNull(repository.layerPixels(layer)).getSafe(32, 32))
+            assertTrue(repository.undo())
+            assertArrayEquals(original.pixels, requireNotNull(repository.layerPixels(layer)).pixels)
+        }
+
+    @Test
     fun changingAlphaLockDuringAnOpenToolDiscardsTheStaleEdit() =
         withCanvas(26) { canvas ->
             val layer = repository.getActiveLayerId()
@@ -1155,251 +1250,4 @@ class CanvasInputDeviceTest {
             assertTrue("A tiny View-space translation must not create a whole-pixel smudge jump: $delta", delta <= 2)
             assertTrue(below.getSafe(28, 32) != original.getSafe(28, 32))
         }
-
-    private fun sendSmudgeBatch(
-        canvas: ArtFlowCanvasView,
-        historical: Touch,
-        current: Touch,
-    ) {
-        fun coords(touch: Touch): Array<MotionEvent.PointerCoords> {
-            val point = canvas.canvasToView(touch.x, touch.y)
-            return arrayOf(
-                MotionEvent.PointerCoords().apply {
-                    x = point.first
-                    y = point.second
-                    pressure = touch.pressure
-                    setAxisValue(MotionEvent.AXIS_TILT, touch.tilt)
-                    setAxisValue(MotionEvent.AXIS_ORIENTATION, touch.orientation)
-                },
-            )
-        }
-        eventTime += 10
-        val event =
-            MotionEvent.obtain(
-                downTime,
-                eventTime,
-                MotionEvent.ACTION_MOVE,
-                1,
-                arrayOf(
-                    MotionEvent.PointerProperties().apply {
-                        id = historical.id
-                        toolType = historical.type
-                    },
-                ),
-                coords(historical),
-                0,
-                0,
-                1f,
-                1f,
-                0,
-                0,
-                InputDevice.SOURCE_STYLUS,
-                0,
-            )
-        try {
-            eventTime += 10
-            event.addBatch(eventTime, coords(current), 0)
-            assertEquals(1, event.historySize)
-            assertTrue(canvas.onTouchEvent(event))
-        } finally {
-            event.recycle()
-        }
-    }
-
-    private suspend fun awaitRasterIdle(layerId: Long) {
-        // Yield to the completed gesture, then acquire/release a real edit as a settlement barrier.
-        delay(1)
-        withTimeout(10_000) {
-            while (true) {
-                val barrier = repository.beginRasterEdit(layerId)
-                if (barrier != null) {
-                    repository.cancelRasterEdit(barrier)
-                    break
-                }
-                delay(10)
-            }
-        }
-    }
-
-    private fun assertZoomAnchor(
-        canvas: ArtFlowCanvasView,
-        point: Pair<Float, Float>,
-        anchor: Pair<Float, Float>,
-    ) {
-        val actual = canvas.canvasToView(point.first, point.second)
-        assertEquals("Zoom must keep its initial canvas point under the pointer", anchor.first, actual.first, 0.02f)
-        assertEquals("Zoom must keep its initial canvas point under the pointer", anchor.second, actual.second, 0.02f)
-    }
-
-    private fun liquifyDrag(canvas: ArtFlowCanvasView) {
-        val pen = Touch(4, 18f, 32f, MotionEvent.TOOL_TYPE_STYLUS)
-        send(canvas, MotionEvent.ACTION_DOWN, pen)
-        send(canvas, MotionEvent.ACTION_MOVE, pen.copy(x = 32f))
-        send(canvas, MotionEvent.ACTION_UP, pen.copy(x = 40f))
-    }
-
-    private fun liquifyFixture(): PixelBuffer =
-        PixelBuffer(64, 64).apply {
-            for (y in 0 until height) for (x in 0 until width) setUnchecked(x, y, Color.rgb(x * 3, y * 3, 40))
-        }
-
-    private fun pixelDifference(
-        a: PixelBuffer,
-        b: PixelBuffer,
-    ): Long =
-        a.pixels.indices.sumOf { index ->
-            val x = a.pixels[index]
-            val y = b.pixels[index]
-            listOf(0, 8, 16, 24).sumOf { shift -> kotlin.math.abs(((x ushr shift) and 255) - ((y ushr shift) and 255)).toLong() }
-        }
-
-    private fun maximumChannelDifference(
-        left: PixelBuffer,
-        right: PixelBuffer,
-    ): Int =
-        left.pixels.indices.maxOf { i ->
-            listOf(0, 8, 16, 24).maxOf { shift ->
-                kotlin.math.abs(((left.pixels[i] ushr shift) and 255) - ((right.pixels[i] ushr shift) and 255))
-            }
-        }
-
-    private suspend fun linkedFixture(canvas: ArtFlowCanvasView): Pair<Long, Long> {
-        val first = repository.getActiveLayerId()
-        repository.setLayerPixels(first, PixelBuffer(64, 64).apply { setUnchecked(20, 20, Color.RED) }, "Ink")
-        val second = repository.addLayer("Colour").id
-        repository.setLayerPixels(second, PixelBuffer(64, 64).apply { setUnchecked(40, 40, Color.BLUE) }, "Colour")
-        assertTrue(repository.linkLayers(listOf(first, second)))
-        repository.setActiveLayer(first)
-        canvas.setActiveLayerId(first)
-        // No temporary multi-selection: persisted membership alone drives these edits.
-        canvas.setTransformCompanions(emptySet())
-        return first to second
-    }
-
-    private fun withCanvas(
-        id: Int,
-        block: suspend (ArtFlowCanvasView) -> Unit,
-    ) {
-        val projectId = 9_100_000L + id
-        storage.deleteProjectFiles(projectId)
-        val scenario = ActivityScenario.launch(SelectionCanvasTestActivity::class.java)
-        try {
-            runBlocking(Dispatchers.Main) {
-                repository.loadOrCreate(projectId, 64, 64, 72)
-                repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer(64, 64), "Blank fixture")
-            }
-            var view: ArtFlowCanvasView? = null
-            scenario.onActivity { activity ->
-                val container = activity.canvasContainer
-                container.removeAllViews()
-                view =
-                    ArtFlowCanvasView(activity).apply {
-                        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                        attachToCanvas(64, 64, 72, Color.WHITE)
-                        setActiveLayerId(repository.getActiveLayerId())
-                        setEditorInput(brush)
-                    }
-                container.addView(requireNotNull(view))
-            }
-            runBlocking(Dispatchers.Main) {
-                val canvas = requireNotNull(view)
-                await { canvas.width > 0 && canvas.height > 0 && canvas.isPreviewAvailable }
-                canvas.fitToView()
-                eventTime = SystemClock.uptimeMillis()
-                block(canvas)
-            }
-        } finally {
-            scenario.close()
-            runBlocking(Dispatchers.Main) { repository.dispose() }
-            storage.deleteProjectFiles(projectId)
-        }
-    }
-
-    private suspend fun image(): PixelBuffer = requireNotNull(repository.compositeFrame(0, transparentBackground = true))
-
-    private fun alpha(
-        pixels: PixelBuffer,
-        x: Int,
-        y: Int,
-    ) = pixels.getSafe(x, y) ushr 24
-
-    private suspend fun await(condition: () -> Boolean) {
-        val deadline = SystemClock.elapsedRealtime() + 10_000
-        while (!condition() && SystemClock.elapsedRealtime() < deadline) delay(10)
-        assertTrue("Canvas operation did not finish before its deadline", condition())
-    }
-
-    private data class Touch(
-        val id: Int,
-        val x: Float,
-        val y: Float,
-        val type: Int = MotionEvent.TOOL_TYPE_FINGER,
-        val pressure: Float = 1f,
-        val tilt: Float = 0f,
-        val orientation: Float = 0f,
-    )
-
-    private fun send(
-        canvas: ArtFlowCanvasView,
-        action: Int,
-        vararg touches: Touch,
-        changed: Int = 0,
-        flags: Int = 0,
-        viewCoordinates: Boolean = false,
-        trace: ((MotionEvent) -> Unit)? = null,
-    ) {
-        eventTime += 10
-        if (action == MotionEvent.ACTION_DOWN) downTime = eventTime
-        val properties =
-            touches
-                .map { touch ->
-                    MotionEvent.PointerProperties().apply {
-                        id = touch.id
-                        toolType = touch.type
-                    }
-                }.toTypedArray()
-        val coords =
-            touches
-                .map { touch ->
-                    val point = if (viewCoordinates) touch.x to touch.y else canvas.canvasToView(touch.x, touch.y)
-                    MotionEvent.PointerCoords().apply {
-                        x = point.first
-                        y = point.second
-                        pressure = touch.pressure
-                        size = 0.1f
-                        setAxisValue(MotionEvent.AXIS_TILT, touch.tilt)
-                        setAxisValue(MotionEvent.AXIS_ORIENTATION, touch.orientation)
-                    }
-                }.toTypedArray()
-        val event =
-            MotionEvent.obtain(
-                downTime,
-                eventTime,
-                action or (changed shl MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                touches.size,
-                properties,
-                coords,
-                0,
-                0,
-                1f,
-                1f,
-                0,
-                0,
-                if (touches.any {
-                        it.type == MotionEvent.TOOL_TYPE_STYLUS || it.type == MotionEvent.TOOL_TYPE_ERASER
-                    }
-                ) {
-                    InputDevice.SOURCE_STYLUS
-                } else {
-                    InputDevice.SOURCE_TOUCHSCREEN
-                },
-                flags,
-            )
-        try {
-            trace?.invoke(event)
-            assertTrue(canvas.onTouchEvent(event))
-        } finally {
-            event.recycle()
-        }
-    }
 }

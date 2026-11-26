@@ -8,6 +8,7 @@ import com.artflow.studio.core.pixels.Quad
 import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.pixels.TransformQuad
 import com.artflow.studio.core.pixels.WarpMesh
+import com.artflow.studio.core.render.PhysicalPaintSnapshot
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 
 /**
@@ -21,6 +22,7 @@ internal class TransformCompanions {
         // A paintable layer can have no raster or strokes yet. Keep that transparent source
         // implicit until beginRasterEdit has checked whether an edit buffer fits the budget.
         val base: PixelBuffer?,
+        val physicalSource: PhysicalPaintSnapshot = PhysicalPaintSnapshot.EMPTY,
     )
 
     /** Layers chosen besides the active one. */
@@ -40,7 +42,7 @@ internal class TransformCompanions {
         // Quad gestures only move pixel planes. Precision transforms also move editable masks.
         if (!LayerLinks.editable(layers, members) || members.any { it.hasMask() }) return null
         return members.filter { it.id != activeLayerId }.map { member ->
-            Layer(member.id, repository.layerPixels(member.id))
+            Layer(member.id, repository.layerPixels(member.id), repository.physicalPaintSource(member.id))
         }
     }
 
@@ -56,6 +58,7 @@ internal class TransformCompanions {
                 cancel(repository)
                 return false
             }
+            session.markGeometricPreview()
             open = open + (layer to session)
         }
         return true
@@ -66,8 +69,23 @@ internal class TransformCompanions {
     fun hasChanges(): Boolean =
         open.any { (layer, session) ->
             val base = layer.base
-            if (base == null) session.buffer.pixels.any { it != 0 } else !base.pixels.contentEquals(session.buffer.pixels)
+            session.physicalPaintChanged ||
+                if (base == null) session.buffer.pixels.any { it != 0 } else !base.pixels.contentEquals(session.buffer.pixels)
         }
+
+    /** Only final placement transforms physical fields; each source remains fixed for Reset. */
+    fun transformPhysical(
+        bounds: IntBounds,
+        quad: Quad,
+        mesh: WarpMesh?,
+        interpolation: TransformQuad.Interpolation,
+    ) {
+        open.forEach { (layer, session) ->
+            session.transformPhysical(layer.physicalSource) { source, target ->
+                TransformQuad.renderShape(source, target, bounds, quad, mesh, null, interpolation)
+            }
+        }
+    }
 
     /** Places every open companion the way the active layer is placed. */
     fun render(

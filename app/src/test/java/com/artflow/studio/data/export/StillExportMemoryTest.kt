@@ -179,6 +179,44 @@ class StillExportMemoryTest {
         }
 
     @Test
+    fun featheredSelectionAppearanceIsBudgetedBeforeReadingOrEncodingPixels() =
+        runBlocking {
+            val source = spy(painted(16, 16))
+            val layers = listOf(layer(1, source), layer(2, source))
+            for (format in listOf(ExportFormat.PSD, ExportFormat.PROCREATE)) {
+                val options = ExportOptions(format)
+                val input = StillExportInput(source, layers, options)
+                // Use the smallest allowance admitting only the editable sources. Adding the
+                // once-selected appearance must be refused before any encoder sees their pixels.
+                var minimum = 0L
+                var maximum = 64 * MIB
+                while (minimum < maximum) {
+                    val candidate = minimum + (maximum - minimum) / 2
+                    if (runCatching { StillExportMemory.requireFits(input, candidate) }.isSuccess) {
+                        maximum = candidate
+                    } else {
+                        minimum = candidate + 1
+                    }
+                }
+                StillExportMemory.requireFits(input, minimum)
+                val storage = mock(ProjectStorage::class.java)
+                val exporter = ArtworkExporter(mock(Context::class.java), storage, minimum)
+                val result = exporter.exportStill(7, "Selected", source, layers, options, renderedSelection = true)
+                assertTrue(
+                    "$format: $result",
+                    result
+                        .exceptionOrNull()
+                        ?.message
+                        .orEmpty()
+                        .contains("Reduce the output scale"),
+                )
+                verifyNoInteractions(storage)
+            }
+            verify(source, never()).pixels
+            verify(source, never()).scaled(anyInt(), anyInt())
+        }
+
+    @Test
     fun materialResolutionIsAdmittedBeforeModelIOOrTextureScaling() =
         runBlocking {
             val source = spy(painted(16, 16))

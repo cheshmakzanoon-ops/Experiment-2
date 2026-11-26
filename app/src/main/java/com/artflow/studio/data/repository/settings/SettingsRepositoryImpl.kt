@@ -191,23 +191,32 @@ class SettingsRepositoryImpl
             while (id in occupied) id = if (id == Long.MAX_VALUE) 1L else id + 1L
             val created = palette.copy(id = id)
             val stored = current.customPalettes
-            current.copy(customPalettes = if (makeDefault) listOf(created) + stored else stored + created)
+            current.copy(
+                customPalettes = if (makeDefault) listOf(created) + stored else stored + created,
+                defaultPaletteName = if (makeDefault) created.name else current.defaultPaletteName,
+            )
         }
 
         override suspend fun removePalette(paletteId: Long) =
             update { current ->
-                current.copy(customPalettes = current.customPalettes.filterNot { it.id == paletteId })
+                val wasDefault = current.customPalettes.firstOrNull { it.name == current.defaultPaletteName }?.id == paletteId
+                current.copy(
+                    customPalettes = current.customPalettes.filterNot { it.id == paletteId },
+                    defaultPaletteName = if (wasDefault) "" else current.defaultPaletteName,
+                )
             }
 
         override suspend fun renamePalette(
             paletteId: Long,
             name: String,
         ) = update { current ->
+            val wasDefault = current.customPalettes.firstOrNull { it.name == current.defaultPaletteName }?.id == paletteId
             current.copy(
                 customPalettes =
                     current.customPalettes.map { palette ->
                         if (palette.id == paletteId) palette.copy(name = name) else palette
                     },
+                defaultPaletteName = if (wasDefault) name else current.defaultPaletteName,
             )
         }
 
@@ -218,7 +227,11 @@ class SettingsRepositoryImpl
             val stored = current.customPalettes
             val index = stored.indexOfFirst { it.id == palette.id }
             val replaced = if (index >= 0) stored.toMutableList().also { it[index] = palette } else stored + palette
-            current.copy(customPalettes = if (makeDefault) listOf(palette) + replaced.filterNot { it.id == palette.id } else replaced)
+            val wasDefault = stored.firstOrNull { it.name == current.defaultPaletteName }?.id == palette.id
+            current.copy(
+                customPalettes = if (makeDefault) listOf(palette) + replaced.filterNot { it.id == palette.id } else replaced,
+                defaultPaletteName = if (makeDefault || wasDefault) palette.name else current.defaultPaletteName,
+            )
         }
 
         // -----------------------------------------------------------------------------------------

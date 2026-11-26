@@ -294,6 +294,10 @@ class WarpMesh(
             interpolation: TransformQuad.Interpolation,
         ) {
             require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+            if (mesh.points.contentEquals(fromBounds(bounds, mesh.side).points)) {
+                source.pixels.copyInto(target.pixels)
+                return
+            }
             val (floating, blend) = LayerTransform.split(source, target, selection)
             val raster = TriangleRaster(floating, target, bounds, blend, interpolation)
             val n = SUBDIVISIONS

@@ -211,6 +211,49 @@ class RenderedPsdExportTest {
     private fun stripedMask() = SelectionMask(8, 6, ByteArray(48) { if (it % 2 == 0) 0 else -1 })
 
     @Test
+    fun overlappingLayersKeepTheOnceSelectedAppearanceAndHiddenSelectedSources() =
+        runTest {
+            frame("Lower red", PixelBuffer.filled(8, 6, 0xFFFF0000.toInt()), first = true)
+            repository.setCanvasBackgroundColor(0)
+            val upper = repository.addLayer("Upper blue").id
+            assertTrue(repository.setLayerPixels(upper, PixelBuffer.filled(8, 6, 0xFF0000FF.toInt()), "Upper paint"))
+            val coverage = byteArrayOf(64, 128.toByte(), 192.toByte(), -1)
+            repository.setSelection(
+                SelectionMask(8, 6, ByteArray(48) { if (it % 8 in 2..5 && it / 8 in 1..4) coverage[it % 8 - 2] else 0 }),
+            )
+            val expected = IntArray(16) { ((coverage[it % 4].toInt() and 0xFF) shl 24) or 0x0000FF }
+            for (rle in listOf(false, true)) {
+                val result = exportResult(ExportOptions(ExportFormat.PSD, area = ExportArea.SELECTION, psdUseRle = rle))
+                val document = read(result)
+                assertTrue(requireNotNull(result.warning).contains("Feathered selection"))
+                assertEquals(4, document.width)
+                assertEquals(4, document.height)
+                val visible = document.layers.single { it.isVisible }
+                assertEquals("Artwork (feathered selection)", visible.name)
+                assertArrayEquals(expected, visible.pixels.pixels)
+                assertArrayEquals(expected, requireNotNull(document.composite).pixels)
+                val sources = document.layers.filterNot { it.isVisible }
+                assertEquals(listOf("Lower red", "Upper blue"), sources.map { it.name })
+                assertArrayEquals(expected, sources.single { it.name == "Upper blue" }.pixels.pixels)
+            }
+            assertArrayEquals(IntArray(48) { 0xFF0000FF.toInt() }, requireNotNull(repository.layerPixels(upper)).pixels)
+        }
+
+    @Test
+    fun hardSelectionKeepsEditableLayersVisibleWithoutAnAppearanceFallback() =
+        runTest {
+            frame("Lower red", PixelBuffer.filled(8, 6, 0xFFFF0000.toInt()), first = true)
+            val upper = repository.addLayer("Upper blue").id
+            assertTrue(repository.setLayerPixels(upper, PixelBuffer.filled(8, 6, 0xFF0000FF.toInt()), "Upper paint"))
+            repository.setSelection(SelectionMask.rectangle(8, 6, 2f, 1f, 6f, 5f))
+            val result = exportResult(ExportOptions(ExportFormat.PSD, area = ExportArea.SELECTION))
+            val document = read(result)
+            assertNull(result.warning)
+            assertEquals(listOf("Lower red", "Upper blue"), document.layers.map { it.name })
+            assertTrue(document.layers.all { it.isVisible })
+        }
+
+    @Test
     fun resizedEnabledMaskCannotRevealPreviouslyInvisibleInk() =
         runTest {
             val id = stripedLayer(transparentAlternate = true)

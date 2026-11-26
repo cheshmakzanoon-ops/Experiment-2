@@ -147,6 +147,81 @@ class ColorPanelPaletteSafetyTest {
             }
         }
 
+    @Test
+    fun aSwatchReplacementRequiresTheDisplayedColorsAndKeepsNewerMetadata() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            val displayed = Palette(id = 11, name = "Working", colors = listOf(RED, BLUE, RED))
+            repository.addPalette(displayed)
+            val latest = displayed.copy(name = "Renamed", colors = listOf(BLUE, RED), isFavorite = true)
+            repository.updatePalette(latest)
+            val failures = mutableListOf<Throwable>()
+            val editorScope = CoroutineScope(coroutineContext + SupervisorJob())
+            try {
+                val actions = PaletteActions(repository, editorScope, CoroutineExceptionHandler { _, error -> failures += error }, {})
+                val edits = PaletteEdits.from(actions)
+                edits.onReplaceColor(displayed, 1, GREEN)
+                runCurrent()
+                assertEquals(latest, reopened(dao))
+                assertEquals(1, failures.size)
+                assertTrue(
+                    failures
+                        .single()
+                        .message
+                        .orEmpty()
+                        .contains("palette changed", ignoreCase = true),
+                )
+
+                edits.onReplaceColor(latest, 1, GREEN)
+                runCurrent()
+                assertEquals(latest.copy(colors = listOf(BLUE, GREEN)), reopened(dao))
+                assertEquals(1, failures.size)
+            } finally {
+                editorScope.cancel()
+            }
+        }
+
+    @Test
+    fun panelCreationDuplicationAndRenameKeepTheDefaultPaletteThroughReopen() =
+        runTest {
+            val dao = MemorySettingsDao()
+            val repository = SettingsRepositoryImpl(dao)
+            val actions = PaletteActions(repository, this, CoroutineExceptionHandler { _, error -> throw error }, {})
+            val edits = PaletteEdits.from(actions)
+            edits.onCreate("Study")
+            runCurrent()
+            val created = reopened(dao)
+            assertEquals("Study", created.name)
+            assertEquals(emptyList<Int>(), created.colors)
+            assertEquals("Study", repository.current().defaultPaletteName)
+
+            edits.onAddColor(created.id, BLUE)
+            runCurrent()
+            edits.onRename(created.id, "Landscape")
+            runCurrent()
+            val original = reopened(dao)
+            assertEquals("Landscape", SettingsRepositoryImpl(dao).settings.first().defaultPaletteName)
+            edits.onDuplicate(original)
+            runCurrent()
+            val duplicated = SettingsRepositoryImpl(dao).settings.first()
+            assertEquals("Landscape copy", duplicated.defaultPaletteName)
+            assertEquals(listOf("Landscape copy", "Landscape"), duplicated.customPalettes.map { it.name })
+            assertEquals(listOf(listOf(BLUE), listOf(BLUE)), duplicated.customPalettes.map { it.colors })
+            assertEquals(
+                2,
+                duplicated.customPalettes
+                    .map { it.id }
+                    .toSet()
+                    .size,
+            )
+
+            edits.onRemove(duplicated.customPalettes.first().id)
+            runCurrent()
+            assertEquals("", SettingsRepositoryImpl(dao).settings.first().defaultPaletteName)
+            assertEquals(original, reopened(dao))
+        }
+
     private suspend fun reopened(dao: SettingsDao): Palette =
         SettingsRepositoryImpl(dao)
             .settings

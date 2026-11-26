@@ -168,12 +168,14 @@ object LayerTransform {
         highQuality: Boolean = true,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
-        val (floating, blend) = split(source, target, selection)
-        val mask = if (blend) selection else null
+        // Cutting a feathered selection into two alpha-scaled planes and compositing them again
+        // is not an identity operation. Reset and a stationary Move must preserve the source bytes.
         if (params.isIdentity) {
-            composite(target, floating, 0, 0, mask != null)
+            source.pixels.copyInto(target.pixels)
             return
         }
+        val (floating, blend) = split(source, target, selection)
+        val mask = if (blend) selection else null
         if (params.isPureIntegerTranslation) {
             composite(target, floating, params.translateX.toInt(), params.translateY.toInt(), mask != null)
             return

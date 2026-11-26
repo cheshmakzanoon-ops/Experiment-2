@@ -536,6 +536,11 @@ object TransformQuad {
         interpolation: Interpolation,
     ) {
         require(source.width == target.width && source.height == target.height) { "Buffer sizes differ" }
+        // Reset restores the original artwork, including feathered-selection alpha exactly.
+        if (quad == Quad.fromBounds(bounds)) {
+            source.pixels.copyInto(target.pixels)
+            return
+        }
         // A collapsed quad has no placement, so nothing moves: the source stays where it was.
         // Checked before split, which clears the selected pixels out of target.
         val inverse = inverseMapping(quad)

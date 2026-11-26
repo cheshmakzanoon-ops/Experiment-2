@@ -1,6 +1,7 @@
 package com.artflow.studio.core.render
 
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -67,6 +68,22 @@ class StrokeReachTest {
     @Test
     fun everyPresetStaysInsideItsReach() {
         StudioBrushes.presets.forEach { preset -> assertInside(preset.parameters, preset.id.hashCode().toLong(), preset.id) }
+    }
+
+    @Test
+    fun importedLongitudinalScatterStaysInsideItsReach() {
+        val full = PressureMapping(listOf(PressureMapping.Point(0f, 1f), PressureMapping.Point(1f, 1f)))
+        val params =
+            BrushParams(
+                size = 48f,
+                spacing = 0.1f,
+                scatter = 4f,
+                count = 8,
+                pressureToSize = 0f,
+                pressureToOpacity = 0f,
+                importedAuxiliaryCurves = mapOf("dynamicsPressurePlotJitterLongitudinalCurve" to full),
+            )
+        repeat(12) { seed -> assertInside(params, seed.toLong(), "longitudinal scatter $seed") }
     }
 
     @Test

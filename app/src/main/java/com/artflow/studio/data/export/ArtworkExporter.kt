@@ -103,9 +103,20 @@ class ArtworkExporter
             layerMasks: Map<Long, PixelBuffer>,
             materialMaps: Map<MaterialChannel, PixelBuffer>,
             crop: IntBounds? = null,
+            renderedSelection: Boolean = false,
         ) {
             StillExportMemory.requireFits(
-                StillExportInput(composite, layers, options, hasAdjustmentLayers, groups, layerMasks, materialMaps, crop),
+                StillExportInput(
+                    composite,
+                    layers,
+                    options,
+                    hasAdjustmentLayers,
+                    groups,
+                    layerMasks,
+                    materialMaps,
+                    crop,
+                    renderedSelection,
+                ),
                 memoryLimitBytes,
             )
         }
@@ -126,6 +137,7 @@ class ArtworkExporter
             groups: List<Layer> = emptyList(),
             layerMasks: Map<Long, PixelBuffer> = emptyMap(),
             materialMaps: Map<MaterialChannel, PixelBuffer> = emptyMap(),
+            renderedSelection: Boolean = false,
         ): Result<ExportResult> =
             withContext(Dispatchers.Default) {
                 try {
@@ -143,7 +155,17 @@ class ArtworkExporter
                         )
                     }
 
-                    val memoryInput = StillExportInput(composite, layers, options, hasAdjustmentLayers, groups, layerMasks, materialMaps)
+                    val memoryInput =
+                        StillExportInput(
+                            composite,
+                            layers,
+                            options,
+                            hasAdjustmentLayers,
+                            groups,
+                            layerMasks,
+                            materialMaps,
+                            renderedSelection = renderedSelection,
+                        )
                     StillExportMemory.requireFits(memoryInput, memoryLimitBytes)
                     // Pin and admit model input before any texture/profile/scale allocation too.
                     val model =
@@ -187,7 +209,8 @@ class ArtworkExporter
                             }
 
                             ExportFormat.PSD -> {
-                                val document = buildPsd(prepared, layers, options, hasAdjustmentLayers, groups, layerMasks)
+                                val document =
+                                    buildPsd(prepared, layers, options, hasAdjustmentLayers, groups, layerMasks, renderedSelection)
                                 resizedPsdMasks = document.resizedMasks
                                 renderedNativePsdBlends = document.nativeBlendFallback
                                 document.bytes
@@ -203,7 +226,16 @@ class ArtworkExporter
 
                             ExportFormat.PROCREATE -> {
                                 val document =
-                                    buildProcreate(prepared, layers, projectName, options, hasAdjustmentLayers, groups, layerMasks)
+                                    buildProcreate(
+                                        prepared,
+                                        layers,
+                                        projectName,
+                                        options,
+                                        hasAdjustmentLayers,
+                                        groups,
+                                        layerMasks,
+                                        renderedSelection,
+                                    )
                                 nativeDocumentWarning = document.warning
                                 document.bytes
                             }
@@ -243,23 +275,15 @@ class ArtworkExporter
                             width = prepared.width,
                             height = prepared.height,
                             warning =
-                                when {
-                                    options.format == ExportFormat.MODEL_OBJ && materialMaps.isNotEmpty() ->
-                                        "Metallic and roughness use PBR material-map extensions; the receiving 3D app must support them."
-                                    renderedNativePsdBlends ->
-                                        "Native Darken is rendered into Artwork to preserve appearance; " +
-                                            "editable source layers and masks are included hidden."
-                                    resizedPsdMasks && hasAdjustmentLayers ->
-                                        "Resized masks and adjustment/filter effects are rendered into Artwork; " +
-                                            "editable layers and masks are included hidden."
-                                    resizedPsdMasks ->
-                                        "Resized masks are rendered into Artwork to preserve appearance; " +
-                                            "editable layers and masks are included hidden."
-                                    nativeDocumentWarning != null -> nativeDocumentWarning
-                                    layeredDocument(options.format) && hasAdjustmentLayers ->
-                                        "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
-                                    else -> null
-                                },
+                                stillWarning(
+                                    options.format,
+                                    materialMaps.isNotEmpty(),
+                                    hasAdjustmentLayers,
+                                    resizedPsdMasks,
+                                    renderedNativePsdBlends,
+                                    nativeDocumentWarning,
+                                    renderedSelection,
+                                ),
                         )
                     Timber.d("Exported ${options.format} (${result.sizeLabel}) to ${file.name}")
                     Result.success(result)
@@ -556,10 +580,11 @@ class ArtworkExporter
             hasAdjustmentLayers: Boolean,
             groups: List<Layer>,
             layerMasks: Map<Long, PixelBuffer>,
+            renderedSelection: Boolean,
         ): PsdOutput {
             var resizedMasks = false
             val nativeBlendFallback = layers.any { it.layer.blendContract == LayerBlendContract.PROCREATE_DARKEN_19 }
-            val needsRenderedAppearance = hasAdjustmentLayers || nativeBlendFallback
+            val needsRenderedAppearance = hasAdjustmentLayers || nativeBlendFallback || renderedSelection
 
             fun shown(layer: Layer) = !needsRenderedAppearance && (options.includeHiddenLayers || layer.isVisible)
 
@@ -608,6 +633,7 @@ class ArtworkExporter
             if (needsRenderedAppearance || resizedMasks) {
                 val name =
                     when {
+                        renderedSelection -> "Artwork (feathered selection)"
                         nativeBlendFallback -> "Artwork (native layer blending)"
                         resizedMasks -> "Artwork (resized masks)"
                         else -> "Artwork (rendered effects)"
@@ -636,6 +662,36 @@ class ArtworkExporter
             )
         }
 
+        private fun stillWarning(
+            format: ExportFormat,
+            hasMaterialMaps: Boolean,
+            hasAdjustmentLayers: Boolean,
+            resizedPsdMasks: Boolean,
+            renderedNativePsdBlends: Boolean,
+            nativeDocumentWarning: String?,
+            renderedSelection: Boolean,
+        ): String? =
+            when {
+                format == ExportFormat.MODEL_OBJ && hasMaterialMaps ->
+                    "Metallic and roughness use PBR material-map extensions; the receiving 3D app must support them."
+                format == ExportFormat.PSD && renderedSelection ->
+                    "Feathered selection coverage and the final appearance are rendered into Artwork; " +
+                        "selected source layers and masks are included hidden."
+                renderedNativePsdBlends ->
+                    "Native Darken is rendered into Artwork to preserve appearance; " +
+                        "editable source layers and masks are included hidden."
+                resizedPsdMasks && hasAdjustmentLayers ->
+                    "Resized masks and adjustment/filter effects are rendered into Artwork; " +
+                        "editable layers and masks are included hidden."
+                resizedPsdMasks ->
+                    "Resized masks are rendered into Artwork to preserve appearance; " +
+                        "editable layers and masks are included hidden."
+                nativeDocumentWarning != null -> nativeDocumentWarning
+                layeredDocument(format) && hasAdjustmentLayers ->
+                    "Adjustment/filter effects are baked into Artwork; original pixel layers are included hidden."
+                else -> null
+            }
+
         /** Formats that store each layer as a layer of the file. */
         private fun layeredDocument(format: ExportFormat): Boolean = format == ExportFormat.PSD || format == ExportFormat.PROCREATE
 
@@ -658,6 +714,7 @@ class ArtworkExporter
             hasAdjustmentLayers: Boolean,
             groups: List<Layer>,
             layerMasks: Map<Long, PixelBuffer>,
+            renderedSelection: Boolean,
         ): ProcreateOutput {
             val unsupportedGroups = groups.any { it.blendMode != BlendMode.PASS_THROUGH || it.hasActiveMask() }
             val resizedMasks =
@@ -667,7 +724,7 @@ class ArtworkExporter
                             LayerMaskExport.requiresResampling(it, composite.width, composite.height, options.fitMode)
                         } == true
                 }
-            val needsRenderedAppearance = hasAdjustmentLayers || unsupportedGroups || resizedMasks
+            val needsRenderedAppearance = hasAdjustmentLayers || unsupportedGroups || resizedMasks || renderedSelection
 
             fun mask(layer: Layer): SelectionMask? =
                 layerMasks[layer.id]?.let { coverage ->
@@ -678,7 +735,12 @@ class ArtworkExporter
             fun shown(layer: Layer) = !needsRenderedAppearance && (options.includeHiddenLayers || layer.isVisible)
             val rendered: List<ProcreateWriter.Node> =
                 if (needsRenderedAppearance) {
-                    val name = if (resizedMasks) "Artwork (resized masks)" else "Artwork (rendered effects)"
+                    val name =
+                        when {
+                            renderedSelection -> "Artwork (feathered selection)"
+                            resizedMasks -> "Artwork (resized masks)"
+                            else -> "Artwork (rendered effects)"
+                        }
                     listOf(ProcreateWriter.Layer(name, composite))
                 } else {
                     emptyList()
@@ -708,6 +770,7 @@ class ArtworkExporter
                 )
             val reasons =
                 listOfNotNull(
+                    "feathered selection coverage".takeIf { renderedSelection },
                     "resized masks".takeIf { resizedMasks },
                     "group blending or group masks".takeIf { unsupportedGroups },
                     "adjustment/filter effects".takeIf { hasAdjustmentLayers },

@@ -146,6 +146,27 @@ class PhysicalPaintPlane(
         tile.pigmentLoad[idx] = p
     }
 
+    /** Adds scalar state retained by a selection after its selected contribution has moved. */
+    internal fun addUnselectedTo(
+        target: PhysicalPaintPlane,
+        selection: com.artflow.studio.core.pixels.SelectionMask,
+    ) {
+        for ((key, tile) in tiles) {
+            forEachCell(key) { i, x, y ->
+                val retained = 1f - selection.alphaAt(y * width + x)
+                if (retained > 0f && tile.hasStateAt(i)) {
+                    target.setCell(
+                        x,
+                        y,
+                        target.wetnessAt(x, y) + tile.wetness[i] * retained,
+                        target.impastoAt(x, y) + tile.impastoHeight[i] * retained,
+                        target.pigmentAt(x, y) + tile.pigmentLoad[i] * retained,
+                    )
+                }
+            }
+        }
+    }
+
     /** Locks all wet watercolor in place while preserving 3D impasto ridges. */
     fun dryAll() {
         val iterator = tiles.entries.iterator()
@@ -458,6 +479,7 @@ object PhysicalPaintEngine {
         radius: Float,
         waterAmount: Float,
         pigmentLoad: Float,
+        coverage: ((Int, Int) -> Float)? = null,
     ) {
         val r = radius.coerceAtLeast(1f)
         val water = waterAmount.coerceIn(0f, 1f)
@@ -470,8 +492,9 @@ object PhysicalPaintEngine {
         for (y in minY..maxY) {
             for (x in minX..maxX) {
                 val dist = hypot(x + 0.5f - centerX, y + 0.5f - centerY)
-                if (dist > r) continue
-                val falloff = 1f - (dist / r).let { it * it }
+                val amount = (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
+                if (dist > r || amount <= 0f) continue
+                val falloff = (1f - (dist / r).let { it * it }) * amount
                 val nextW = max(plane.wetnessAt(x, y), water * falloff)
                 val nextP = max(plane.pigmentAt(x, y), pigment * falloff)
                 plane.setCell(x, y, nextW, plane.impastoAt(x, y), nextP)
@@ -490,6 +513,7 @@ object PhysicalPaintEngine {
         thickness: Float,
         dirX: Float,
         dirY: Float,
+        coverage: ((Int, Int) -> Float)? = null,
     ) {
         val r = radius.coerceAtLeast(1f)
         val thick = thickness.coerceIn(0f, 1f)
@@ -508,7 +532,8 @@ object PhysicalPaintEngine {
                 val dx = x + 0.5f - centerX
                 val dy = y + 0.5f - centerY
                 val dist = hypot(dx, dy)
-                if (dist > r) continue
+                val amount = (coverage?.invoke(x, y) ?: 1f).coerceIn(0f, 1f)
+                if (dist > r || amount <= 0f) continue
                 val normR = dist / r
                 val across = (dx * perpX + dy * perpY) / r
                 // Bristle grooves across the brush width + subtle paint ridge heaped along the stroke rim.
@@ -516,7 +541,7 @@ object PhysicalPaintEngine {
                 val rimPile = if (normR > 0.65f) 1.25f * (1f - (normR - 0.65f) / 0.35f) else 0.85f
                 val deposit = thick * bristles * rimPile * (1f - normR * normR)
                 val current = plane.impastoAt(x, y)
-                val nextH = (current * 0.65f + deposit).coerceIn(-1f, 1f)
+                val nextH = (current + (deposit - current * 0.35f) * amount).coerceIn(-1f, 1f)
                 plane.setCell(x, y, plane.wetnessAt(x, y), nextH, plane.pigmentAt(x, y))
             }
         }

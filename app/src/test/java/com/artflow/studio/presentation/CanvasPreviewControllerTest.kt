@@ -1,6 +1,7 @@
 package com.artflow.studio.presentation
 
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import com.artflow.studio.presentation.ui.viewmodel.CanvasPreviewController
 import kotlinx.coroutines.CompletableDeferred
@@ -127,13 +128,154 @@ class CanvasPreviewControllerTest {
             assertSame(updated, controller.preview.value)
         }
 
+    @Test
+    fun supersededSettledRenderDoesNotPublishBeforeTheLatestRefresh() =
+        runTest {
+            val repository = DeferredPreviewRepository()
+            val controller = CanvasPreviewController(repository, backgroundScope, StandardTestDispatcher(testScheduler))
+            controller.refresh()
+            runCurrent()
+            advanceTimeBy(250)
+            runCurrent()
+            val old = repository.started.receive()
+            controller.refresh()
+            old.result.complete(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
+            runCurrent()
+            assertNull(controller.preview.value)
+
+            advanceTimeBy(250)
+            runCurrent()
+            val current = repository.started.receive()
+            val updated = PixelBuffer.filled(2, 2, 0xFF00FF00.toInt())
+            current.result.complete(updated)
+            runCurrent()
+            assertSame(updated, controller.preview.value)
+            assertEquals(1, repository.maximumConcurrent)
+        }
+
+    @Test
+    fun changedFrameRejectsACommittedRenderEvenBeforeAnotherRefreshArrives() =
+        runTest {
+            val repository = DeferredPreviewRepository()
+            val controller = CanvasPreviewController(repository, backgroundScope, StandardTestDispatcher(testScheduler))
+            controller.finishProvisional()
+            runCurrent()
+            val old = repository.started.receive()
+            assertEquals(0, old.frameIndex)
+            repository.frameIndex = 1
+            old.result.complete(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
+            runCurrent()
+            assertNull(controller.preview.value)
+
+            controller.finishProvisional()
+            runCurrent()
+            val current = repository.started.receive()
+            assertEquals(1, current.frameIndex)
+            val updated = PixelBuffer.filled(2, 2, 0xFF00FF00.toInt())
+            current.result.complete(updated)
+            runCurrent()
+            assertSame(updated, controller.preview.value)
+        }
+
+    @Test
+    fun resetClearsBothOutputsAndRejectsLateWorkWithoutOverlappingRenders() =
+        runTest {
+            val repository = DeferredPreviewRepository()
+            val controller = CanvasPreviewController(repository, backgroundScope, StandardTestDispatcher(testScheduler))
+            val oldMap = PixelBuffer.filled(2, 2, 0xFF444444.toInt())
+            repository.materials = mapOf(MaterialChannel.METALLIC to oldMap)
+            controller.finishProvisional()
+            runCurrent()
+            repository.started
+                .receive()
+                .result
+                .complete(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
+            runCurrent()
+            assertSame(oldMap, controller.materialMaps.value[MaterialChannel.METALLIC])
+
+            controller.finishProvisional()
+            runCurrent()
+            val delayed = repository.started.receive()
+            controller.reset()
+            assertNull(controller.preview.value)
+            assertEquals(emptyMap<MaterialChannel, PixelBuffer>(), controller.materialMaps.value)
+            repository.materials = emptyMap()
+            controller.finishProvisional()
+            runCurrent()
+            assertEquals(2, repository.startedCount)
+            delayed.result.complete(PixelBuffer.filled(2, 2, 0xFF0000FF.toInt()))
+            runCurrent()
+            assertNull(controller.preview.value)
+
+            val current = repository.started.receive()
+            val updated = PixelBuffer.filled(2, 2, 0xFF00FF00.toInt())
+            current.result.complete(updated)
+            runCurrent()
+            assertSame(updated, controller.preview.value)
+            assertEquals(emptyMap<MaterialChannel, PixelBuffer>(), controller.materialMaps.value)
+            assertEquals(1, repository.maximumConcurrent)
+        }
+
+    @Test
+    fun revisionChangeDuringMaterialRenderingCannotPublishMixedOutputs() =
+        runTest {
+            val repository = DeferredPreviewRepository()
+            repository.gateMaterials = true
+            val controller = CanvasPreviewController(repository, backgroundScope, StandardTestDispatcher(testScheduler))
+            controller.finishProvisional()
+            runCurrent()
+            repository.started
+                .receive()
+                .result
+                .complete(PixelBuffer.filled(2, 2, 0xFFFF0000.toInt()))
+            runCurrent()
+            val oldMap = repository.materialStarted.receive()
+            assertNull("Color must wait for its matching material maps", controller.preview.value)
+            repository.revision++
+            oldMap.result.complete(PixelBuffer.filled(2, 2, 0xFF444444.toInt()))
+            runCurrent()
+            assertNull(controller.preview.value)
+            assertEquals(emptyMap<MaterialChannel, PixelBuffer>(), controller.materialMaps.value)
+
+            repository.gateMaterials = false
+            val newMap = PixelBuffer.filled(2, 2, 0xFF888888.toInt())
+            repository.materials = mapOf(MaterialChannel.ROUGHNESS to newMap)
+            controller.finishProvisional()
+            runCurrent()
+            val updated = PixelBuffer.filled(2, 2, 0xFF00FF00.toInt())
+            repository.started
+                .receive()
+                .result
+                .complete(updated)
+            runCurrent()
+            assertSame(updated, controller.preview.value)
+            assertEquals(mapOf(MaterialChannel.ROUGHNESS to newMap), controller.materialMaps.value)
+        }
+
     private class DeferredPreviewRepository : CanvasRepository by mock(CanvasRepository::class.java) {
         val started = Channel<Render>(Channel.UNLIMITED)
+        val materialStarted = Channel<Render>(Channel.UNLIMITED)
         var startedCount = 0
         var maximumConcurrent = 0
+        var frameIndex = 0
+        var revision = 0L
+        var gateMaterials = false
+        var materials = emptyMap<MaterialChannel, PixelBuffer>()
         private var concurrent = 0
 
-        override fun activeFrameIndex(): Int = 0
+        override val contentRevision: Long get() = revision
+
+        override fun activeFrameIndex(): Int = frameIndex
+
+        override suspend fun compositeMaterial(
+            channel: MaterialChannel,
+            provisional: Boolean,
+        ): PixelBuffer? {
+            if (!gateMaterials) return materials[channel]
+            val request = Render(provisional, frameIndex)
+            materialStarted.send(request)
+            return request.result.await()
+        }
 
         override suspend fun compositePreview(): PixelBuffer = render(true)
 
@@ -146,7 +288,7 @@ class CanvasPreviewControllerTest {
             concurrent++
             maximumConcurrent = maxOf(maximumConcurrent, concurrent)
             startedCount++
-            val request = Render(provisional)
+            val request = Render(provisional, frameIndex)
             started.send(request)
             return try {
                 request.result.await()
@@ -158,6 +300,7 @@ class CanvasPreviewControllerTest {
 
     private class Render(
         val provisional: Boolean,
+        val frameIndex: Int,
     ) {
         val result = CompletableDeferred<PixelBuffer>()
     }
