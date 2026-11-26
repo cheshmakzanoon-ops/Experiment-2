@@ -39,6 +39,7 @@ import com.artflow.studio.core.canvas.ViewMath
 import com.artflow.studio.core.canvas.ViewTransform
 import com.artflow.studio.core.canvas.WheelAction
 import com.artflow.studio.core.color.CmykProof
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ViewFilter
 import com.artflow.studio.core.perspective.PerspectiveGuide
 import com.artflow.studio.core.pixels.AreaSample
@@ -58,6 +59,7 @@ import com.artflow.studio.core.render.PhysicalPaintSnapshot
 import com.artflow.studio.core.render.StrokeClock
 import com.artflow.studio.core.symmetry.SymmetryEngine
 import com.artflow.studio.core.text.TextLayout
+import com.artflow.studio.core.tool.CloneStampState
 import com.artflow.studio.core.tool.FillTool
 import com.artflow.studio.core.tool.GradientTool
 import com.artflow.studio.core.tool.LiquifyTool
@@ -506,7 +508,7 @@ class ArtFlowCanvasView
         private var pixelCommitDescription = ""
 
         private var smudgeSession: PixelBrushes.SmudgeSession? = null
-        private var cloneSession: PixelBrushes.CloneSession? = null
+        private var cloneStroke: CloneStampState.Stroke? = null
         private var healingSession: PixelBrushes.HealingSession? = null
         private var liquifySession: LiquifyTool.Session? = null
 
@@ -550,8 +552,10 @@ class ArtFlowCanvasView
             liquifyAdjustGesture = 0L
         }
 
-        private var cloneSource: Pair<Float, Float>? = null
-        private var cloneDragStarted = false
+        private var cloneState by mutableStateOf(CloneStampState())
+        private var cloneSourcePending by mutableStateOf(false)
+        val cloneSource: Pair<Float, Float>? get() = cloneState.source
+        val isChoosingCloneSource: Boolean get() = cloneSourcePending || cloneSource == null
         private var lastPreviewRequest = 0L
         private var lastLiquifyPreview = 0L
         private var liquifyPreviewJob: Job? = null
@@ -726,7 +730,7 @@ class ArtFlowCanvasView
             pendingPixelCommit = false
             pendingPixelCancel = false
             smudgeSession = null
-            cloneSession = null
+            cloneStroke = null
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
@@ -758,6 +762,11 @@ class ArtFlowCanvasView
             val destinationChanged = newInput.tool != input.tool || newInput.strokeDestination != input.strokeDestination
             if (destinationChanged || newInput.fingerPainting != input.fingerPainting) cancelActiveGesture()
             if (destinationChanged) resetLiquifyReference()
+            if (newInput.tool != input.tool) cloneSourcePending = false
+            if (newInput.clone.aligned != input.clone.aligned) {
+                cancelActiveGesture()
+                cloneState = cloneState.withoutAlignment()
+            }
             pointerRouter.enabled = newInput.gestures.canvasGestures()
             if (newInput.tool != input.tool) previousTool = input.tool
             if (newInput.stylus != input.stylus) stylusMapper = StylusButtonMapper(newInput.stylus)
@@ -781,6 +790,35 @@ class ArtFlowCanvasView
             canvasRepository.setStrokeColor(newInput.brushColor)
             canvasRepository.setSecondaryColor(newInput.secondaryColor)
             canvasRepository.setSymmetry(newInput.symmetry)
+        }
+
+        /** The next valid canvas tap chooses a source without changing pixels or undo history. */
+        fun requestCloneSourceSelection() {
+            cancelActiveGesture()
+            cloneSourcePending = true
+            onStatusMessage?.invoke("Tap the canvas to set the clone source")
+        }
+
+        /** Keep the previous source and offset if the artist abandons a new choice. */
+        fun cancelCloneSourceSelection() {
+            cancelActiveGesture()
+            cloneSourcePending = false
+        }
+
+        private fun chooseCloneSource(
+            x: Float,
+            y: Float,
+        ) {
+            val insideWidth = x >= 0f && x < canvasWidth
+            val insideHeight = y >= 0f && y < canvasHeight
+            if (!insideWidth || !insideHeight) {
+                onStatusMessage?.invoke("Choose a clone source inside the canvas")
+                return
+            }
+            cloneState = cloneState.withSource(x, y)
+            cloneSourcePending = false
+            onCloneSourceChanged?.invoke(x to y)
+            onStatusMessage?.invoke("Clone source set — tap or drag to stamp")
         }
 
         fun setActiveLayerId(layerId: Long) {
@@ -807,6 +845,8 @@ class ArtFlowCanvasView
             if (dimensionsChanged) {
                 resetLiquifyReference()
                 cancelActiveGesture()
+                cloneState = CloneStampState()
+                cloneSourcePending = false
             }
             canvasWidth = max(1, width)
             canvasHeight = max(1, height)
@@ -1416,6 +1456,7 @@ class ArtFlowCanvasView
                             }
                             // Ghost count, opacity and tints live in the animation settings.
                             if (onionEnabled && canvasRepository.timeline.value.settings != onionSettings) onionDirty = true
+                            if (onionEnabled && canvasRepository.getColorProfile() != onionProfile) onionDirty = true
                         }.conflate()
                         .collect {
                             // A busy renderer must complete frames instead of cancelling each one
@@ -1485,6 +1526,7 @@ class ArtFlowCanvasView
 
         /** The animation settings the current ghosts were made with. */
         private var onionSettings: AnimationSettings? = null
+        private var onionProfile: ColorProfile? = null
 
         private fun refreshOnionSkins() {
             if (onionEnabled && !onionDirty) return
@@ -1500,6 +1542,8 @@ class ArtFlowCanvasView
                 coroutineScope.launch {
                     val state = canvasRepository.timeline.value
                     onionSettings = state.settings
+                    val profile = canvasRepository.getColorProfile()
+                    onionProfile = profile
                     val active = state.activeIndex
                     val neighbours = AnimationTimeline.onionGhosts(state)
                     val entries = neighbours.previous.asReversed() + neighbours.next.asReversed()
@@ -1528,7 +1572,7 @@ class ArtFlowCanvasView
                             if (tint == null) {
                                 preview
                             } else {
-                                withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint) }
+                                withContext(Dispatchers.Default) { OnionSkinTint.silhouette(preview, tint, profile) }
                             }
                         ghosts += ghost to opacity
                     }
@@ -1932,8 +1976,7 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.CLONE_STAMP -> {
-                    cloneDragStarted = false
-                    if (cloneSource == null) {
+                    if (isChoosingCloneSource) {
                         onStatusMessage?.invoke("Tap to set the clone source")
                     } else {
                         startPixelGesture(tool, canvasX, canvasY, pressure, "Clone stamp")
@@ -2034,7 +2077,7 @@ class ArtFlowCanvasView
                 ToolType.SMUDGE, ToolType.CLONE_STAMP, ToolType.HEALING,
                 ToolType.LIQUIFY, ToolType.MOVE, ToolType.TRANSFORM,
                 -> {
-                    if (tool == ToolType.CLONE_STAMP && gestureMoved > TAP_SLOP) cloneDragStarted = true
+                    if (tool == ToolType.CLONE_STAMP && isChoosingCloneSource) return true
                     queuePixelSample(
                         canvasX,
                         canvasY,
@@ -2140,10 +2183,8 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.CLONE_STAMP -> {
-                    if (!cancelled && cloneSource == null && wasTap) {
-                        cloneSource = canvasX to canvasY
-                        onCloneSourceChanged?.invoke(canvasX to canvasY)
-                        onStatusMessage?.invoke("Clone source set — drag to stamp")
+                    if (isChoosingCloneSource) {
+                        if (!cancelled && wasTap) chooseCloneSource(canvasX, canvasY)
                     } else {
                         endPixelGesture(cancelled)
                     }
@@ -2825,7 +2866,7 @@ class ArtFlowCanvasView
             rasterSource = null
             rasterBase = null
             smudgeSession = null
-            cloneSession = null
+            cloneStroke = null
             healingSession = null
             liquifySession = null
             moveStart = x to y
@@ -2969,13 +3010,10 @@ class ArtFlowCanvasView
                 }
 
                 ToolType.CLONE_STAMP -> {
-                    val source = cloneSource ?: (x to y)
-                    cloneSession =
-                        PixelBrushes.beginCloneStamp(
+                    cloneStroke =
+                        cloneState.beginStroke(
                             targetX = x,
                             targetY = y,
-                            sourceX = source.first,
-                            sourceY = source.second,
                             settings =
                                 gestureInput.clone.copy(
                                     size = gestureInput.brushParams.size,
@@ -3052,7 +3090,7 @@ class ArtFlowCanvasView
             val changed =
                 when (pixelTool) {
                     ToolType.SMUDGE -> smudgeSession?.dragTo(x, y, buffer, pressure, tilt, orientation)
-                    ToolType.CLONE_STAMP -> cloneSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
+                    ToolType.CLONE_STAMP -> cloneStroke?.session?.dragTo(x, y, buffer, rasterSource ?: buffer)
                     ToolType.HEALING -> healingSession?.dragTo(x, y, buffer, rasterSource ?: buffer)
                     else -> null
                 }
@@ -3179,6 +3217,7 @@ class ArtFlowCanvasView
             val session = rasterSession ?: return
             if (!cancelled) smudgeSession?.finish(session.buffer)
             val description = pixelCommitDescription
+            val finalClone = cloneStroke
             val finalLiquify = liquifySession
             val reference = gestureLiquifyReference
             val original = rasterBase
@@ -3199,7 +3238,7 @@ class ArtFlowCanvasView
             pendingPixelCommit = false
             pendingSamples.clear()
             smudgeSession = null
-            cloneSession = null
+            cloneStroke = null
             healingSession = null
             liquifySession = null
             gestureLiquifyReference = null
@@ -3275,6 +3314,7 @@ class ArtFlowCanvasView
                                 }
                         if (changed) {
                             if (canvasRepository.commitRasterEdits(group, description)) {
+                                if (finalClone != null) cloneState = cloneState.afterStroke(finalClone)
                                 if (transform != null) {
                                     transform.quad = finalQuad ?: transform.quad
                                     transform.mesh = finalMesh
@@ -3288,6 +3328,12 @@ class ArtFlowCanvasView
                             } else {
                                 onStatusMessage?.invoke("The layer changed; this gesture was discarded")
                             }
+                        } else if (finalClone != null &&
+                            canvasRepository.contentRevision == session.contentRevision &&
+                            activeLayerId == session.layerId
+                        ) {
+                            // A valid stroke over identical pixels still establishes the artist's offset.
+                            cloneState = cloneState.afterStroke(finalClone)
                         }
                     }
                 } finally {

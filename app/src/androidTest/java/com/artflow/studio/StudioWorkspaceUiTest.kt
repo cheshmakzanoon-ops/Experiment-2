@@ -273,6 +273,35 @@ class StudioWorkspaceUiTest {
     private fun stripTool(tool: ToolType): SemanticsNodeInteraction =
         compose.onNode(hasContentDescription(tool.displayName) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected))
 
+    @Test fun cloneOptionsControlAlignmentAndSamplingAndExposeSourceSelection() {
+        openEditor()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onNodeWithContentDescription("Erase").performClick()
+        compose.onNodeWithText("All tools").performScrollTo().performClick()
+        stripTool(ToolType.CLONE_STAMP).performScrollTo().performClick()
+        compose
+            .onNodeWithContentDescription("Aligned clone strokes")
+            .performScrollTo()
+            .assertIsOn()
+            .performClick()
+        compose
+            .onNodeWithContentDescription("Sample all layers for clone")
+            .performScrollTo()
+            .assertIsOff()
+            .performClick()
+        compose.runOnIdle {
+            assertFalse(viewModel.input.value.clone.aligned)
+            assertTrue(viewModel.input.value.clone.sampleAllLayers)
+        }
+        compose.onNodeWithText("Set clone source").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Close Tool options").assertDoesNotExist()
+        compose.runOnIdle {
+            val view = requireNotNull(findCanvas(compose.activity.findViewById(android.R.id.content)))
+            assertTrue(view.isChoosingCloneSource)
+            assertNull(view.cloneSource)
+        }
+    }
+
     @Test fun lightWorkspaceKeepsPrimaryControlsReachable() {
         openEditor(AppSettings(themeMode = ThemeMode.LIGHT, largeTouchTargets = true, reduceMotion = true))
         compose.onNodeWithContentDescription("Erase").performClick()

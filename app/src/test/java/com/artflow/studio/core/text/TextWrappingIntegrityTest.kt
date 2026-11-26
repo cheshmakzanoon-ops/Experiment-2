@@ -21,6 +21,19 @@ class TextWrappingIntegrityTest {
     }
 
     @Test
+    fun wrappingKeepsACombiningMarkAttachedToItsSpaceBase() {
+        val text = "a \u0301b"
+        val lines = TextLayout.wrap(text, 3f, style, unitWidth)
+        assertEquals(listOf("a \u0301", "b"), lines)
+        assertEquals(text, lines.joinToString(""))
+    }
+
+    @Test
+    fun softWrappingConsumesOnlyWholeSeparatorClusters() {
+        assertEquals(listOf("a", " \u0301b"), TextLayout.wrap("a \t \u0301b", 3f, style, unitWidth))
+    }
+
+    @Test
     fun emptyAndWhitespaceOnlyParagraphsKeepTheirAuthoredContent() {
         assertEquals(listOf(""), TextLayout.wrap("", 10f, style, unitWidth))
         assertEquals(listOf(" \t  "), TextLayout.wrap(" \t  ", 10f, style, unitWidth))
@@ -69,6 +82,19 @@ class TextWrappingIntegrityTest {
         assertEquals(listOf("aa", "bb", "cc"), runs.map { it.text })
         assertEquals(listOf(6f, 12.5f, 17f), runs.map { it.x })
         assertEquals(19f, runs.last().x + runs.last().width, 0f)
+    }
+
+    @Test
+    fun justifiedRunsKeepCombiningMarksWithTheirSpaceBase() {
+        val text = "a \u0301b"
+        val singleWord = TextLayout.justify(text, unitWidth, 8f, 4f)
+        assertEquals(listOf(text), singleWord.map { it.text })
+        assertEquals(listOf(4f), singleWord.map { it.x })
+
+        val runs = TextLayout.justify("a \t \u0301b c", unitWidth, 12f, 4f)
+        assertEquals(listOf("a", " \u0301b", "c"), runs.map { it.text })
+        assertEquals(listOf(4f, 9f, 15f), runs.map { it.x })
+        assertEquals(16f, runs.last().x + runs.last().width, 0f)
     }
 
     @Test

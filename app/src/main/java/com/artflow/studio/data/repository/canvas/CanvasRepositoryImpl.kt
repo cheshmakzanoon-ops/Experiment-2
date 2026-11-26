@@ -294,6 +294,7 @@ class CanvasRepositoryImpl
             trackedMs.set(0L)
             backgroundColor = 0xFFFFFFFF.toInt()
             animationSettings = AnimationSettings()
+            frameClipboard = null
             pendingEdits.clear()
             damageTrackedSessions.clear()
             nextLayerId = 1

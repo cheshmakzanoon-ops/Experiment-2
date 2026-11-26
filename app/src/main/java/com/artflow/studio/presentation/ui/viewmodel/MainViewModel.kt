@@ -249,16 +249,17 @@ class MainViewModel
             storage.flattenedFile(project.id).takeIf { it.isFile } ?: project.thumbnailPath?.let { java.io.File(it) }?.takeIf { it.isFile }
 
         /** Copies the artwork's last saved image into the shareable exports folder; null if it was never saved. */
-        suspend fun shareablePng(project: Project): java.io.File? {
-            val bytes = storage.loadFlattenedBytes(project.id) ?: return null
-            val name =
-                project.name
-                    .filter { it.isLetterOrDigit() || it in " -_" }
-                    .trim()
-                    .ifEmpty { "Artwork" }
-                    .take(MAX_STACK_NAME)
-            return storage.saveExport(project.id, "$name.png", bytes)
-        }
+        suspend fun shareablePng(project: Project): java.io.File? =
+            withContext(Dispatchers.IO) {
+                val source = storage.flattenedFile(project.id).takeIf { it.isFile } ?: return@withContext null
+                val name =
+                    project.name
+                        .filter { it.isLetterOrDigit() || it in " -_" }
+                        .trim()
+                        .ifEmpty { "Artwork" }
+                        .take(MAX_STACK_NAME)
+                storage.saveExportFromFile(project.id, "$name.png", source)
+            }
 
         /** Puts an artwork in a gallery stack; a blank name returns it to the main gallery. */
         fun moveToStack(

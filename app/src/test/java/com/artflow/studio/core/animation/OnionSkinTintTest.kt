@@ -1,5 +1,6 @@
 package com.artflow.studio.core.animation
 
+import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.pixels.PixelBuffer
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -32,5 +33,16 @@ class OnionSkinTintTest {
         assertEquals(2, tinted.height)
         assertEquals(0x40ABCDEF, source.pixels[0])
         assertEquals(0x40FF0000, tinted.pixels[7])
+    }
+
+    @Test fun srgbPickerTintIsExpressedInTheWideDocumentProfileBeforeDisplay() {
+        val source = PixelBuffer(3, 1, intArrayOf(0x80123456.toInt(), 0x00FFFFFF, 0xFF0000FF.toInt()))
+        val original = source.pixels.copyOf()
+        val tinted = OnionSkinTint.silhouette(source, red, ColorProfile.DISPLAY_P3)
+
+        // sRGB red has Display P3 components (234, 51, 35). Copying (255, 0, 0)
+        // instead would ask the display shader for P3 red, shifting the chosen swatch.
+        assertArrayEquals(intArrayOf(0x80EA3323.toInt(), 0x00EA3323, 0xFFEA3323.toInt()), tinted.pixels)
+        assertArrayEquals(original, source.pixels)
     }
 }

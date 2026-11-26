@@ -40,6 +40,32 @@ import org.mockito.Mockito.`when`
 @OptIn(ExperimentalCoroutinesApi::class)
 class CanvasMetadataViewModelTest {
     @Test
+    fun openingANewSameSizeArtworkClearsTheFrameClipboardAndPasteAffordance() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                fixture.repository.addLayer("Copied artwork")
+                fixture.viewModel.frameClipboard.copy(0)
+                runCurrent()
+                assertTrue(fixture.viewModel.frameClipboard.canPaste.value)
+
+                fixture.viewModel.open(2L)
+                assertFalse(fixture.viewModel.frameClipboard.canPaste.value)
+                runCurrent()
+                assertEquals(2L, fixture.repository.projectId())
+                assertFalse(fixture.repository.pasteFrame(1))
+                assertEquals(1, fixture.repository.frames().size)
+                assertFalse(fixture.repository.getAllLayers().any { it.name == "Copied artwork" })
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
     fun savedInputSwitchesReachTheEditorWithoutReplacingItsTool() =
         runTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -352,7 +378,7 @@ class CanvasMetadataViewModelTest {
         private val projects =
             mock(ProjectRepository::class.java) { call ->
                 check(call.method.name == "getProjectById") { "Unexpected project call: ${call.method.name}" }
-                project
+                project.copy(id = call.getArgument(0))
             }
         private val settings =
             mock(SettingsRepository::class.java).also {

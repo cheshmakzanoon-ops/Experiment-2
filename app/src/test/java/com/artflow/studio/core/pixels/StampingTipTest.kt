@@ -85,4 +85,62 @@ class StampingTipTest {
         assertTrue(below > 0 && above > 0)
         assertEquals(above.toDouble(), below.toDouble(), above * 0.05)
     }
+
+    @Test
+    fun growingThinTipsPreserveAreaAcrossTheWholeSamplingInterval() {
+        for (angle in listOf(0f, 30f, 45f, 70f, 90f)) {
+            for (offset in listOf(0f, 0.25f, 0.5f, 0.75f)) {
+                var previousArea = 0.0
+                for (step in 0..48) {
+                    val radius = 8f + step * 0.25f
+                    val area = paintedArea(radius, Stamping.TipShape(0.05f, angle), offset = offset)
+                    val context = "radius=$radius, angle=$angle, offset=$offset"
+                    val expected = Math.PI * radius * radius * 0.05
+                    assertTrue("Growing a thin tip lost paint area at $context: $previousArea to $area", area >= previousArea)
+                    assertEquals("Thin-tip area at $context", expected, area, expected * 0.02 + 0.02)
+                    previousArea = area
+                }
+            }
+        }
+    }
+
+    @Test
+    fun largerEllipsesKeepTheSameHardnessAndAreaProfile() {
+        for (radius in listOf(12f, 24f, 48f)) {
+            for (roundness in listOf(0.05f, 0.25f, 0.75f)) {
+                for (angle in listOf(0f, 37f, 90f)) {
+                    assertHardnessProfile(radius, roundness, angle)
+                }
+            }
+        }
+    }
+
+    private fun assertHardnessProfile(
+        radius: Float,
+        roundness: Float,
+        angle: Float,
+    ) {
+        for (hardness in listOf(0f, 0.5f, 1f)) {
+            val area = paintedArea(radius, Stamping.TipShape(roundness, angle), hardness, offset = 0.25f)
+            // Integrating the radial hardness ramp gives this fraction of the ellipse area.
+            val expected = Math.PI * radius * radius * roundness * (1 + hardness + hardness * hardness) / 3
+            assertEquals(
+                "Ellipse area at radius=$radius, roundness=$roundness, angle=$angle, hardness=$hardness",
+                expected,
+                area,
+                expected * 0.03 + 0.04,
+            )
+        }
+    }
+
+    private fun paintedArea(
+        radius: Float,
+        tip: Stamping.TipShape,
+        hardness: Float = 1f,
+        offset: Float = 0f,
+    ): Double {
+        val pixels = PixelBuffer(101, 101)
+        Stamping.dab(pixels, 50f + offset, 50f + offset, radius, black, hardness = hardness, tip = tip)
+        return pixels.pixels.sumOf { (it ushr 24) / 255.0 }
+    }
 }

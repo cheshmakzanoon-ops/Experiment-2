@@ -290,6 +290,7 @@ class CanvasViewModel
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
             exportController.reset()
             canvasPreview.reset()
+            frameClipboard.reset()
             recoveryController.onProjectOpening(projectId)
             imports.cancel()
             cancelText()

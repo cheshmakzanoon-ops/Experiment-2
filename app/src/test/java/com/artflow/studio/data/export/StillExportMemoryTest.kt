@@ -180,7 +180,7 @@ class StillExportMemoryTest {
 
     @Test
     fun featheredSelectionAppearanceIsBudgetedBeforeReadingOrEncodingPixels() =
-        runBlocking {
+        runBlocking<Unit> {
             val source = spy(painted(16, 16))
             val layers = listOf(layer(1, source), layer(2, source))
             for (format in listOf(ExportFormat.PSD, ExportFormat.PROCREATE)) {

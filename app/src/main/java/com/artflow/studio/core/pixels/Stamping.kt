@@ -234,43 +234,18 @@ object Stamping {
         val radians = Math.toRadians(tip.angleDegrees.toDouble())
         val cosA = cos(radians).toFloat()
         val sinA = sin(radians).toFloat()
-        val x0 = max(0, floor(x - radius).toInt())
-        val x1 = min(target.width - 1, ceil(x + radius).toInt())
-        val y0 = max(0, floor(y - radius).toInt())
-        val y1 = min(target.height - 1, ceil(y + radius).toInt())
+        val ellipse = SubpixelEllipse(x, y, radius, minor, cosA, sinA, hardness.coerceIn(0f, 1f))
+        val x0 = max(0, floor(x - ellipse.xExtent).toInt())
+        val x1 = min(target.width - 1, ceil(x + ellipse.xExtent).toInt())
+        val y0 = max(0, floor(y - ellipse.yExtent).toInt())
+        val y1 = min(target.height - 1, ceil(y + ellipse.yExtent).toInt())
         if (x1 < x0 || y1 < y0) return
-        // The edge ramp is at least a pixel wide along the short axis, and it starts inside the radius, so a hard
-        // tip (hardness 1) is anti-aliased too. Without the ramp it stair-steps; the ramp starts at the same place
-        // as before for every tip that is not thin.
-        val inner = min(radius * hardness.coerceIn(0f, 1f), radius - 0.75f / minor).coerceAtLeast(0f)
-        val edge = max(radius - inner, 0.75f / minor)
-        // A thin tip can lie entirely between pixel centres. Integrate its actual footprint so
-        // fractional movement cannot erase the whole dab or inflate it to a one-pixel-wide brush.
-        val subpixel =
-            if (radius * minor < 0.75f) {
-                SubpixelEllipse(x, y, radius, minor, cosA, sinA, hardness.coerceIn(0f, 1f))
-            } else {
-                null
-            }
-        val subpixelWeight = ((0.75f - radius * minor) / 0.25f).coerceIn(0f, 1f)
+        // Integrate the same ellipse footprint at every size. Switching to an inward edge ramp
+        // as a thin tip grows loses paint area; the helper instead skips resolved interior pixels.
         val paintRows = { from: Int, to: Int ->
             for (py in from..to) {
                 for (px in x0..x1) {
-                    if (subpixel != null && subpixelWeight >= 1f) {
-                        applyPixel(target, py * target.width + px, color, subpixel.coverage(px, py) * strength, mode, alphaLock, mask)
-                        continue
-                    }
-                    val dx = px + 0.5f - x
-                    val dy = py + 0.5f - y
-                    val along = dx * cosA + dy * sinA
-                    val across = (-dx * sinA + dy * cosA) / minor
-                    val distance = sqrt(along * along + across * across)
-                    val baseFalloff = if (distance <= inner) 1f else ((radius - distance) / edge).coerceIn(0f, 1f)
-                    // Fade into the established large-tip transfer without a density jump when
-                    // pressure changes the short radius across the integration threshold.
-                    val falloff =
-                        subpixel?.let { baseFalloff + (it.coverage(px, py) - baseFalloff) * subpixelWeight }
-                            ?: baseFalloff
+                    val falloff = ellipse.coverage(px, py)
                     if (falloff <= 0f) continue
                     applyPixel(target, py * target.width + px, color, falloff * strength, mode, alphaLock, mask)
                 }

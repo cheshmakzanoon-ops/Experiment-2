@@ -13,11 +13,11 @@ import java.util.Random
 import kotlin.math.sin
 
 /**
- * Pins the pixels brushes paint with the settings that existed before wet-mix, rendering-mode and
- * path-jitter fields were added. A brush that leaves the newer fields at their defaults must keep
- * painting exactly these pixels. The constants pin the base codebase at adf0bc7208974f1579095ea5a890b7c1375f02f9,
- * independently compiled from Git before accepting the native brush mapping changes. Its renderer already
- * disagreed with the earlier constants; see docs/BRUSH_BASELINE_VALIDATION_2026-10-21.md for the comparison.
+ * Pins the pixels painted by the default brush settings. The original captures came from
+ * adf0bc7208974f1579095ea5a890b7c1375f02f9; see docs/BRUSH_BASELINE_VALIDATION_2026-10-21.md.
+ * Preset and random-brush fingerprints were refreshed on 2026-11-26 for area-consistent ellipse
+ * coverage at every tip size. StampingTipTest independently checks geometric area, hardness and
+ * increasing-size coverage; the round eraser fingerprint is unchanged from the original capture.
  */
 class BrushDefaultsGoldenTest {
     private val width = 180
@@ -63,7 +63,7 @@ class BrushDefaultsGoldenTest {
             val params = preset.parameters.copy(size = preset.parameters.size.coerceAtMost(28f))
             combined = 31 * combined + paintedHash(params)
         }
-        assertEquals(-2657600560538100551L, combined)
+        assertEquals(-3302243978577737167L, combined)
     }
 
     @Test
@@ -109,7 +109,7 @@ class BrushDefaultsGoldenTest {
                 )
             combined = 31 * combined + paintedHash(params)
         }
-        assertEquals(6912832811445097011L, combined)
+        assertEquals(-5729322085307478503L, combined)
     }
 
     @Test

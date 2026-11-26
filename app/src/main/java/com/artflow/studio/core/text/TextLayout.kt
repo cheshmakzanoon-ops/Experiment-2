@@ -16,7 +16,6 @@ import kotlin.math.sqrt
  */
 object TextLayout {
     private val GRAPHEME = Regex("\\X")
-    private val WRAP_SEGMENTS = Regex("[ \t]*[^ \t]+|[ \t]+$")
 
     @kotlinx.serialization.Serializable
     enum class Alignment(
@@ -174,7 +173,7 @@ object TextLayout {
         if (paragraph.isEmpty()) return listOf("")
         if (maxWidth <= 0f) return listOf(paragraph)
 
-        val segments = WRAP_SEGMENTS.findAll(paragraph).map { it.value }
+        val segments = wordSegments(paragraph)
 
         val lines = mutableListOf<String>()
         var current = StringBuilder()
@@ -187,7 +186,8 @@ object TextLayout {
         }
 
         segments.forEach { segment ->
-            val candidate = "$current$segment"
+            val segmentText = paragraph.substring(segment.start, segment.endExclusive)
+            val candidate = "$current$segmentText"
             if (measureWidth(candidate) <= maxWidth) {
                 current = StringBuilder(candidate)
                 return@forEach
@@ -195,7 +195,8 @@ object TextLayout {
 
             // Only the separator at a wrap boundary is consumed. Indentation at the beginning
             // of a paragraph and repeated spacing that fits on a line remain as authored.
-            val word = if (current.isNotEmpty()) segment.trimStart(' ', '\t') else segment
+            // A space with a combining mark is part of its word, not removable whitespace.
+            val word = if (current.isNotEmpty()) paragraph.substring(segment.wordStart, segment.endExclusive) else segmentText
             flush()
             if (measureWidth(word) <= maxWidth) {
                 current = StringBuilder(word)
@@ -218,6 +219,34 @@ object TextLayout {
         return lines.ifEmpty { listOf("") }
     }
 
+    private data class WordSegment(
+        val start: Int,
+        val wordStart: Int,
+        val endExclusive: Int,
+    )
+
+    /** Groups each word with preceding separators without cutting a grapheme at a space. */
+    private fun wordSegments(text: String): List<WordSegment> {
+        val segments = mutableListOf<WordSegment>()
+        var segmentStart = 0
+        var wordStart = -1
+        GRAPHEME.findAll(text).forEach { glyph ->
+            if (glyph.value == " " || glyph.value == "\t") {
+                if (wordStart >= 0) {
+                    segments += WordSegment(segmentStart, wordStart, glyph.range.first)
+                    segmentStart = glyph.range.first
+                    wordStart = -1
+                }
+            } else if (wordStart < 0) {
+                wordStart = glyph.range.first
+            }
+        }
+        if (segmentStart < text.length) {
+            segments += WordSegment(segmentStart, wordStart.takeIf { it >= 0 } ?: text.length, text.length)
+        }
+        return segments
+    }
+
     /** Distributes leftover width across the gaps of an already-wrapped line. */
     internal fun justify(
         lineText: String,
@@ -225,13 +254,14 @@ object TextLayout {
         targetWidth: Float,
         startX: Float,
     ): List<PositionedText> {
-        val words = Regex("[^ \\t]+").findAll(lineText).toList()
+        val words = wordSegments(lineText).filter { it.wordStart < it.endExclusive }
         if (words.size < 2) return listOf(PositionedText(lineText, startX, 0f, measureWidth(lineText)))
 
         val extraGap = ((targetWidth - measureWidth(lineText)) / (words.size - 1)).coerceAtLeast(0f)
         return words.mapIndexed { index, word ->
-            val naturalX = measureWidth(lineText.substring(0, word.range.first))
-            PositionedText(word.value, startX + naturalX + index * extraGap, 0f, measureWidth(word.value))
+            val wordText = lineText.substring(word.wordStart, word.endExclusive)
+            val naturalX = measureWidth(lineText.substring(0, word.wordStart))
+            PositionedText(wordText, startX + naturalX + index * extraGap, 0f, measureWidth(wordText))
         }
     }
 

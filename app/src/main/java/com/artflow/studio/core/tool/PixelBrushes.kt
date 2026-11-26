@@ -273,8 +273,8 @@ object PixelBrushes {
         val hardness: Float = 0.85f,
         val opacity: Float = 1f,
         /**
-         * Aligned: the source keeps its offset relative to the brush for the whole session
-         * (the default in every desktop tool). Non-aligned: each stroke restarts from the origin.
+         * Aligned: [CloneStampState] keeps the source offset across completed strokes.
+         * Non-aligned: each stroke restarts from the chosen origin.
          */
         val aligned: Boolean = true,
         /** Sample the flattened composite instead of just the active layer. */
@@ -290,8 +290,8 @@ object PixelBrushes {
     }
 
     /**
-     * One clone-stamp drag. Create with [beginCloneStamp]; the offset is captured on the first
-     * stamp and reused for the rest of the session when [CloneSettings.aligned] is set.
+     * One clone-stamp drag. Its source tracks the brush with a fixed offset in both modes;
+     * [CloneStampState] decides whether the next stroke reuses that offset or the chosen origin.
      */
     class CloneSession(
         private val targetStartX: Float,

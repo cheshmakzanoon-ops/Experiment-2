@@ -392,7 +392,7 @@
     <string name="canvasscreen_only_fill_the_connected_region">Only fill the connected region</string>
     <string name="canvasscreen_filled">Filled</string>
     <string name="canvasscreen_reset_liquify">Reset liquify</string>
-    <string name="canvasscreen_tap_to_set_the_clone_source_then_drag">Tap to set the clone source, then drag. Blend mode: aligned.</string>
+    <string name="canvasscreen_tap_to_set_the_clone_source_then_drag">Tap inside the canvas to set the clone source.</string>
     <string name="canvasscreen_edit_shape">Edit Shape</string>
     <string name="canvasscreen_paste_as_layer">Paste as layer</string>
     <string name="canvasscreen_quickshape_hold_at_the_end_of_a_stroke">QuickShape — hold at the end of a stroke to snap a line or ellipse</string>

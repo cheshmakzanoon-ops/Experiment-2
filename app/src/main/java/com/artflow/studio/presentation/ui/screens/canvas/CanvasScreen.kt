@@ -705,7 +705,7 @@ fun CanvasScreen(
                             (input.smudgeParams?.takeIf { input.tool == ToolType.SMUDGE } ?: input.brushParams).opacityLimits,
                         ),
                 )
-                ToolOptionsPanel(viewModel, input, canvasView)
+                ToolOptionsPanel(viewModel, input, canvasView, onChooseCloneSource = dismissPanel)
             }
 
             EditorPanel.COLOUR -> {
@@ -1902,6 +1902,7 @@ private fun ToolOptionsPanel(
     viewModel: CanvasViewModel,
     input: EditorInput,
     canvasView: ArtFlowCanvasView?,
+    onChooseCloneSource: () -> Unit,
 ) {
     Column(
         modifier =
@@ -2063,11 +2064,58 @@ private fun ToolOptionsPanel(
         if (input.tool == ToolType.TRANSFORM) TransformOptions(viewModel, input, canvasView)
         if (input.tool == ToolType.BRUSH) BrushAssistOptions(viewModel, input)
         if (input.tool == ToolType.CLONE_STAMP) {
-            Text(
-                stringResource(R.string.canvasscreen_tap_to_set_the_clone_source_then_drag),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            CloneOptions(viewModel, input, canvasView, onChooseCloneSource)
         }
+    }
+}
+
+@Composable
+private fun CloneOptions(
+    viewModel: CanvasViewModel,
+    input: EditorInput,
+    canvasView: ArtFlowCanvasView?,
+    onChooseSource: () -> Unit,
+) {
+    val source = canvasView?.cloneSource
+    Text(
+        if (canvasView?.isChoosingCloneSource != false) {
+            stringResource(R.string.canvasscreen_tap_to_set_the_clone_source_then_drag)
+        } else {
+            "Source: ${source?.first?.roundToInt()}, ${source?.second?.roundToInt()} px"
+        },
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OutlinedButton(
+        onClick = {
+            canvasView?.requestCloneSourceSelection()
+            onChooseSource()
+        },
+        enabled = canvasView != null,
+    ) {
+        Text(if (source == null) "Set clone source" else "Choose new clone source")
+    }
+    if (source != null && canvasView?.isChoosingCloneSource == true) {
+        TextButton(onClick = { canvasView.cancelCloneSourceSelection() }) { Text("Keep current clone source") }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Aligned strokes", modifier = Modifier.weight(1f))
+        Switch(
+            checked = input.clone.aligned,
+            onCheckedChange = { viewModel.setCloneSettings(input.clone.copy(aligned = it)) },
+            modifier = Modifier.semantics { contentDescription = "Aligned clone strokes" },
+        )
+    }
+    Text(
+        if (input.clone.aligned) "Keep the source offset between strokes." else "Start every stroke from the chosen source.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Sample all layers", modifier = Modifier.weight(1f))
+        Switch(
+            checked = input.clone.sampleAllLayers,
+            onCheckedChange = { viewModel.setCloneSettings(input.clone.copy(sampleAllLayers = it)) },
+            modifier = Modifier.semantics { contentDescription = "Sample all layers for clone" },
+        )
     }
 }
 
@@ -2117,7 +2165,7 @@ private fun toolHint(tool: ToolType): String =
         }
 
         ToolType.CLONE_STAMP -> {
-            "Tap once to set the source, then drag to stamp."
+            "Choose a source, then tap or drag to copy its pixels."
         }
 
         ToolType.HEALING -> {

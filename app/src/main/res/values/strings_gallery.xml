@@ -12,4 +12,5 @@
     <string name="gallery_unfavourite_selected">Remove favourite</string>
     <string name="gallery_more_actions">More actions</string>
     <string name="gallery_share_chooser">Share artworks</string>
+    <string name="gallery_share_failed">The artwork could not be shared. Please try again.</string>
 </resources>
