@@ -1,5 +1,7 @@
 """Positive and adversarial controls for the binary release preflight."""
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -129,6 +131,93 @@ class PreflightTest(unittest.TestCase):
                 z.writestr('AndroidManifest.xml', b'manifest')
                 z.writestr('lib/arm64-v8a/check.so', elf())
             self.assertTrue(any('APK entry' in e for e in verify_archive(path)[0]))
+
+
+class PackagedNoticeTest(unittest.TestCase):
+    notices = {
+        'META-INF/ARTFLOW-LICENSE.txt': b'project license\n',
+        'META-INF/UNICODE-LICENSE.txt': b'unicode notice\n',
+    }
+
+    def write_archive(self, path, notices, prefix=None):
+        bundle = path.suffix == '.aab'
+        if prefix is None:
+            prefix = 'base/root/' if bundle else ''
+        with zipfile.ZipFile(path, 'w') as archive:
+            manifest = 'base/manifest/AndroidManifest.xml' if bundle else 'AndroidManifest.xml'
+            archive.writestr(manifest, b'manifest')
+            for name, content in notices.items():
+                archive.writestr(prefix + name, content)
+
+    def test_exact_notices_accepted_in_apk_and_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix in ('.apk', '.aab'):
+                with self.subTest(suffix=suffix):
+                    path = Path(directory) / ('app' + suffix)
+                    self.write_archive(path, self.notices)
+                    self.assertEqual([], verify_archive(path, self.notices)[0])
+
+    def test_each_missing_notice_rejected_in_apk_and_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix in ('.apk', '.aab'):
+                for omitted in self.notices:
+                    with self.subTest(suffix=suffix, omitted=omitted):
+                        path = Path(directory) / ('app' + suffix)
+                        self.write_archive(path, {k: v for k, v in self.notices.items() if k != omitted})
+                        errors = verify_archive(path, self.notices)[0]
+                        self.assertTrue(any('missing required notice' in e and omitted in e for e in errors))
+
+    def test_changed_or_truncated_notice_rejected_in_apk_and_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix in ('.apk', '.aab'):
+                for changed, original in self.notices.items():
+                    for content in (original[:-1], b'!' + original[1:]):
+                        with self.subTest(suffix=suffix, changed=changed, length=len(content)):
+                            path = Path(directory) / ('app' + suffix)
+                            self.write_archive(path, {**self.notices, changed: content})
+                            errors = verify_archive(path, self.notices)[0]
+                            self.assertTrue(any('differs from repository source' in e and changed in e
+                                                for e in errors))
+
+    def test_notice_in_wrong_archive_root_does_not_satisfy_requirement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix, wrong_prefix in (('.apk', 'base/root/'), ('.aab', '')):
+                with self.subTest(suffix=suffix):
+                    path = Path(directory) / ('app' + suffix)
+                    self.write_archive(path, self.notices, wrong_prefix)
+                    self.assertEqual(2, len(verify_archive(path, self.notices)[0]))
+
+    def test_generic_caller_does_not_require_project_notices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix in ('.apk', '.aab'):
+                with self.subTest(suffix=suffix):
+                    path = Path(directory) / ('app' + suffix)
+                    self.write_archive(path, {})
+                    self.assertEqual([], verify_archive(path)[0])
+
+    def test_cli_requires_repository_notices_from_another_working_directory(self):
+        root = Path(__file__).resolve().parents[2]
+        script = root / '.github/scripts/verify_android_artifacts.py'
+        resource_dir = root / 'app/src/main/resources/META-INF'
+        expected = {
+            'META-INF/ARTFLOW-LICENSE.txt': (root / 'LICENSE').read_bytes(),
+            'META-INF/UNICODE-LICENSE.txt': (resource_dir / 'UNICODE-LICENSE.txt').read_bytes(),
+        }
+        self.assertEqual(expected['META-INF/ARTFLOW-LICENSE.txt'],
+                         (resource_dir / 'ARTFLOW-LICENSE.txt').read_bytes())
+        with tempfile.TemporaryDirectory() as directory:
+            for suffix in ('.apk', '.aab'):
+                for omitted in (None, *expected):
+                    with self.subTest(suffix=suffix, omitted=omitted):
+                        path = Path(directory) / ('app' + suffix)
+                        self.write_archive(path, {k: v for k, v in expected.items() if k != omitted})
+                        result = subprocess.run([sys.executable, str(script), str(path)], cwd=directory,
+                                                capture_output=True, text=True, check=False)
+                        self.assertEqual(0 if omitted is None else 1, result.returncode,
+                                         result.stdout + result.stderr)
+                        if omitted is not None:
+                            self.assertIn('missing required notice', result.stdout)
+                            self.assertIn(omitted, result.stdout)
 
 
 if __name__ == '__main__':

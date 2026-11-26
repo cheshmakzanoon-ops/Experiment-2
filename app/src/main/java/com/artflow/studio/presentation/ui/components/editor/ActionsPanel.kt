@@ -10,6 +10,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
 import com.artflow.studio.core.canvas.StylusAction
@@ -77,6 +79,8 @@ data class VideoActions(
     /** Time-lapse Recording: whether new edits are recorded. */
     val recording: Boolean = true,
     val onRecording: (Boolean) -> Unit = {},
+    /** Global permission is kept in Settings; changing this artwork never changes other artworks. */
+    val recordingAllowed: Boolean = true,
 )
 
 data class StudioPrefs(
@@ -173,7 +177,19 @@ fun ActionsPanel(
                 }
 
                 ActionsTab.Video -> {
-                    PrefSwitch("Time-lapse Recording", video.recording, video.onRecording)
+                    PrefSwitch(
+                        stringResource(R.string.actions_timelapse_recording),
+                        video.recording && video.recordingAllowed,
+                        if (video.recordingAllowed) video.onRecording else null,
+                    )
+                    if (!video.recordingAllowed) {
+                        Text(
+                            stringResource(R.string.actions_timelapse_master_disabled),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                        ActionRow(stringResource(R.string.actions_timelapse_settings), prefActions.onMoreSettings)
+                    }
                     ActionRow("Time-lapse Replay", video.onReplay)
                     ActionRow("Export Time-lapse (Full length)", onClick = { video.onExport(true) })
                     ActionRow("Export Time-lapse (30 seconds)", onClick = { video.onExport(false) })
@@ -548,10 +564,15 @@ private fun <T> ChoiceRow(
 private fun PrefSwitch(
     label: String,
     checked: Boolean,
-    onChange: (Boolean) -> Unit,
+    onChange: ((Boolean) -> Unit)?,
 ) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(
+            checked = checked,
+            onCheckedChange = { onChange?.invoke(it) },
+            enabled = onChange != null,
+            modifier = Modifier.semantics { contentDescription = label },
+        )
     }
 }

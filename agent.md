@@ -48,6 +48,13 @@ latest exact-revision CI evidence before starting. Never count an unused helper 
 feature. The current document format is v7; keep legacy migration fixtures and checksums intact.
 Physical-device/performance and publisher gates remain separate from source publication.
 
+Settings now exposes explicit shared-copy storage cleanup with count/byte refresh and a confirmation
+that old shared links stop opening. Gallery, palette, brush and editor Share/Open copies record
+ownership when acquired and remain protected through chooser launch/cancellation. Cleanup is limited
+to marked, inactive, flat export directories; it preserves artwork, ordinary exports and timelapse
+snapshots and can reclaim preparations abandoned by a prior process. Brush copies no longer expire
+automatically after 24 hours; older unmarked/legacy UUID share directories are conservatively kept.
+
 The [24 October follow-through](docs/PARITY_FOLLOW_THROUGH_2026-10-24.md) adds continuous Smudge
 input/dynamics, atomic clipboard transactions and independently paintable 3D material channels.
 Current `.artflow` storage is v7, with checksum-first migration of older color-only documents.

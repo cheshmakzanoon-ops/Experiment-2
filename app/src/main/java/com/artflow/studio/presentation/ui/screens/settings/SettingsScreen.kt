@@ -40,6 +40,7 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settings.collectAsState()
     val recoveryRunning by viewModel.paletteRecoveryRunning.collectAsState()
+    val sharedCopyStorage by viewModel.sharedCopyStorage.collectAsState()
     val resolver = LocalContext.current.contentResolver
     val paletteBackup =
         rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { destination ->
@@ -47,6 +48,7 @@ fun SettingsScreen(
         }
     val snackbar = remember { SnackbarHostState() }
     LaunchedEffect(viewModel) {
+        viewModel.refreshSharedCopies()
         viewModel.messageFlow.collect { snackbar.showSnackbar(it) }
     }
 
@@ -176,6 +178,12 @@ fun SettingsScreen(
 
             SettingsSection("Saving")
             SwitchRow(
+                title = stringResource(R.string.settings_timelapse_allowed),
+                subtitle = stringResource(R.string.settings_timelapse_allowed_description),
+                checked = settings.recordTimelapse,
+                onChange = viewModel::setTimelapseRecordingAllowed,
+            )
+            SwitchRow(
                 title = stringResource(R.string.settingsscreen_autosave),
                 subtitle = stringResource(R.string.settingsscreen_keeps_a_recovery_copy_while_you_paint),
                 checked = settings.autosaveEnabled,
@@ -222,6 +230,14 @@ fun SettingsScreen(
                     )
                 }
             }
+
+            SettingsSection("Storage")
+            SharedCopyStorageControls(
+                state = sharedCopyStorage,
+                storageLabel = viewModel.storageSummary(),
+                onRefresh = viewModel::refreshSharedCopies,
+                onRemove = viewModel::removeSharedCopies,
+            )
 
             SettingsSection("Privacy")
             PrivacyPolicyEntry()

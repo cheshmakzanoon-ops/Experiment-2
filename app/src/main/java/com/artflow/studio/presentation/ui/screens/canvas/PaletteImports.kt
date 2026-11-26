@@ -17,11 +17,17 @@ import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.color.PaletteCodec
 import com.artflow.studio.core.color.PaletteExtractor
 import com.artflow.studio.core.export.readAtMost
+import com.artflow.studio.core.lifecycle.withCleanup
+import com.artflow.studio.data.local.ShareExportFiles
+import com.artflow.studio.data.local.StorageFileTree
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.File
+import java.io.IOException
 
 /** The Palettes tab's ways to add a palette (from a swatch file or a photo's colours) and to share one. */
 class PaletteImports(
@@ -102,25 +108,59 @@ fun rememberPaletteImports(
         fromPhoto = { launchSafely(onError, noPickerMessage) { photo.launch("image/*") } },
         fromCamera = camera,
         share = { palette ->
-            scope.launch {
-                val shared =
-                    withContext(Dispatchers.IO) {
-                        runCatching {
-                            val directory = File(context.filesDir, "exports/palettes").apply { mkdirs() }
-                            File(directory, paletteFileName(palette.name)).apply { writeBytes(PaletteCodec.exportAse(palette)) }
-                        }.getOrNull()
-                    }
-                if (shared == null) onError("The palette could not be shared") else sharePaletteFile(context, shared, onError)
-            }
+            scope.launch { sharePalette(context, palette, onError) }
         },
     )
+}
+
+/** Prepares one immutable palette copy and retains it only after the system chooser has launched. */
+internal suspend fun sharePalette(
+    context: Context,
+    palette: Palette,
+    onError: (String) -> Unit,
+) {
+    var file: File? = null
+    val failure =
+        try {
+            withCleanup({ file?.let { ShareExportFiles.finish(it) } }) {
+                val directory =
+                    withContext(Dispatchers.IO) {
+                        File(context.filesDir, "exports/palettes").also {
+                            StorageFileTree.requireDirectory(it, context.filesDir, "Cannot create the palette export directory")
+                        }
+                    }
+                val prepared =
+                    ShareExportFiles.create(directory, paletteFileName(palette.name)) { it.write(PaletteCodec.exportAse(palette)) }
+                file = prepared
+                withContext(Dispatchers.Main) {
+                    sharePaletteFile(context, prepared)
+                    ShareExportFiles.markPublished(prepared)
+                }
+                return
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failed: IOException) {
+            failed
+        } catch (failed: IllegalArgumentException) {
+            failed
+        } catch (failed: IllegalStateException) {
+            failed
+        } catch (failed: ActivityNotFoundException) {
+            failed
+        } catch (failed: SecurityException) {
+            failed
+        } catch (failed: UnsupportedOperationException) {
+            failed
+        }
+    Timber.w(failure, "Could not share palette")
+    onError(context.getString(R.string.paletteimports_could_not_share))
 }
 
 /** Sends [file] to another app as Adobe Swatch Exchange, which Procreate and most art apps import. */
 private fun sharePaletteFile(
     context: Context,
     file: File,
-    onError: (String) -> Unit,
 ) {
     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     val send =
@@ -130,9 +170,7 @@ private fun sharePaletteFile(
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-    launchSafely(onError, context.getString(R.string.paletteimports_could_not_share)) {
-        context.startActivity(Intent.createChooser(send, "Share palette"))
-    }
+    context.startActivity(Intent.createChooser(send, "Share palette"))
 }
 
 /** A file name for the palette called [name] that is safe on every platform. */

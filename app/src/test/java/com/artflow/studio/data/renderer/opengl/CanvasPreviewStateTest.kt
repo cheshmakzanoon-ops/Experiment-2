@@ -6,6 +6,20 @@ import org.junit.Test
 
 class CanvasPreviewStateTest {
     @Test
+    fun aQueuedRefreshKeepsTheVisibleFrameButCannotRestoreANewerMissingFrame() {
+        val state = CanvasPreviewState()
+        state.presented(state.generation(), true)
+        val oldUpload = state.advanceContent()
+        assertEquals(CanvasPreviewAvailability.AVAILABLE, state.availability)
+        val missing = state.advanceContent()
+        state.awaitSurface()
+        state.presented(oldUpload, true)
+        assertEquals(CanvasPreviewAvailability.WAITING_FOR_FRAME, state.availability)
+        state.presented(missing, true)
+        assertEquals(CanvasPreviewAvailability.AVAILABLE, state.availability)
+    }
+
+    @Test
     fun anAlreadyQueuedFrameCannotReenableInputAfterCompositionFails() {
         val state = CanvasPreviewState()
         val queued = state.generation()
@@ -16,6 +30,20 @@ class CanvasPreviewStateTest {
         assertTrue(state.generation() > queued)
 
         state.presented(state.generation(), true)
+        assertEquals(CanvasPreviewAvailability.AVAILABLE, state.availability)
+    }
+
+    @Test
+    fun aFailedDrawBlocksInputEvenWhenItsReplacementIsAlreadyQueued() {
+        val state = CanvasPreviewState()
+        val drawing = state.generation()
+        state.presented(drawing, true)
+        val queued = state.advanceContent()
+        state.presentationFailed()
+        assertEquals(CanvasPreviewAvailability.UNAVAILABLE, state.availability)
+        state.presented(drawing, true)
+        assertEquals(CanvasPreviewAvailability.UNAVAILABLE, state.availability)
+        state.presented(queued, true)
         assertEquals(CanvasPreviewAvailability.AVAILABLE, state.availability)
     }
 

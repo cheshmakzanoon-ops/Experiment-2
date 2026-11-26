@@ -77,7 +77,7 @@ import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
 import com.artflow.studio.domain.model.settings.ThemeMode
 import com.artflow.studio.domain.model.settings.pressureAndSmoothing
-import com.artflow.studio.presentation.ui.ShortcutHost
+import com.artflow.studio.presentation.ui.LocalShortcutHost
 import com.artflow.studio.presentation.ui.components.brush.BrushStudioDialog
 import com.artflow.studio.presentation.ui.components.canvas.ArtFlowCanvasView
 import com.artflow.studio.presentation.ui.components.canvas.BrushCursor
@@ -168,7 +168,9 @@ import com.artflow.studio.presentation.ui.viewmodel.CanvasImportController
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import com.artflow.studio.presentation.ui.viewmodel.ExportUiState
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -205,6 +207,7 @@ fun CanvasScreen(
     onOpenHelp: () -> Unit = {},
     viewModel: CanvasViewModel = hiltViewModel(),
 ) {
+    val shortcutHost = LocalShortcutHost.current
     val uiState by viewModel.uiState.collectAsState()
     val input by viewModel.input.collectAsState()
     val layers by viewModel.layers.collectAsState()
@@ -268,7 +271,7 @@ fun CanvasScreen(
     LaunchedEffect(panel, layers, history) {
         if (panel == EditorPanel.LAYERS) viewModel.layerThumbnails.refresh()
     }
-    var replayFrames by remember { mutableStateOf<List<java.io.File>?>(null) }
+    var showReplay by remember(projectId) { mutableStateOf(false) }
     val hasClipboard by viewModel.clipboard.hasContent.collectAsState()
     val wide = isWideLayout()
     var colorDropPosition by remember { mutableStateOf<androidx.compose.ui.geometry.Offset?>(null) }
@@ -291,8 +294,8 @@ fun CanvasScreen(
     LaunchedEffect(canvasView, seamlessTileMode) {
         canvasView?.setSeamlessTileMode(seamlessTileMode)
     }
-    LaunchedEffect(settings.customShortcuts) {
-        com.artflow.studio.presentation.ui.ShortcutHost.overrides = settings.decodedShortcutOverrides()
+    LaunchedEffect(shortcutHost, settings.customShortcuts) {
+        shortcutHost?.overrides = settings.decodedShortcutOverrides()
     }
     LaunchedEffect(contentRevision) {
         if (uiState is CanvasUiState.Ready) viewModel.physicalStudio.notifyStrokeCommitted()
@@ -445,7 +448,8 @@ fun CanvasScreen(
             scope.launch {
                 val result =
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        FontLibrary.importDetailed(context, uri)
+                        val owner = coroutineContext
+                        FontLibrary.importDetailed(context, uri, checkActive = { owner.ensureActive() })
                     }
                 when (result) {
                     is FontLibrary.ImportResult.Failure -> viewModel.notify(result.message)
@@ -672,10 +676,10 @@ fun CanvasScreen(
         }
     }
     val currentShortcutHandler by rememberUpdatedState(shortcutHandler)
-    DisposableEffect(Unit) {
+    DisposableEffect(shortcutHost) {
         val host: (ShortcutAction) -> Boolean = { currentShortcutHandler(it) }
-        ShortcutHost.handler = host
-        onDispose { if (ShortcutHost.handler === host) ShortcutHost.handler = null }
+        val release = shortcutHost?.register(host)
+        onDispose { release?.invoke() }
     }
 
     val panelContent: @Composable ColumnScope.() -> Unit = {
@@ -1132,7 +1136,7 @@ fun CanvasScreen(
                         ),
                     video =
                         VideoActions(
-                            onReplay = { scope.launch { replayFrames = viewModel.timelapseFrames() } },
+                            onReplay = { showReplay = true },
                             onExport = { fullLength ->
                                 viewModel.exportTimelapse(fullLength)
                                 panel = EditorPanel.EXPORT
@@ -1140,8 +1144,9 @@ fun CanvasScreen(
                             onClear = viewModel::clearTimelapse,
                             quality = settings.timelapseMaxSide,
                             onQuality = { side -> viewModel.updateSettings { it.copy(timelapseMaxSide = side) } },
-                            recording = settings.recordTimelapse,
-                            onRecording = { on -> viewModel.updateSettings { it.copy(recordTimelapse = on) } },
+                            recording = timelapseRecording,
+                            onRecording = viewModel::setTimelapseRecording,
+                            recordingAllowed = settings.recordTimelapse,
                         ),
                     prefActions =
                         PrefActions(
@@ -1814,16 +1819,25 @@ fun CanvasScreen(
         }
     }
 
-    replayFrames?.let { frames ->
-        TimelapseReplay(
-            frames = frames,
-            onExport = { fullLength ->
-                replayFrames = null
-                panel = EditorPanel.EXPORT
-                viewModel.exportTimelapse(fullLength)
-            },
-            onDismiss = { replayFrames = null },
-        )
+    if (showReplay) {
+        val replayFrames by produceState<List<java.io.File>?>(null, projectId, viewModel) {
+            viewModel.withTimelapseFrames(projectId) { frames ->
+                value = frames
+                awaitCancellation()
+            }
+            showReplay = false
+        }
+        replayFrames?.let { frames ->
+            TimelapseReplay(
+                frames = frames,
+                onExport = { fullLength ->
+                    showReplay = false
+                    panel = EditorPanel.EXPORT
+                    viewModel.exportTimelapse(fullLength)
+                },
+                onDismiss = { showReplay = false },
+            )
+        }
     }
 
     if (showBrushEditor) {

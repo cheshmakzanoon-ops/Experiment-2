@@ -17,27 +17,22 @@ physical-device/stylus acceptance, upgrade testing, and store submission remain 
 [Release sign-off](docs/release/RELEASE_SIGNOFF.md). A helper's unit test or green emulator run does
 not establish physical performance, complete format compatibility, or Procreate parity.
 
-## Download Android APK (latest `main` CI build)
+## Download an engineering APK
 
-[**Download ArtFlow Android APK (GitHub Actions ZIP)**](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44930844997/artifacts/14718242864)
+Open the [Android CI runs on `main`](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml?query=branch%3Amain)
+and select the source revision you want to evaluate. Check that its build job and all seven device
+jobs succeeded; a newer commit or the branch badge does not change an older artifact's results.
+The [hardening record](docs/release/PRODUCTION_HARDENING_2026-11-26.md) links the exact revisions
+and retains failed checkpoints alongside successful ones.
 
-This is the latest APK built by **`main`** on November 21, 2026, from
-[commit `1f5b020`](https://github.com/cheshmakzanoon-ops/Experiment-2/commit/1f5b020e2e80ac8faec9a917ee16665cd2eb4127).
-The [Android CI build and device-test run](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44930844997)
-succeeded. Sign in to GitHub, download the linked ZIP, extract
-`apk/debug/app-debug.apk`, and install that APK on an Android 8+ device.
+Sign in to GitHub, download that run's `artflow-builds-unverified` ZIP, extract
+`apk/debug/app-debug.apk`, and install it on an Android 8+ test device. This is a debug-signed
+engineering APK. The ZIP also contains an unsigned release bundle and an optimization mapping;
+the bundle is not directly installable. Artifacts are retained for 14 days. Diagnostic artifacts
+can also exist for failed runs, so artifact availability alone does not establish a passing build.
 
-**APK SHA-256:** `618dd61354f87a26368686806b6681ffd96333ffded9bec49a89e097d6991549`.
-
-**This is a debug-signed test APK, not a publisher-signed production release.**
-The same ZIP contains an unsigned `app-release.aab` and a mapping file; neither
-is an installable publisher release. GitHub Actions artifacts expire according
-to the repository's retention policy. For future builds, visit the
-[Android CI workflow on `main`](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/workflows/android-ci.yml?query=branch%3Amain)
-and select the `artflow-builds-unverified` artifact from the latest successful run.
-Other release gates remain open: the same revision's
-[release-optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/44930845034)
-had one failing test (68 of 69 passed).
+Publisher signing, the final revision's repeated qualification, physical-device acceptance and
+store approval remain governed by [Release sign-off](docs/release/RELEASE_SIGNOFF.md).
 
 ## Current development
 
@@ -168,6 +163,13 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   source and existing exports and asks the artist to reduce output scale or export fewer layers.
   See the [still-export memory record](docs/verification/still-export-memory.md) for the supported
   paths and conservative estimates; native codec peak memory still needs device measurements.
+- **Shared copies:** gallery images, palettes, brushes and editor Share/Open handoffs use independent
+  copies so later saves or exports do not change an earlier link. Settings → Storage → Remove shared
+  copies shows the removable count and bytes and confirms that old links will stop opening. Cleanup
+  preserves artwork, saved images, ordinary exports, timelapse snapshots and current sharing requests;
+  it can reclaim owned preparations abandoned by a previous process. New brush shares no longer
+  expire silently after 24 hours. Older unmarked share folders and legacy brush UUID folders remain
+  outside this cleanup because their ownership cannot be established safely.
 - **Performance:** `StrokeTimingDeviceTest` records repository timings and excludes input delivery,
   GL upload/draw, and physical display latency. It has no speed threshold. The `benchmark` build
   type supports minified launch smoke and selected workflow qualification; it has no performance

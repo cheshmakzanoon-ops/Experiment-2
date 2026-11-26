@@ -121,7 +121,7 @@ data class AppSettings(
     val stylusEraserEnd: StylusEraserEnd = StylusEraserEnd.ERASER,
     /** Longest side, in pixels, of recorded time-lapse frames (720p, 1080p or 1440p). */
     val timelapseMaxSide: Int = 1280,
-    /** Actions > Video > Time-lapse Recording: whether edits are recorded at all. */
+    /** Settings master permission; an artwork's Actions > Video switch can separately pause it. */
     val recordTimelapse: Boolean = true,
     /** Brush size follows the zoom so the brush looks the same size on screen. */
     val dynamicBrushScaling: Boolean = false,

@@ -134,3 +134,39 @@ See Gradle's [dependency verification guidance](https://docs.gradle.org/current/
 License declarations, selected-version locks, artifact checksum enforcement,
 vulnerability review, final-package analysis, and publisher signing remain distinct
 checks. Passing one cannot substitute for another.
+
+### Packaged notice verification (26 November 2026)
+
+Inspection of the diagnostic APK and AAB from revision
+`d129c5a611de0f70776fe5d5abe3db6c139a0b8e`, run `45788267910`, artifact
+`15102721850` (`artflow-builds-unverified`), found the exact checked-in Unicode
+license, AndroidX Apache license texts, Jakarta notice and OkHttp public-suffix
+notice. The downloaded artifact ZIP matched its provider SHA-256
+`0d70912a8db9f8f1902ac2093cf51c2a95e10fc9346229ccbfefa7575c86cbf5`.
+The only native library was `libandroidx.graphics.path.so`, packaged for
+`armeabi-v7a`, `arm64-v8a`, `x86` and `x86_64`. These observations describe those
+specific binaries; they are not a fresh native-device qualification.
+
+Neither binary included the project's own GPLv3 license. The application now
+packages an exact copy of the root `LICENSE` as `META-INF/ARTFLOW-LICENSE.txt`.
+The artifact verifier CLI requires that file and `META-INF/UNICODE-LICENSE.txt`
+to match their repository source bytes. It checks APK root resources and AAB
+`base/root/` resources separately and rejects missing, truncated, modified or
+misplaced notices. Existing native alignment and archive checks remain in force.
+Generic `verify_archive` callers retain their optional project-notice policy;
+the repository CLI always supplies the two requirements.
+
+The notice regression suite uses synthetic APK/AAB containers and exercises the
+CLI from an unrelated working directory. These checks establish byte identity
+and placement. A subsequent Android build and artifact preflight must confirm
+that resource packaging retains the added GPL text in actual output; the older
+diagnostic artifacts remain evidence of the original omission. This scoped
+change does not establish satisfaction of GPL corresponding-source delivery,
+all third-party attribution obligations, publisher signing or distribution
+compliance. See the [GPLv3 text](https://www.gnu.org/licenses/gpl-3.0.html).
+
+No dependency, SDK, Gradle plugin, workflow action or test baseline changed in
+this notice fix. The existing strict release lock, dependency/POM license
+inventory, workflow SHA pins and known-pattern secret scanner remain separate
+gates. Trusted dependency checksum enforcement and a complete current
+vulnerability review remain outside the evidence supplied here.

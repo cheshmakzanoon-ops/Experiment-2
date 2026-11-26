@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -30,6 +31,7 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject lateinit var brushAssetStartup: BrushAssetStartup
+    private val shortcutHost = ShortcutHost()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // The manifest starts the cold-start window on Theme.ArtFlow.Starting; swap to the real
@@ -44,7 +46,8 @@ class MainActivity : ComponentActivity() {
             EditorKeyboardCallback(
                 delegate = window.callback,
                 textEditorFocused = { currentFocus?.onCheckIsTextEditor() == true },
-                shortcutHandler = { ShortcutHost.handler },
+                shortcutHandler = { shortcutHost.handler },
+                shortcutOverrides = { shortcutHost.overrides },
             )
         // A recreated activity must not import the file that started it a second time.
         if (savedInstanceState == null) acceptFiles(intent)
@@ -52,17 +55,19 @@ class MainActivity : ComponentActivity() {
             val viewModel: MainViewModel = hiltViewModel()
             val settings by viewModel.settings.collectAsState()
             val assetState by brushAssetStartup.state.collectAsState()
-            ArtFlowTheme(settings = settings) {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background,
-                ) {
-                    BrushAssetGate(
-                        state = assetState,
-                        onRetry = brushAssetStartup::retry,
-                        onContinueWithAvailable = brushAssetStartup::continueWithAvailableAssets,
+            CompositionLocalProvider(LocalShortcutHost provides shortcutHost) {
+                ArtFlowTheme(settings = settings) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background,
                     ) {
-                        ArtFlowApp(viewModel = viewModel)
+                        BrushAssetGate(
+                            state = assetState,
+                            onRetry = brushAssetStartup::retry,
+                            onContinueWithAvailable = brushAssetStartup::continueWithAvailableAssets,
+                        ) {
+                            ArtFlowApp(viewModel = viewModel)
+                        }
                     }
                 }
             }
@@ -82,7 +87,7 @@ class MainActivity : ComponentActivity() {
         val message =
             when {
                 received.rejected > 0 -> getString(R.string.incoming_files_queue_full, received.accepted, received.rejected)
-                received.accepted > 0 && ShortcutHost.handler != null -> getString(R.string.incoming_files_wait_for_gallery)
+                received.accepted > 0 && shortcutHost.handler != null -> getString(R.string.incoming_files_wait_for_gallery)
                 else -> null
             }
         if (message != null) {
@@ -95,6 +100,6 @@ class MainActivity : ComponentActivity() {
         menu: Menu?,
         deviceId: Int,
     ) {
-        if (ShortcutHost.handler != null) data.addAll(AndroidKeys.helperGroups())
+        if (shortcutHost.handler != null) data.addAll(AndroidKeys.helperGroups(shortcutHost.overrides))
     }
 }

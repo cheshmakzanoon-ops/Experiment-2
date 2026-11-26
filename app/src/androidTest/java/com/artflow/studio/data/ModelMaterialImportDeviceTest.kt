@@ -585,14 +585,13 @@ class ModelMaterialImportDeviceTest {
             scenario.onActivity { activity ->
                 view = ModelView(activity)
                 attached = view
-                view.mesh = ObjParser.parse(model)
+                val mesh = ObjParser.parse(model)
                 val bitmaps =
                     planes.mapValues { (_, pixels) ->
                         Bitmap.createBitmap(pixels.pixels, pixels.width, pixels.height, Bitmap.Config.ARGB_8888)
                     }
                 try {
-                    view.setTexture(bitmaps.getValue(MaterialChannel.COLOR))
-                    view.setMaterialMaps(bitmaps.filterKeys { it.isScalar })
+                    assertTrue(view.setFrame(mesh, bitmaps.getValue(MaterialChannel.COLOR), bitmaps.filterKeys { it.isScalar }))
                 } finally {
                     bitmaps.values.forEach(Bitmap::recycle)
                 }
@@ -623,7 +622,7 @@ class ModelMaterialImportDeviceTest {
             )
             assertTrue("Imported model and maps must reach the actual GL surface: $samples", rendered)
         } finally {
-            scenario.onActivity { attached?.onPause() }
+            scenario.onActivity { attached?.release() }
             scenario.close()
         }
     }

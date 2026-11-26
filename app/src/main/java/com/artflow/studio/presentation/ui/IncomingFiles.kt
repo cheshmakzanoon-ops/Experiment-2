@@ -2,6 +2,8 @@ package com.artflow.studio.presentation.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.os.BadParcelableException
+import android.os.Parcelable
 import androidx.core.content.IntentCompat
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -28,12 +30,21 @@ object IncomingFiles {
 
     internal fun uris(intent: Intent?): List<Uri> {
         intent ?: return emptyList()
-        return when (intent.action) {
-            Intent.ACTION_VIEW, Intent.ACTION_EDIT -> listOfNotNull(intent.data)
-            Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
-            Intent.ACTION_SEND_MULTIPLE ->
-                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
-            else -> emptyList()
+        return try {
+            when (intent.action) {
+                Intent.ACTION_VIEW, Intent.ACTION_EDIT -> listOfNotNull(intent.data)
+                Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))
+                Intent.ACTION_SEND_MULTIPLE ->
+                    // IntentCompat does not check individual list elements on Android 13 and below.
+                    IntentCompat
+                        .getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Parcelable::class.java)
+                        .orEmpty()
+                        .filterIsInstance<Uri>()
+                else -> emptyList()
+            }
+        } catch (_: BadParcelableException) {
+            // Malformed external extras must not crash an open artwork or disturb queued files.
+            emptyList()
         }
     }
 }

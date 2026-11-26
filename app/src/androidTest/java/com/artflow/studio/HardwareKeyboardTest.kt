@@ -58,4 +58,14 @@ class HardwareKeyboardTest {
         val ctrlShiftZ = listed.first { it.label == "Redo" && it.keycode == KeyEvent.KEYCODE_Z }
         assertEquals(KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON, ctrlShiftZ.modifiers)
     }
+
+    @Test
+    fun theSystemShortcutListUsesOnlyTheRequestingWindowsOverrides() {
+        val custom = mapOf(ShortcutAction.UNDO to KeyChord("k", primary = true))
+        val remapped = AndroidKeys.helperGroups(custom).flatMap { it.items }.single { it.label == "Undo" }
+        val defaults = AndroidKeys.helperGroups().flatMap { it.items }.single { it.label == "Undo" }
+        assertEquals(KeyEvent.KEYCODE_K, remapped.keycode)
+        assertEquals(KeyEvent.META_CTRL_ON, remapped.modifiers)
+        assertEquals(KeyEvent.KEYCODE_Z, defaults.keycode)
+    }
 }

@@ -2,6 +2,7 @@ package com.artflow.studio.presentation.ui
 
 import android.view.KeyEvent
 import android.view.Window
+import com.artflow.studio.core.canvas.KeyChord
 import com.artflow.studio.core.canvas.KeyboardShortcuts
 import com.artflow.studio.core.canvas.ShortcutAction
 
@@ -13,6 +14,7 @@ internal class EditorKeyboardCallback(
     private val delegate: Window.Callback,
     private val textEditorFocused: () -> Boolean,
     private val shortcutHandler: () -> ((ShortcutAction) -> Boolean)?,
+    private val shortcutOverrides: () -> Map<ShortcutAction, KeyChord> = { emptyMap() },
 ) : Window.Callback by delegate {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && consumesAsShortcut(event)) return true
@@ -22,7 +24,7 @@ internal class EditorKeyboardCallback(
     private fun consumesAsShortcut(event: KeyEvent): Boolean {
         val handler = shortcutHandler() ?: return false
         if (textEditorFocused()) return false
-        val action = AndroidKeys.chord(event)?.let { KeyboardShortcuts.actionFor(it, ShortcutHost.overrides) } ?: return false
+        val action = AndroidKeys.chord(event)?.let { KeyboardShortcuts.actionFor(it, shortcutOverrides()) } ?: return false
         // A held key repeats only the actions made for it; the rest still consume their own repeats.
         return if (event.repeatCount > 0 && !action.repeats) true else handler(action)
     }

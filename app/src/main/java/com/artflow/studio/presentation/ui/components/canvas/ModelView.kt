@@ -13,7 +13,9 @@ import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.core.three.SurfaceHit
 import com.artflow.studio.core.three.SurfaceSink
 import com.artflow.studio.core.three.SurfaceStroker
+import com.artflow.studio.data.renderer.opengl.CanvasPreviewAvailability
 import com.artflow.studio.data.renderer.opengl.ModelRenderer
+import timber.log.Timber
 import kotlin.math.hypot
 
 /** Receives strokes painted on the model, in texture space: u and v run 0..1 with v = 0 at the bottom. */
@@ -24,17 +26,22 @@ interface ModelPainter : SurfaceSink
  * Two fingers always turn it and pinch to move nearer or farther, as in Procreate's 3D painting.
  */
 @SuppressLint("ViewConstructor")
-class ModelView(
+class ModelView internal constructor(
     context: Context,
+    private val renderer: ModelRenderer,
 ) : GLSurfaceView(context) {
-    private val renderer = ModelRenderer()
+    constructor(context: Context) : this(context, ModelRenderer())
+
     var mesh: Mesh? = null
-        set(value) {
-            if (field !== value) cancelPainting()
-            field = value
-            value?.let(renderer::setMesh)
-            requestRender()
-        }
+        private set
+    var onPreviewMessage: ((String?) -> Unit)? = null
+
+    @Volatile
+    private var attachment = 0L
+    private var paused = false
+    private var gesturePreviewInterruption = 0L
+    val isPreviewAvailable: Boolean
+        get() = isAttachedToWindow && !paused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
     var lighting: ModelLighting
         get() = renderer.lighting
         set(value) {
@@ -110,26 +117,84 @@ class ModelView(
         setEGLConfigChooser(8, 8, 8, 8, DEPTH_BITS, 0)
         setRenderer(renderer)
         renderMode = RENDERMODE_WHEN_DIRTY
+        renderer.onStatusMessage = { message ->
+            val owner = attachment
+            post {
+                if (owner == attachment && isAttachedToWindow && !isPreviewAvailable) onPreviewMessage?.invoke(message)
+            }
+        }
+        renderer.onPreviewAvailabilityChanged = { availability ->
+            val owner = attachment
+            val interruption = renderer.previewStatus.interruptions
+            post {
+                if (owner == attachment && isAttachedToWindow) {
+                    if (availability != CanvasPreviewAvailability.AVAILABLE && gesturePreviewInterruption < interruption) cancelPainting()
+                    if (availability == CanvasPreviewAvailability.AVAILABLE && isPreviewAvailable) onPreviewMessage?.invoke(null)
+                }
+            }
+        }
     }
 
-    /** Paints the model with a copy of [artwork]. */
-    fun setTexture(artwork: Bitmap) {
-        renderer.setTexture(artwork.copy(Bitmap.Config.ARGB_8888, false))
-        requestRender()
+    /** Copies one coherent mesh/color/material generation; the caller keeps its published bitmaps. */
+    fun setFrame(
+        mesh: Mesh,
+        artwork: Bitmap?,
+        maps: Map<MaterialChannel, Bitmap>,
+    ): Boolean {
+        if (this.mesh !== mesh) {
+            cancelPainting()
+            renderer.awaitPrimaryPreview(invalidateContent = true)
+        }
+        this.mesh = mesh
+        val copies = mutableListOf<Bitmap>()
+        var transferred = false
+        try {
+            if (artwork != null) {
+                listOf(artwork, maps[MaterialChannel.METALLIC], maps[MaterialChannel.ROUGHNESS]).forEach { source ->
+                    copies += copyChannel(source)
+                }
+            }
+            renderer.setFrame(mesh, copies.toList())
+            transferred = true
+            requestRender()
+            return true
+        } catch (failure: IllegalStateException) {
+            Timber.w(failure, "Could not prepare the model preview")
+        } catch (failure: IllegalArgumentException) {
+            Timber.w(failure, "Model preview pixels were unavailable")
+        } catch (failure: OutOfMemoryError) {
+            Timber.w(failure, "Model preview copies did not fit")
+        } finally {
+            if (!transferred) copies.forEach(Bitmap::recycle)
+        }
+        renderer.invalidateFrame()
+        return false
     }
 
-    /** Each data map is independent from the color texture; missing maps use the channel default. */
-    fun setMaterialMaps(maps: Map<MaterialChannel, Bitmap>) {
-        renderer.setMaterialMaps(
-            maps[MaterialChannel.METALLIC]?.copy(Bitmap.Config.ARGB_8888, false),
-            maps[MaterialChannel.ROUGHNESS]?.copy(Bitmap.Config.ARGB_8888, false),
-        )
-        requestRender()
-    }
+    private fun copyChannel(source: Bitmap?): Bitmap =
+        if (source == null) {
+            Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        } else {
+            checkNotNull(source.copy(Bitmap.Config.ARGB_8888, false)) { "Could not copy the model preview" }
+        }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (!gesturesEnabled) return false
+        val preview = renderer.previewStatus
+        if (!isAttachedToWindow || paused || preview.availability != CanvasPreviewAvailability.AVAILABLE) {
+            cancelPainting()
+            return false
+        }
+        val interruption = preview.interruptions
+        if (gesturePreviewInterruption < interruption) {
+            cancelPainting()
+            if (event.actionMasked != MotionEvent.ACTION_DOWN) return true
+        }
+        if (renderer.previewStatus != preview) {
+            cancelPainting()
+            return false
+        }
         if (
             event.actionMasked == MotionEvent.ACTION_CANCEL ||
             (Build.VERSION.SDK_INT >= 33 && event.flags and MotionEvent.FLAG_CANCELED != 0)
@@ -137,7 +202,10 @@ class ModelView(
             cancelPainting()
             return true
         }
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) gestureOnly = false
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            gestureOnly = false
+            gesturePreviewInterruption = interruption
+        }
         if (event.pointerCount >= 2) {
             if (!gestureOnly) cancelPainting()
             gestureOnly = true
@@ -157,8 +225,36 @@ class ModelView(
     }
 
     override fun onDetachedFromWindow() {
+        attachment++
         cancelPainting()
         super.onDetachedFromWindow()
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        attachment++
+        renderer.awaitPrimaryPreview()
+        requestRender()
+    }
+
+    override fun onPause() {
+        paused = true
+        cancelPainting()
+        super.onPause()
+        renderer.awaitPrimaryPreview()
+    }
+
+    override fun onResume() {
+        paused = false
+        super.onResume()
+        requestRender()
+    }
+
+    /** AndroidView's final release, after pausing the GL thread; ordinary reattachment retains pixels. */
+    fun release() {
+        onPreviewMessage = null
+        onPause()
+        renderer.dispose()
     }
 
     private fun twoFingers(event: MotionEvent) {

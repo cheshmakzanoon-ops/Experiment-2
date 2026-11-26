@@ -220,6 +220,7 @@ class CanvasViewModel
         private var autosaveJob: Job? = null
         private var observationJob: Job? = null
         private val _timelapseRecording = MutableStateFlow(true)
+        private var timelapseControlRequest = Any()
 
         /** Whether the open artwork is being recorded (Actions > Video > Time-lapse recording). */
         val timelapseRecording: StateFlow<Boolean> = _timelapseRecording.asStateFlow()
@@ -344,7 +345,9 @@ class CanvasViewModel
                         refreshHistory()
                         refreshSelection()
                         savedSelections.refresh()
-                        _timelapseRecording.value = timelapse.isRecording(projectId)
+                        val recordingRequest = timelapseControlRequest
+                        val recording = timelapse.isRecording(projectId)
+                        if (recordingRequest === timelapseControlRequest) _timelapseRecording.value = recording
                         startObserving()
                         startAutosave()
                         PendingImports.take(projectId)?.let { (img, priv) ->
@@ -396,12 +399,12 @@ class CanvasViewModel
             timelapseJob =
                 viewModelScope.launch {
                     timelapseRequests.collect {
-                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
+                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse || !_timelapseRecording.value) return@collect
                         // Let the edit settle so a burst of changes yields one frame.
                         delay(TIMELAPSE_INTERVAL_MS)
                         if (projectId == 0L || currentProjectId != projectId) return@collect
                         // The artist may have switched recording off while this capture was waiting.
-                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse) return@collect
+                        if (!timelapse.isEnabled || !_settings.value.recordTimelapse || !_timelapseRecording.value) return@collect
                         val revision = canvasRepository.contentRevision
                         // Playback only switches frames; it is not an edit worth recording.
                         if (revision == timelapseRevision || playbackActive) return@collect
@@ -411,7 +414,11 @@ class CanvasViewModel
                             ensureActive()
                             // Stored values are in the document's profile; the recording is sRGB.
                             val recorded = ColorProfiles.convert(composite, canvasRepository.getColorProfile(), ColorProfile.SRGB)
-                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide) { _settings.value.recordTimelapse }
+                            timelapse.capture(projectId, recorded, _settings.value.timelapseMaxSide) {
+                                (_uiState.value as? CanvasUiState.Ready)?.projectId == projectId &&
+                                    _settings.value.recordTimelapse &&
+                                    _timelapseRecording.value
+                            }
                             timelapseRevision = revision
                         } catch (cancelled: CancellationException) {
                             throw cancelled
@@ -1507,23 +1514,76 @@ class CanvasViewModel
 
         fun setTimelapseRecording(recording: Boolean) {
             val projectId = currentProjectId
-            if (projectId == 0L) return
-            _timelapseRecording.value = recording
-            viewModelScope.launch(editorErrors) { timelapse.setRecording(projectId, recording) }
+            if (projectId == 0L || (_uiState.value as? CanvasUiState.Ready)?.projectId != projectId) return
+            val opening = loadJob
+            val request = Any().also { timelapseControlRequest = it }
+            // Stop immediately. Resume is visible only after its durable preference succeeds.
+            _timelapseRecording.value = false
+            viewModelScope.launch(editorErrors, start = CoroutineStart.UNDISPATCHED) {
+                try {
+                    timelapse.setRecording(projectId, recording)
+                    val stored = timelapse.isRecording(projectId)
+                    if (ownsTimelapseControl(projectId, opening) && timelapseControlRequest === request) {
+                        _timelapseRecording.value = stored
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Timber.w(error, "Could not save time-lapse recording preference")
+                    if (ownsTimelapseControl(projectId, opening) && timelapseControlRequest === request) {
+                        notify(
+                            "Recording is paused for this app session. " +
+                                "The preference could not be saved; check it after restarting the app.",
+                        )
+                    }
+                }
+            }
         }
 
-        /** Frames for the in-app time-lapse replay (empty before anything was drawn). */
-        suspend fun timelapseFrames(): List<java.io.File> {
-            val projectId = currentProjectId
-            return if (projectId == 0L) emptyList() else timelapse.frameFiles(projectId)
+        private fun ownsTimelapseControl(
+            projectId: Long,
+            opening: Job?,
+        ): Boolean =
+            currentProjectId == projectId &&
+                loadJob === opening &&
+                (_uiState.value as? CanvasUiState.Ready)?.projectId == projectId
+
+        /** Keeps an owned replay snapshot until its presentation scope is dismissed or cancelled. */
+        suspend fun withTimelapseFrames(
+            projectId: Long,
+            show: suspend (List<java.io.File>) -> Unit,
+        ) {
+            if (currentProjectId != projectId || (_uiState.value as? CanvasUiState.Ready)?.projectId != projectId) return
+            try {
+                timelapse.withFrameSnapshot(projectId) { files ->
+                    withContext(Dispatchers.Main.immediate) {
+                        if (currentProjectId == projectId && (_uiState.value as? CanvasUiState.Ready)?.projectId == projectId) show(files)
+                    }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Timber.w(error, "Could not open time-lapse replay")
+                notify(error.message ?: "Could not open time-lapse replay")
+            }
         }
 
         fun clearTimelapse() {
             val projectId = currentProjectId
-            if (projectId == 0L) return
+            if (projectId == 0L || (_uiState.value as? CanvasUiState.Ready)?.projectId != projectId) return
+            val opening = loadJob
             viewModelScope.launch(editorErrors) {
-                timelapse.clear(projectId)
-                notify("Time-lapse recording cleared")
+                try {
+                    timelapse.clear(projectId)
+                    if (ownsTimelapseControl(projectId, opening)) notify("Time-lapse recording cleared")
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Timber.w(error, "Could not finish clearing the time-lapse recording")
+                    if (ownsTimelapseControl(projectId, opening)) {
+                        notify("Could not finish clearing the recording. Open Replay to check what remains.")
+                    }
+                }
             }
         }
 
@@ -1544,9 +1604,12 @@ class CanvasViewModel
             }
         }
 
-        fun shareIntent(result: ExportResult): Intent = exporter.shareIntent(result)
-
-        fun viewIntent(result: ExportResult): Intent = exporter.viewIntent(result)
+        /** A delayed share/open belongs to this exact completed result, not a later same-name export. */
+        suspend fun launchExport(
+            result: ExportResult,
+            open: Boolean,
+            launch: (Intent) -> Unit,
+        ) = exporter.launchExport(result, open, { (_exportState.value as? ExportUiState.Done)?.result === result }, launch)
 
         fun resetExportState() = exportController.reset()
 

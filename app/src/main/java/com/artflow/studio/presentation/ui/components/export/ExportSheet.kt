@@ -226,15 +226,28 @@ private fun ExportPreview(bytes: ByteArray?) {
             if (!published) decoded?.recycle()
         }
     }
-    bitmap?.let {
-        Image(
-            it.asImageBitmap(),
-            stringResource(R.string.export_preview_description),
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
-        )
-        Text(stringResource(R.string.export_preview_description), style = MaterialTheme.typography.labelSmall)
+    // Reserve both children from sheet entry. A late decode, a different image aspect ratio,
+    // or a cleared preview must not move controls or a result the user has already scrolled to.
+    Box(Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+        val current = bitmap
+        if (current != null) {
+            Image(
+                current.asImageBitmap(),
+                stringResource(R.string.export_preview_description),
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            // Null also covers an unavailable source or a failed decode; it is not evidence
+            // that more work is pending, so do not leave an indefinite progress indicator.
+            Text(
+                stringResource(R.string.export_preview_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
+    Text(stringResource(R.string.export_preview_description), style = MaterialTheme.typography.labelSmall)
 }
 
 @Composable

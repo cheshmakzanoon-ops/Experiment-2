@@ -74,6 +74,8 @@ fun ModelCompanion(
     // The texture is sent to the view only when the artwork actually changes.
     val sent = remember { arrayOfNulls<Bitmap>(1) }
     val sentMaps = remember { arrayOfNulls<Map<MaterialChannel, Bitmap>>(1) }
+    val sentMesh = remember { arrayOfNulls<Mesh>(1) }
+    var previewMessage by remember { mutableStateOf<String?>(null) }
     BoxWithConstraints(modifier.fillMaxSize().padding(8.dp)) {
         val side = minOf(maxWidth, maxHeight, 360.dp)
         Surface(
@@ -113,26 +115,31 @@ fun ModelCompanion(
                 Box(Modifier.weight(1f)) {
                     AndroidView(
                         factory = { context -> ModelView(context) },
+                        onRelease = { view -> view.release() },
                         update = { view ->
-                            if (view.mesh !== mesh) view.mesh = mesh
+                            view.onPreviewMessage = { previewMessage = it }
                             view.gesturesEnabled = interactive
                             view.painting = painting
                             view.painter = painter
                             view.lighting = lighting
                             view.showMesh = showMesh
-                            if (sentMaps[0] !== materialMaps) {
-                                sentMaps[0] = materialMaps
-                                view.setMaterialMaps(materialMaps)
-                            }
-                            if (artwork != null && sent[0] !== artwork) {
-                                sent[0] = artwork
-                                view.setTexture(artwork)
+                            if (sentMesh[0] !== mesh || sentMaps[0] !== materialMaps || sent[0] !== artwork) {
+                                if (view.setFrame(mesh, artwork, materialMaps)) {
+                                    sentMesh[0] = mesh
+                                    sentMaps[0] = materialMaps
+                                    sent[0] = artwork
+                                }
                             }
                         },
                         // Older SurfaceView versions clear the current canvas clip to expose GL.
                         // Bound that hole to the viewport so it cannot erase the sibling header.
                         modifier = Modifier.fillMaxSize().clipToBounds().testTag("model-view"),
                     )
+                    previewMessage?.let { message ->
+                        Surface(modifier = Modifier.align(Alignment.Center).padding(12.dp)) {
+                            Text(message, modifier = Modifier.padding(12.dp))
+                        }
+                    }
                     if (lightingOpen) {
                         LightingPanel(lighting, { lighting = it }, Modifier.align(Alignment.BottomCenter))
                     }

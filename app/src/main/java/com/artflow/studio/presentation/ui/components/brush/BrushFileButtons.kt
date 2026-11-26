@@ -19,11 +19,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.FileProvider
 import com.artflow.studio.R
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.data.export.importFailureMessage
 import com.artflow.studio.data.local.BrushArchives
 import com.artflow.studio.data.local.BrushImports
 import com.artflow.studio.data.local.BrushShareFiles
 import com.artflow.studio.data.local.BrushShareFormat
+import com.artflow.studio.data.local.ShareExportFiles
+import com.artflow.studio.data.local.StorageFileTree
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.SavedBrush
 import com.artflow.studio.domain.model.brush.StudioBrushes
@@ -31,11 +34,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import timber.log.Timber
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
-import java.util.UUID
 
 /** Share the brush being edited as an `.artbrush` or Procreate `.brush` file, or import brushes (ArtFlow, Procreate or Photoshop). */
 @Composable
@@ -99,58 +100,45 @@ internal suspend fun shareBrushes(
     format: BrushShareFormat = BrushShareFormat.ARTFLOW,
 ): Boolean {
     if (brushes.isEmpty()) return false
+    var file: File? = null
     return try {
-        val file =
-            withContext(Dispatchers.IO) {
-                val encoded = BrushShareFiles.encode(name, brushes, format)
-                val root = File(context.filesDir, "exports/brushes")
-                check(root.isDirectory || root.mkdirs()) { "The brush export directory could not be created" }
-                // Each share owns an immutable file in its own directory. A receiving app may still be reading
-                // an earlier share, so a later one must never rewrite or replace that path.
-                val directory = File(root, UUID.randomUUID().toString())
-                check(directory.mkdirs()) { "The brush export directory could not be created" }
-                val target = File(directory, encoded.fileName)
-                val partial = File(directory, ".${encoded.fileName}.partial")
-                try {
-                    partial.outputStream().use { it.write(encoded.bytes) }
-                    Files.move(partial.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
-                } finally {
-                    partial.delete()
+        withCleanup({ file?.let { ShareExportFiles.finish(it) } }) {
+            val (root, encoded) =
+                withContext(Dispatchers.IO) {
+                    val encoded = BrushShareFiles.encode(name, brushes, format)
+                    val root = File(context.filesDir, "exports/brushes")
+                    StorageFileTree.requireDirectory(root, context.filesDir, "The brush export directory could not be created")
+                    root to encoded
                 }
-                pruneStaleShares(root, keep = directory)
-                target
+            val prepared = ShareExportFiles.create(root, encoded.fileName) { it.write(encoded.bytes) }
+            file = prepared
+            withContext(Dispatchers.Main) {
+                share(context, prepared)
+                ShareExportFiles.markPublished(prepared)
             }
-        withContext(Dispatchers.Main) { share(context, file) }
-        true
+            true
+        }
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (failed: IOException) {
-        false
+        brushShareFailure(failed)
     } catch (failed: IllegalArgumentException) {
-        false
+        brushShareFailure(failed)
     } catch (failed: IllegalStateException) {
-        false
+        brushShareFailure(failed)
     } catch (failed: ActivityNotFoundException) {
-        false
+        brushShareFailure(failed)
     } catch (failed: SecurityException) {
-        false
+        brushShareFailure(failed)
     } catch (failed: UnsupportedOperationException) {
-        false
+        brushShareFailure(failed)
     }
 }
 
-/** Older shares are no longer being delivered; remove them so exports cannot accumulate without bound. */
-private fun pruneStaleShares(
-    root: File,
-    keep: File,
-) {
-    val cutoff = System.currentTimeMillis() - STALE_SHARE_MS
-    root.listFiles()?.forEach { entry ->
-        if (entry != keep && entry.isDirectory && entry.lastModified() < cutoff) entry.deleteRecursively()
-    }
+private fun brushShareFailure(failure: Exception): Boolean {
+    Timber.w(failure, "Could not share brush")
+    return false
 }
-
-private const val STALE_SHARE_MS = 24L * 60 * 60 * 1000
 
 private fun share(
     context: Context,

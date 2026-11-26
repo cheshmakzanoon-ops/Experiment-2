@@ -33,8 +33,16 @@ internal class CanvasPreviewState {
     @Synchronized
     fun generation(): Long = contentGeneration
 
+    /** Normal queued refreshes retain the visible frame, but obsolete completions cannot change it. */
+    @Synchronized
+    fun advanceContent(): Long = ++contentGeneration
+
     @Synchronized
     fun awaitSurface() = change(CanvasPreviewAvailability.WAITING_FOR_FRAME)
+
+    /** A failed GL draw leaves no valid presentation, even if its replacement is already queued. */
+    @Synchronized
+    fun presentationFailed() = change(CanvasPreviewAvailability.UNAVAILABLE)
 
     @Synchronized
     fun invalidateContent() {

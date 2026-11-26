@@ -5,6 +5,7 @@ import android.graphics.Typeface
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.artflow.studio.core.export.readAtMost
+import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -106,27 +107,35 @@ object FontLibrary {
     fun resolveFile(
         family: String,
         filesDir: File? = configuredFilesDir,
-    ): File? =
-        when {
-            family.startsWith(PREFIX) -> {
-                val name = family.removePrefix(PREFIX)
-                if (!isSafeFileName(name)) null else filesDir?.let { File(File(it, "fonts"), name) }
-            }
-            family.startsWith(LEGACY_PREFIX) -> {
-                val raw = family.removePrefix(LEGACY_PREFIX)
-                if (raw.isBlank()) {
-                    null
-                } else {
-                    val legacy = File(raw)
-                    when {
-                        Files.isRegularFile(legacy.toPath(), LinkOption.NOFOLLOW_LINKS) -> legacy
-                        filesDir != null && isSafeFileName(legacy.name) -> File(File(filesDir, "fonts"), legacy.name)
-                        else -> null
+    ): File? {
+        return try {
+            val file =
+                when {
+                    family.startsWith(PREFIX) -> {
+                        val name = family.removePrefix(PREFIX)
+                        if (!isSafeFileName(name) || filesDir == null) return null
+                        File(File(filesDir, "fonts"), name)
                     }
+                    family.startsWith(LEGACY_PREFIX) -> {
+                        val raw = family.removePrefix(LEGACY_PREFIX)
+                        if (raw.isBlank()) return null
+                        val legacy = File(raw)
+                        when {
+                            Files.isRegularFile(legacy.toPath(), LinkOption.NOFOLLOW_LINKS) -> legacy
+                            filesDir != null && isSafeFileName(legacy.name) -> File(File(filesDir, "fonts"), legacy.name)
+                            else -> null
+                        }
+                    }
+                    else -> null
                 }
-            }
-            else -> null
+            file?.also { it.toPath() }
+        } catch (_: InvalidPathException) {
+            // Saved legacy references can contain paths that this device cannot represent.
+            null
+        } catch (_: SecurityException) {
+            null
         }
+    }
 
     /** True when [family] resolves to an existing regular font file on disk. */
     fun exists(
@@ -233,25 +242,29 @@ object FontLibrary {
         uri: Uri,
     ): String? = (importDetailed(context, uri) as? ImportResult.Success)?.family
 
-    /** Imports a TrueType or OpenType font using isolated temp validation and non-destructive naming. */
+    /** Imports a font without replacing existing files; [checkActive] stops work before publication. */
     fun importDetailed(
         context: Context,
         uri: Uri,
+        checkActive: () -> Unit = {},
     ): ImportResult {
+        checkActive()
         val resolver = context.contentResolver
         val displayName =
             runCatching {
                 resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
                     if (cursor.moveToFirst()) cursor.getString(0) else null
                 }
+            }.onFailure { failure ->
+                if (failure is CancellationException || failure !is Exception) throw failure
             }.getOrNull() ?: "Font.ttf"
+        checkActive()
         return importStream(
             filesDir = context.filesDir,
             displayName = displayName,
             openStream = { resolver.openInputStream(uri) },
-            validator = { staged ->
-                runCatching { Typeface.createFromFile(staged) != null }.getOrDefault(false)
-            },
+            checkActive = checkActive,
+            validator = { staged -> Typeface.createFromFile(staged) != null },
         )
     }
 
@@ -290,8 +303,10 @@ object FontLibrary {
         filesDir: File,
         displayName: String?,
         openStream: () -> InputStream?,
+        checkActive: () -> Unit = {},
         validator: (File) -> Boolean,
     ): ImportResult {
+        checkActive()
         val rawName = displayName?.takeIf { it.isNotBlank() } ?: "Font.ttf"
         val extension =
             rawName.substringAfterLast('.', "").lowercase().takeIf { it in ALLOWED_EXTENSIONS }
@@ -304,14 +319,25 @@ object FontLibrary {
             try {
                 val stream =
                     openStream()
-                        ?: return ImportResult.Failure(FailureReason.UNREADABLE, "That font file could not be opened")
-                stream.use { it.readAtMost(MAX_BYTES.toLong()) }
+                        ?: run {
+                            checkActive()
+                            return ImportResult.Failure(FailureReason.UNREADABLE, "That font file could not be opened")
+                        }
+                stream.use { it.readAtMost(MAX_BYTES.toLong(), checkActive) }
             } catch (_: IOException) {
+                checkActive()
                 return ImportResult.Failure(FailureReason.UNREADABLE, "That font file could not be read")
-            } ?: return ImportResult.Failure(
+            } catch (_: SecurityException) {
+                checkActive()
+                return ImportResult.Failure(FailureReason.UNREADABLE, "That font file is no longer accessible. Choose it again")
+            }
+        checkActive()
+        if (bytes == null) {
+            return ImportResult.Failure(
                 FailureReason.TOO_LARGE,
                 "That font file is larger than 20 MB",
             )
+        }
         if (bytes.isEmpty()) {
             return ImportResult.Failure(FailureReason.EMPTY, "That font file is empty")
         }
@@ -330,6 +356,7 @@ object FontLibrary {
                 return ImportResult.Failure(FailureReason.WRITE_FAILED, "Could not prepare storage for the font")
             }
         try {
+            checkActive()
             try {
                 FileOutputStream(staged).use { out ->
                     out.write(bytes)
@@ -340,7 +367,14 @@ object FontLibrary {
                 return ImportResult.Failure(FailureReason.WRITE_FAILED, "Could not write the font to app storage")
             }
 
-            if (!runCatching { validator(staged) }.getOrDefault(false)) {
+            checkActive()
+            val valid =
+                runCatching { validator(staged) }
+                    .onFailure { failure ->
+                        if (failure is CancellationException || failure !is Exception) throw failure
+                    }.getOrDefault(false)
+            checkActive()
+            if (!valid) {
                 return ImportResult.Failure(
                     FailureReason.INVALID_FONT,
                     "That font could not be loaded on this device",
@@ -348,8 +382,9 @@ object FontLibrary {
             }
 
             return synchronized(importLock) {
+                checkActive()
                 try {
-                    val destination = moveToUniqueDestination(fontsDir, staged, base, extension)
+                    val destination = moveToUniqueDestination(fontsDir, staged, base, extension, checkActive)
                     syncDirectoryBestEffort(fontsDir)
                     val renamed = destination.name != "$base.$extension"
                     ImportResult.Success(
@@ -373,9 +408,12 @@ object FontLibrary {
         staged: File,
         base: String,
         extension: String,
+        checkActive: () -> Unit,
     ): File {
         repeat(MAX_COLLISION_ATTEMPTS) {
             val target = uniqueTargetFile(fontsDir, base, extension)
+            // The name search may take time. Cancellation after this commit retains a complete font.
+            checkActive()
             try {
                 Files.move(staged.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
                 return target

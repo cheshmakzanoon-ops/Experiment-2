@@ -1,8 +1,11 @@
 package com.artflow.studio.data.export
 
+import android.system.Os
+import android.system.OsConstants
 import com.artflow.studio.core.export.ExportFormat
 import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.renderer.BitmapPixelBridge
@@ -14,7 +17,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.nio.file.Files
+import java.nio.file.LinkOption
+import java.security.MessageDigest
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
@@ -34,48 +41,95 @@ class TimelapseRecorder
         private val storage: ProjectStorage,
     ) {
         private val mutex = Mutex()
+        private val controls = TimelapseControlState()
 
         /** A master switch above the per-artwork one; tests turn it off. */
         @Volatile
         var isEnabled: Boolean = true
         private var lastProjectId = 0L
-        private var lastHash = 0
+        private var lastDigest: ByteArray? = null
 
-        private fun dir(projectId: Long): File = File(storage.projectDir(projectId), DIR_NAME).apply { mkdirs() }
+        private fun dir(projectId: Long): File = TimelapseFiles.directory(storage.projectDir(projectId))
 
         private fun frames(projectId: Long): List<File> =
             dir(projectId)
-                .listFiles { file -> file.isFile && file.name.endsWith(EXTENSION) }
-                ?.sortedBy { it.name }
-                .orEmpty()
-
-        // Beside the frames, not inside them, so Clear recording does not switch recording back on.
-        private fun pausedMarker(projectId: Long): File = File(storage.projectDir(projectId), PAUSED_FILE)
+                .listFiles { file -> file.name.endsWith(EXTENSION) && Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) }
+                ?.sortedWith(compareBy<File> { it.nameWithoutExtension.toLongOrNull() ?: Long.MAX_VALUE }.thenBy { it.name })
+                ?: throw IOException("Could not read the time-lapse recording")
 
         /** Whether this artwork is being recorded: on until Actions > Video > Time-lapse recording is switched off. */
-        suspend fun isRecording(projectId: Long): Boolean = withContext(Dispatchers.IO) { !pausedMarker(projectId).exists() }
+        suspend fun isRecording(projectId: Long): Boolean = withContext(Dispatchers.IO) { recordingAllowed(projectId) }
+
+        private fun recordingAllowed(projectId: Long): Boolean =
+            controls.permitsRecording(projectId) && TimelapseFiles.recordingAllowed(storage.projectDir(projectId))
 
         /** Switches recording on or off for one artwork; the choice stays with the artwork's files. */
         suspend fun setRecording(
             projectId: Long,
             recording: Boolean,
-        ) = withContext(Dispatchers.IO) {
-            val marker = pausedMarker(projectId)
-            if (recording) {
-                marker.delete()
-            } else {
-                marker.createNewFile()
+        ) {
+            // Block before any dispatcher/mutex wait. A failed or cancelled write remains paused
+            // in this process; only a subsequent successful preference request can release it.
+            val request = controls.begin(projectId, recording)
+            withContext(Dispatchers.IO) {
                 mutex.withLock {
-                    if (projectId == lastProjectId) lastHash = 0
+                    if (!controls.owns(request)) return@withLock
+                    val coroutine = currentCoroutineContext()
+                    val project = storage.projectDir(projectId)
+                    val checkRequest = {
+                        coroutine.ensureActive()
+                        if (!controls.owns(request)) throw RecordingStoppedException()
+                    }
+                    try {
+                        checkRequest()
+                        if (request.recording) {
+                            TimelapseFiles.removePause(project)
+                            syncDirectory(project)
+                        } else {
+                            val marker = TimelapseFiles.pauseFile(project)
+                            storage.writeAtomically(marker, modifiedAfter = null, beforeCommit = checkRequest) {}
+                        }
+                    } catch (_: RecordingStoppedException) {
+                        return@withLock
+                    }
+                    if (projectId == lastProjectId) lastDigest = null
+                    coroutine.ensureActive()
+                    controls.persisted(request)
                 }
             }
-            Unit
         }
 
-        suspend fun frameCount(projectId: Long): Int = withContext(Dispatchers.IO) { frames(projectId).size }
+        suspend fun frameCount(projectId: Long): Int = withContext(Dispatchers.IO) { mutex.withLock { frames(projectId).size } }
 
-        /** Recorded frames in order, for the in-app replay. */
-        suspend fun frameFiles(projectId: Long): List<File> = mutex.withLock { withContext(Dispatchers.IO) { frames(projectId) } }
+        /**
+         * Immutable disk copies for replay. The IO callback owns them until it returns, including
+         * while suspended; cancellation, failed acquisition and callback failures all release them.
+         */
+        suspend fun <T> withFrameSnapshot(
+            projectId: Long,
+            block: suspend (List<File>) -> T,
+        ): T = withFrameSnapshot(projectId, frameLimit = null, block)
+
+        private suspend fun <T> withFrameSnapshot(
+            projectId: Long,
+            frameLimit: Int?,
+            block: suspend (List<File>) -> T,
+        ): T =
+            withContext(Dispatchers.IO) {
+                // Acquire, consume and release on this dispatcher so cancellation cannot strand a
+                // completed snapshot while returning it across a dispatcher boundary.
+                val snapshot = TimelapseFrameSnapshot(storage.exportsDir(projectId))
+                withCleanup(snapshot::close) {
+                    val files =
+                        mutex.withLock {
+                            val recorded = frames(projectId)
+                            val selected = if (frameLimit == null) recorded else sampled(recorded, frameLimit)
+                            val coroutine = currentCoroutineContext()
+                            snapshot.copyFrames(selected, coroutine::ensureActive)
+                        }
+                    block(files)
+                }
+            }
 
         /**
          * Appends [composite] to the recording unless it is identical to the previous frame.
@@ -91,29 +145,40 @@ class TimelapseRecorder
             if (!isEnabled || !permitted() || !isRecording(projectId)) return
             withContext(Dispatchers.Default) {
                 val frame = downscale(composite, maxSide)
-                val hash = frame.pixels.contentHashCode()
                 mutex.withLock {
                     if (!isEnabled || !permitted() || !isRecording(projectId)) return@withLock
-                    if (projectId == lastProjectId && hash == lastHash) return@withLock
                     val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
+                    val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+                    if (projectId == lastProjectId && lastDigest?.contentEquals(digest) == true) return@withLock
                     val captured =
                         withContext(Dispatchers.IO) {
                             val coroutine = currentCoroutineContext()
                             val checkCapture = {
                                 coroutine.ensureActive()
-                                val permittedNow = isEnabled && permitted() && !pausedMarker(projectId).exists()
+                                val permittedNow = isEnabled && permitted() && recordingAllowed(projectId)
                                 coroutine.ensureActive()
                                 if (!permittedNow) throw RecordingStoppedException()
                             }
                             try {
                                 // Encoding and syncing can outlast a recording toggle or an editor
-                                // close. Check before thinning existing frames and at publication.
+                                // close. Existing frames cannot change before publication succeeds.
                                 checkCapture()
-                                var existing = frames(projectId)
-                                if (existing.size >= MAX_FRAMES) existing = decimate(existing)
-                                val next = (existing.lastOrNull()?.nameWithoutExtension?.toIntOrNull() ?: -1) + 1
-                                val file = File(dir(projectId), "%06d%s".format(next, EXTENSION))
+                                val existing = frames(projectId)
+                                check(existing.size <= MAX_FRAMES) { "Time-lapse storage is full; clear the recording before continuing" }
+                                val previous =
+                                    existing.lastOrNull()?.let { file ->
+                                        requireNotNull(file.nameWithoutExtension.toLongOrNull()) { "Invalid time-lapse frame sequence" }
+                                    } ?: -1L
+                                require(previous >= -1L) { "Invalid time-lapse frame sequence" }
+                                val next = Math.addExact(previous, 1L)
+                                val file = File(dir(projectId), String.format(Locale.ROOT, "%06d%s", next, EXTENSION))
                                 storage.writeAtomically(file, modifiedAfter = null, beforeCommit = checkCapture) { it.write(bytes) }
+                                // The new frame and its directory entry are durable. Interrupted or
+                                // failed pruning now only keeps extra history; survivors never move.
+                                if (existing.size >= MAX_FRAMES) {
+                                    val removed = decimate(existing)
+                                    check(existing.size + 1 - removed <= MAX_FRAMES) { "Could not reduce the time-lapse recording" }
+                                }
                                 true
                             } catch (_: RecordingStoppedException) {
                                 false
@@ -121,7 +186,7 @@ class TimelapseRecorder
                         }
                     if (!captured) return@withLock
                     lastProjectId = projectId
-                    lastHash = hash
+                    lastDigest = digest
                 }
             }
         }
@@ -131,9 +196,22 @@ class TimelapseRecorder
 
         suspend fun clear(projectId: Long) {
             mutex.withLock {
-                withContext(Dispatchers.IO) { dir(projectId).deleteRecursively() }
-                if (projectId == lastProjectId) lastHash = 0
+                try {
+                    withContext(Dispatchers.IO) {
+                        val project = storage.projectDir(projectId)
+                        TimelapseFiles.clear(project)
+                        syncDirectory(project)
+                    }
+                } finally {
+                    // A checked clear may have removed some frames before reporting a failure.
+                    if (projectId == lastProjectId) lastDigest = null
+                }
             }
+        }
+
+        private fun syncDirectory(directory: File) {
+            val descriptor = Os.open(directory.path, OsConstants.O_RDONLY, 0)
+            withCleanup({ Os.close(descriptor) }) { Os.fsync(descriptor) }
         }
 
         /**
@@ -149,23 +227,9 @@ class TimelapseRecorder
         ): Result<ExportResult> =
             withContext(Dispatchers.IO) {
                 try {
-                    // Each export owns its snapshot, even when two exports start in the same
-                    // millisecond. Keep creation and cleanup in this dispatcher so cancellation
-                    // cannot lose the directory while returning it to another dispatcher.
-                    val tempDir = Files.createTempDirectory(storage.exportsDir(projectId).toPath(), "timelapse_snap_").toFile()
-                    try {
-                        val files =
-                            mutex.withLock {
-                                val recorded = frames(projectId)
-                                require(recorded.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
-                                val selected = if (fullLength) recorded else sampled(recorded, TARGET_DURATION_MS / MIN_FRAME_MS)
-                                selected.mapIndexed { index, file ->
-                                    currentCoroutineContext().ensureActive()
-                                    val snapFile = File(tempDir, "%06d%s".format(index, EXTENSION))
-                                    file.copyTo(snapFile)
-                                    snapFile
-                                }
-                            }
+                    val frameLimit = if (fullLength) null else TARGET_DURATION_MS / MIN_FRAME_MS
+                    withFrameSnapshot(projectId, frameLimit) { files ->
+                        require(files.isNotEmpty()) { "Nothing has been recorded yet — draw something first" }
                         val first = decode(files.first())
                         // Large recordings fall back to 720p on devices whose encoder cannot take their size.
                         val fitted = if (Mp4Encoder.supports(first.width, first.height)) first else downscale(first, MAX_SIDE)
@@ -207,9 +271,6 @@ class TimelapseRecorder
                         } finally {
                             temp.delete()
                         }
-                    } finally {
-                        // No suspending handoff here: this must run even when encoding is cancelled.
-                        tempDir.deleteRecursively()
                     }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
@@ -223,15 +284,8 @@ class TimelapseRecorder
                 requireNotNull(BitmapPixelBridge.fromEncodedBytes(file.readBytes())) { "A time-lapse frame is damaged" }
             }
 
-        /** Keeps every other frame and renumbers the survivors contiguously. */
-        private fun decimate(existing: List<File>): List<File> {
-            existing.filterIndexed { index, _ -> index % 2 == 1 }.forEach { it.delete() }
-            return existing.filterIndexed { index, _ -> index % 2 == 0 }.mapIndexed { index, file ->
-                val target = File(file.parentFile, "%06d%s".format(index, EXTENSION))
-                if (file != target) file.renameTo(target)
-                target
-            }
-        }
+        /** Removes alternating older frames only after an additional frame is durable. */
+        private fun decimate(existing: List<File>): Int = existing.filterIndexed { index, _ -> index % 2 == 1 }.count { it.delete() }
 
         private fun downscale(
             source: PixelBuffer,
@@ -254,8 +308,7 @@ class TimelapseRecorder
                 return List(count) { i -> files[(i.toLong() * (files.size - 1) / (count - 1)).toInt()] }
             }
 
-            const val DIR_NAME = "timelapse"
-            private const val PAUSED_FILE = "timelapse.paused"
+            const val DIR_NAME = TimelapseFiles.DIRECTORY
             private const val EXTENSION = ".jpg"
             const val MAX_FRAMES = 3_600
             private const val MAX_SIDE = 1_280

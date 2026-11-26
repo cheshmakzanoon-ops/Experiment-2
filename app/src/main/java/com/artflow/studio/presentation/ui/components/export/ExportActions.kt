@@ -11,6 +11,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -19,6 +20,9 @@ import com.artflow.studio.core.export.ExportOptions
 import com.artflow.studio.core.export.ExportResult
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
 import com.artflow.studio.presentation.ui.viewmodel.ExportUiState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import java.io.IOException
 
 /** Platform actions are lifecycle-aware and never assume an external viewer is installed. */
 data class ExportActions(
@@ -35,6 +39,7 @@ data class ExportActions(
 @Composable
 fun rememberExportActions(viewModel: CanvasViewModel): ExportActions {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var documentSource by rememberSaveable { mutableStateOf<String?>(null) }
     var gallerySource by rememberSaveable { mutableStateOf<String?>(null) }
     val saveDocument =
@@ -62,8 +67,12 @@ fun rememberExportActions(viewModel: CanvasViewModel): ExportActions {
         dismissResult = viewModel::resetExportState,
         exportTimelapse = viewModel::exportTimelapse,
         clearTimelapse = viewModel::clearTimelapse,
-        share = { result -> openSafely(viewModel::notify) { context.startActivity(viewModel.shareIntent(result)) } },
-        open = { result -> openSafely(viewModel::notify) { context.startActivity(viewModel.viewIntent(result)) } },
+        share = { result ->
+            scope.launch { openSafely(viewModel::notify) { viewModel.launchExport(result, open = false, context::startActivity) } }
+        },
+        open = { result ->
+            scope.launch { openSafely(viewModel::notify) { viewModel.launchExport(result, open = true, context::startActivity) } }
+        },
         saveFile = { result ->
             documentSource = result.filePath
             openSafely(viewModel::notify) {
@@ -89,17 +98,25 @@ fun rememberExportActions(viewModel: CanvasViewModel): ExportActions {
     )
 }
 
-private fun openSafely(
+private inline fun openSafely(
     notify: (String) -> Unit,
     launch: () -> Unit,
 ) {
     try {
         launch()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
     } catch (missing: ActivityNotFoundException) {
         notify("No app can open this file here. Use Save file or install a compatible viewer.")
     } catch (denied: SecurityException) {
         notify("Android did not allow this file to be opened. Try Save file instead.")
     } catch (invalid: IllegalArgumentException) {
         notify(invalid.message ?: "This export is no longer available. Export it again.")
+    } catch (failed: IOException) {
+        notify("Could not prepare this export. Free some storage and try again.")
+    } catch (failed: IllegalStateException) {
+        notify(failed.message ?: "Could not prepare this export. Export it again.")
+    } catch (failed: UnsupportedOperationException) {
+        notify("Could not prepare this export on this device. Try Save file instead.")
     }
 }

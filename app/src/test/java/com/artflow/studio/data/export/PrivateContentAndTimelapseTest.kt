@@ -175,8 +175,7 @@ class PrivateContentAndTimelapseTest {
                 recorder.capture(projectId, frame)
             }
             assertEquals(5, recorder.frameCount(projectId))
-            val recordedFiles = recorder.frameFiles(projectId)
-            assertEquals(5, recordedFiles.size)
+            recorder.withFrameSnapshot(projectId) { recordedFiles -> assertEquals(5, recordedFiles.size) }
 
             // Test export attempts: frames are snapshotted under lock
             val result = recorder.export(projectId, "Sample Artwork", fullLength = true)

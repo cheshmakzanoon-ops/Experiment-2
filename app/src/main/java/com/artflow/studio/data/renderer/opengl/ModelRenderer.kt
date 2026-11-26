@@ -3,11 +3,11 @@ package com.artflow.studio.data.renderer.opengl
 import android.graphics.Bitmap
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import android.opengl.GLUtils
 import android.opengl.Matrix
 import com.artflow.studio.core.three.Mesh
 import com.artflow.studio.core.three.ModelLighting
 import com.artflow.studio.core.three.OrbitCamera
+import timber.log.Timber
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -15,105 +15,121 @@ import java.util.concurrent.atomic.AtomicReference
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
-/**
- * Draws a painted model: the artwork is its texture, lit from the camera's side so its form reads.
- * The mesh and texture arrive from the UI thread and are uploaded on the GL thread.
- */
-class ModelRenderer : GLSurfaceView.Renderer {
+/** A complete mesh/color/material frame is owned across uploads and EGL context restoration. */
+class ModelRenderer internal constructor(
+    private val previewTextureLimit: () -> Int,
+) : GLSurfaceView.Renderer {
+    constructor() : this({ Int.MAX_VALUE })
+
     @Volatile
     var camera: OrbitCamera = OrbitCamera()
 
     @Volatile
     var lighting: ModelLighting = ModelLighting()
 
-    /** Procreate's Show 3D mesh: the model's triangle edges drawn over it. */
     @Volatile
     var showMesh: Boolean = false
 
-    private val pendingMesh = AtomicReference<Mesh?>(null)
-    private val pendingTexture = AtomicReference<Bitmap?>(null)
-    private val pendingMaterials = AtomicReference<List<Bitmap>?>(null)
-    private var materialBitmaps: List<Bitmap>? = null
-    private var colorBitmap: Bitmap? = null
-    private var texturesLost = true
+    private class Frame(
+        val mesh: Mesh,
+        val bitmaps: List<Bitmap>,
+        val generation: Long,
+    ) {
+        fun recycle() = bitmaps.forEach(Bitmap::recycle)
+    }
+
+    private val pendingFrame = AtomicReference<Frame?>(null)
+    private var retainedFrame: Frame? = null
+    private var textureSet: ModelTextureSet? = null
+    private var texturesNeedUpload = true
+    private var maxTextureSize = 0
+    private var initialized = false
+    private var reportedFailureGeneration = -1L
+    private val previewState = CanvasPreviewState()
+
+    val previewStatus: CanvasPreviewStatus get() = previewState.status
+    val previewAvailability: CanvasPreviewAvailability get() = previewState.availability
+    internal val textureSizes: List<CanvasTextureSize> get() = textureSet?.sizes.orEmpty()
+
+    var onPreviewAvailabilityChanged: ((CanvasPreviewAvailability) -> Unit)?
+        get() = previewState.onChanged
+        set(value) {
+            previewState.onChanged = value
+        }
+
+    @Volatile
+    var onStatusMessage: ((String) -> Unit)? = null
+
     private var program = 0
     private var wireProgram = 0
-    private var buffers = IntArray(3)
+    private val buffers = IntArray(3)
     private var corners = 0
-
-    /** The mesh's edges as line vertices, built on the GL thread the first time the mesh is shown. */
     private val wireBuffer = IntArray(1)
     private var wireVertices = 0
     private var wireSource: Mesh? = null
-
-    /** The mesh whose buffers are on the GPU now (set on the GL thread). */
     private var uploadedMesh: Mesh? = null
-    private var texture = 0
-    private val materialTextures = IntArray(2)
     private var width = 1
     private var height = 1
     private val projection = FloatArray(16)
     private val view = FloatArray(16)
     private val mvp = FloatArray(16)
 
-    @Volatile
-    private var lastMesh: Mesh? = null
-
-    fun setMesh(mesh: Mesh) {
-        lastMesh = mesh
-        pendingMesh.set(mesh)
-    }
-
-    /** Takes ownership of artwork pixels, retained for context restoration until the next update. */
-    fun setTexture(bitmap: Bitmap) {
-        pendingTexture.getAndSet(bitmap)?.recycle()
-    }
-
-    /** Takes ownership of the maps; transparent fallback texels leave the scalar defaults intact. */
-    fun setMaterialMaps(
-        metallic: Bitmap?,
-        roughness: Bitmap?,
+    /** Owns all three copied channels together; an empty set explicitly invalidates a missing preview. */
+    fun setFrame(
+        mesh: Mesh,
+        bitmaps: List<Bitmap>,
     ) {
-        val maps = listOf(metallic ?: blankTexture(), roughness ?: blankTexture())
-        pendingMaterials.getAndSet(maps)?.forEach { it.recycle() }
+        require(bitmaps.isEmpty() || bitmaps.size == 3)
+        val generation = previewState.advanceContent()
+        if (bitmaps.isEmpty()) previewState.awaitSurface()
+        pendingFrame.getAndSet(Frame(mesh, bitmaps, generation))?.recycle()
     }
 
-    private fun blankTexture(): Bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+    fun invalidateFrame() {
+        previewState.invalidateContent()
+        reportFailure(previewState.generation())
+    }
+
+    fun awaitPrimaryPreview(invalidateContent: Boolean = false) {
+        if (invalidateContent) previewState.advanceContent()
+        previewState.awaitSurface()
+    }
 
     override fun onSurfaceCreated(
         unused: GL10?,
         config: EGLConfig?,
     ) {
-        program = program(VERTEX, FRAGMENT)
-        wireProgram = program(WIRE_VERTEX, WIRE_FRAGMENT)
-        GLES20.glGenBuffers(3, buffers, 0)
-        GLES20.glGenBuffers(1, wireBuffer, 0)
-        wireSource = null
-        val ids = IntArray(1)
-        GLES20.glGenTextures(1, ids, 0)
-        texture = ids[0]
-        GLES20.glGenTextures(2, materialTextures, 0)
-        (listOf(texture) + materialTextures.toList()).forEach { name ->
-            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, name)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
-            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-            val blank = blankTexture()
-            GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, blank, 0)
-            blank.recycle()
-        }
-        // A plain white texture until the artwork arrives.
-        val white = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply { eraseColor(-1) }
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, white, 0)
-        white.recycle()
-        GLES20.glEnable(GLES20.GL_DEPTH_TEST)
-        // A recreated context lost every upload, so the mesh is sent again.
-        corners = 0
+        initialized = false
+        previewState.awaitSurface()
+        // Numeric names belong to the old context. Retain CPU frames, not old GL names.
+        textureSet = null
+        texturesNeedUpload = true
         uploadedMesh = null
-        lastMesh?.let { pendingMesh.compareAndSet(null, it) }
-        texturesLost = true
+        wireSource = null
+        corners = 0
+        program = 0
+        wireProgram = 0
+        buffers.fill(0)
+        wireBuffer.fill(0)
+        try {
+            drainModelGlErrors()
+            val limit = IntArray(1)
+            GLES20.glGetIntegerv(GLES20.GL_MAX_TEXTURE_SIZE, limit, 0)
+            maxTextureSize = limit[0]
+            program = createProgram(VERTEX, FRAGMENT)
+            wireProgram = createProgram(WIRE_VERTEX, WIRE_FRAGMENT)
+            GLES20.glGenBuffers(3, buffers, 0)
+            GLES20.glGenBuffers(1, wireBuffer, 0)
+            GLES20.glEnable(GLES20.GL_DEPTH_TEST)
+            initialized = buffers.all { it != 0 } && wireBuffer[0] != 0 && drainModelGlErrors() == GLES20.GL_NO_ERROR
+            if (!initialized) reportFailure(previewState.generation())
+        } catch (failure: IllegalStateException) {
+            Timber.w(failure, "Model preview initialization failed")
+            reportFailure(previewState.generation())
+        } catch (failure: OutOfMemoryError) {
+            Timber.w(failure, "Model preview initialization did not fit")
+            reportFailure(previewState.generation())
+        }
     }
 
     override fun onSurfaceChanged(
@@ -127,33 +143,69 @@ class ModelRenderer : GLSurfaceView.Renderer {
     }
 
     override fun onDrawFrame(unused: GL10?) {
-        pendingMesh.getAndSet(null)?.let(::upload)
-        val color = pendingTexture.getAndSet(null)
-        if (color != null) {
-            colorBitmap?.recycle()
-            colorBitmap = color
-        }
-        if (color != null || texturesLost) {
-            colorBitmap?.let { bitmap ->
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
-            }
-        }
-        val materials = pendingMaterials.getAndSet(null)
-        if (materials != null) {
-            materialBitmaps?.forEach { it.recycle() }
-            materialBitmaps = materials
-        }
-        if (materials != null || texturesLost) {
-            materialBitmaps?.forEachIndexed { index, bitmap ->
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, materialTextures[index])
-                GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bitmap, 0)
-            }
-        }
-        texturesLost = false
         GLES20.glClearColor(BACKGROUND, BACKGROUND, BACKGROUND, 1f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
-        if (corners == 0) return
+        val incoming = pendingFrame.getAndSet(null)
+        if (incoming != null) {
+            retainedFrame?.recycle()
+            retainedFrame = incoming
+            texturesNeedUpload = true
+        }
+        val frame = retainedFrame ?: return
+        if (frame.bitmaps.isEmpty()) return
+        if (!initialized) {
+            reportFailure(frame.generation)
+            return
+        }
+        try {
+            drainModelGlErrors()
+            if (!prepareFrame(frame)) {
+                reportFailure(frame.generation)
+                return
+            }
+            // A complete older image can remain visible while a newer refresh is queued.
+            // Its presentation cannot restore availability for a newer missing/failed frame.
+            drawModel(requireNotNull(textureSet))
+            if (drainModelGlErrors() == GLES20.GL_NO_ERROR) {
+                previewState.presented(frame.generation, true)
+                reportedFailureGeneration = -1L
+            } else {
+                uploadedMesh = null
+                texturesNeedUpload = true
+                reportFailure(frame.generation)
+            }
+        } catch (failure: IllegalArgumentException) {
+            Timber.w(failure, "Model preview frame rejected")
+            reportFailure(frame.generation)
+        } catch (failure: OutOfMemoryError) {
+            Timber.w(failure, "Model preview frame did not fit")
+            reportFailure(frame.generation)
+        }
+    }
+
+    private fun prepareFrame(frame: Frame): Boolean {
+        if (uploadedMesh !== frame.mesh && !upload(frame.mesh)) return false
+        if (texturesNeedUpload || textureSet == null) {
+            val uploaded = ModelTextureSet.upload(frame.bitmaps) { minOf(maxTextureSize, previewTextureLimit()) } ?: return false
+            val previous = textureSet
+            textureSet = uploaded
+            texturesNeedUpload = false
+            previous?.delete()
+        }
+        return corners > 0
+    }
+
+    private fun reportFailure(generation: Long) {
+        // GL draws are serial: a failed draw cleared the surface, even when Main queued a new
+        // generation during its upload. That queued frame can restore input only after drawing.
+        previewState.presentationFailed()
+        if (reportedFailureGeneration != generation) {
+            reportedFailureGeneration = generation
+            onStatusMessage?.invoke("The 3D preview could not be displayed. Painting is paused. Close and reopen the 3D view to retry.")
+        }
+    }
+
+    private fun drawModel(textures: ModelTextureSet) {
         val cam = camera
         Matrix.perspectiveM(projection, 0, cam.fieldOfViewDegrees, width.toFloat() / height, NEAR, FAR)
         val eye = cam.eye
@@ -173,23 +225,21 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uExposure"), light.exposure)
         val second = light.secondDirection()
         GLES20.glUniform3f(GLES20.glGetUniformLocation(program, "uLight2Dir"), second.x, second.y, second.z)
-        GLES20.glUniform1f(
-            GLES20.glGetUniformLocation(program, "uLight2"),
-            light.secondIntensity.coerceIn(0f, ModelLighting.MAX_INTENSITY),
-        )
-        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texture)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uTexture"), 0)
-        materialTextures.forEachIndexed { index, name ->
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE1 + index)
+        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uLight2"), light.secondIntensity.coerceIn(0f, ModelLighting.MAX_INTENSITY))
+        textures.handles.forEachIndexed { index, name ->
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0 + index)
             GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, name)
-            val uniform = if (index == 0) "uMetallicMap" else "uRoughnessMap"
-            GLES20.glUniform1i(GLES20.glGetUniformLocation(program, uniform), index + 1)
+            val uniform =
+                when (index) {
+                    0 -> "uTexture"
+                    1 -> "uMetallicMap"
+                    else -> "uRoughnessMap"
+                }
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(program, uniform), index)
         }
         attribute("aPosition", buffers[0], 3)
         attribute("aNormal", buffers[1], 3)
         attribute("aUv", buffers[2], 2)
-        // The surface sits a little behind its own edges so the wireframe is never hidden by it.
         GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL)
         GLES20.glPolygonOffset(1f, 1f)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, corners)
@@ -212,13 +262,33 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glDrawArrays(GLES20.GL_LINES, 0, wireVertices)
     }
 
-    private fun upload(mesh: Mesh) {
+    private fun upload(mesh: Mesh): Boolean {
+        // Each glBufferData changes existing storage. A partial failure must not leave the old
+        // identity eligible for the fast path when the artist returns to that same mesh object.
+        uploadedMesh = null
+        corners = 0
+        wireSource = null
         listOf(mesh.positions, mesh.normals, mesh.uvs).forEachIndexed { index, values ->
             GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, buffers[index])
             GLES20.glBufferData(GLES20.GL_ARRAY_BUFFER, values.size * 4, floats(values), GLES20.GL_STATIC_DRAW)
         }
+        if (drainModelGlErrors() != GLES20.GL_NO_ERROR) return false
         corners = mesh.triangleCount * 3
         uploadedMesh = mesh
+        return true
+    }
+
+    /** Call after GLSurfaceView has paused/stopped its renderer; no GL operation runs on the UI thread. */
+    fun dispose() {
+        pendingFrame.getAndSet(null)?.recycle()
+        retainedFrame?.recycle()
+        retainedFrame = null
+        textureSet = null
+        uploadedMesh = null
+        wireSource = null
+        initialized = false
+        previewState.invalidateContent()
+        previewState.awaitSurface()
     }
 
     private fun attribute(
@@ -234,27 +304,32 @@ class ModelRenderer : GLSurfaceView.Renderer {
     }
 
     private fun floats(values: FloatArray): FloatBuffer =
-        ByteBuffer
-            .allocateDirect(values.size * 4)
-            .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .apply {
-                put(values)
-                position(0)
-            }
+        ByteBuffer.allocateDirect(values.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply {
+            put(values)
+            position(0)
+        }
 
-    private fun program(
+    private fun createProgram(
         vertex: String,
         fragment: String,
     ): Int {
         val id = GLES20.glCreateProgram()
-        GLES20.glAttachShader(id, shader(GLES20.GL_VERTEX_SHADER, vertex))
-        GLES20.glAttachShader(id, shader(GLES20.GL_FRAGMENT_SHADER, fragment))
-        GLES20.glLinkProgram(id)
-        val status = IntArray(1)
-        GLES20.glGetProgramiv(id, GLES20.GL_LINK_STATUS, status, 0)
-        check(status[0] != 0) { "Model shader link failed: ${GLES20.glGetProgramInfoLog(id)}" }
-        return id
+        val shaders = mutableListOf<Int>()
+        var complete = false
+        try {
+            shaders += shader(GLES20.GL_VERTEX_SHADER, vertex)
+            shaders += shader(GLES20.GL_FRAGMENT_SHADER, fragment)
+            shaders.forEach { GLES20.glAttachShader(id, it) }
+            GLES20.glLinkProgram(id)
+            val status = IntArray(1)
+            GLES20.glGetProgramiv(id, GLES20.GL_LINK_STATUS, status, 0)
+            check(status[0] != 0) { "Model shader link failed: ${GLES20.glGetProgramInfoLog(id)}" }
+            complete = true
+            return id
+        } finally {
+            shaders.forEach(GLES20::glDeleteShader)
+            if (!complete) GLES20.glDeleteProgram(id)
+        }
     }
 
     private fun shader(
@@ -266,7 +341,11 @@ class ModelRenderer : GLSurfaceView.Renderer {
         GLES20.glCompileShader(id)
         val status = IntArray(1)
         GLES20.glGetShaderiv(id, GLES20.GL_COMPILE_STATUS, status, 0)
-        check(status[0] != 0) { "Model shader compile failed: ${GLES20.glGetShaderInfoLog(id)}" }
+        if (status[0] == 0) {
+            val message = GLES20.glGetShaderInfoLog(id)
+            GLES20.glDeleteShader(id)
+            error("Model shader compile failed: $message")
+        }
         return id
     }
 

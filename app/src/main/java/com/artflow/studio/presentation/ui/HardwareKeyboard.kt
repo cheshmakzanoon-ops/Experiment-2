@@ -3,18 +3,13 @@ package com.artflow.studio.presentation.ui
 import android.view.KeyEvent
 import android.view.KeyboardShortcutGroup
 import android.view.KeyboardShortcutInfo
+import androidx.compose.runtime.staticCompositionLocalOf
 import com.artflow.studio.core.canvas.KeyChord
 import com.artflow.studio.core.canvas.KeyboardShortcuts
 import com.artflow.studio.core.canvas.ShortcutAction
 
-/**
- * Where the open editor registers to receive keyboard shortcuts; null while no editor is on screen.
- * Set and read on the main thread only.
- */
-object ShortcutHost {
-    var handler: ((ShortcutAction) -> Boolean)? = null
-    var overrides: Map<ShortcutAction, KeyChord> = emptyMap()
-}
+/** Only the activity that receives hardware events supplies a keyboard host to its composition. */
+internal val LocalShortcutHost = staticCompositionLocalOf<ShortcutHost?> { null }
 
 /** Android key codes on one side, the platform-free tokens of [KeyChord] on the other. */
 internal object AndroidKeys {
@@ -62,13 +57,13 @@ internal object AndroidKeys {
     }
 
     /** The shortcut groups Android shows in its keyboard shortcuts helper (Meta + /). */
-    fun helperGroups(): List<KeyboardShortcutGroup> =
+    fun helperGroups(overrides: Map<ShortcutAction, KeyChord> = emptyMap()): List<KeyboardShortcutGroup> =
         ShortcutAction.Group.entries.mapNotNull { group ->
             val infos =
                 ShortcutAction.entries
                     .filter { it.group == group }
                     .flatMap { action ->
-                        KeyboardShortcuts.chordsFor(action, ShortcutHost.overrides).mapNotNull { chord ->
+                        KeyboardShortcuts.chordsFor(action, overrides).mapNotNull { chord ->
                             val code = keyCodes[chord.key] ?: return@mapNotNull null
                             var modifiers = 0
                             if (chord.primary) modifiers = modifiers or KeyEvent.META_CTRL_ON

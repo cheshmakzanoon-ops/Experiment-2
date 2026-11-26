@@ -7,8 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.Palette
 import com.artflow.studio.core.gallery.GalleryOrder
+import com.artflow.studio.core.gallery.GalleryShareRequests
 import com.artflow.studio.data.export.PendingImports
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.local.ShareExportFiles
+import com.artflow.studio.data.local.SharedCopyCleanupResult
 import com.artflow.studio.domain.model.Project
 import com.artflow.studio.domain.model.settings.AccentChoice
 import com.artflow.studio.domain.model.settings.AppSettings
@@ -72,11 +75,16 @@ class MainViewModel
         private val _paletteRecoveryRunning = MutableStateFlow(false)
         val paletteRecoveryRunning: StateFlow<Boolean> = _paletteRecoveryRunning.asStateFlow()
 
+        private val sharedCopyStorageState = MutableStateFlow(SharedCopyStorageState())
+        internal val sharedCopyStorage: StateFlow<SharedCopyStorageState> = sharedCopyStorageState.asStateFlow()
+
         private val _query = MutableStateFlow("")
         val query: StateFlow<String> = _query.asStateFlow()
 
         private val messages = Channel<String>(Channel.BUFFERED)
         val messageFlow: Flow<String> = messages.receiveAsFlow()
+
+        internal val galleryShares = GalleryShareRequests()
 
         private var allProjects: List<Project> = emptyList()
         private var storageBytes = 0L
@@ -249,17 +257,23 @@ class MainViewModel
             storage.flattenedFile(project.id).takeIf { it.isFile } ?: project.thumbnailPath?.let { java.io.File(it) }?.takeIf { it.isFile }
 
         /** Copies the artwork's last saved image into the shareable exports folder; null if it was never saved. */
-        suspend fun shareablePng(project: Project): java.io.File? =
-            withContext(Dispatchers.IO) {
-                val source = storage.flattenedFile(project.id).takeIf { it.isFile } ?: return@withContext null
-                val name =
-                    project.name
-                        .filter { it.isLetterOrDigit() || it in " -_" }
-                        .trim()
-                        .ifEmpty { "Artwork" }
-                        .take(MAX_STACK_NAME)
-                storage.saveExportFromFile(project.id, "$name.png", source)
-            }
+        suspend fun shareablePng(project: Project): java.io.File? {
+            // A card can outlive its database row while the gallery's flow refresh is pending.
+            // Do not recreate a deleted project's directories to inspect a stale card.
+            if (projectRepository.getProjectById(project.id) == null) return null
+            val paths =
+                withContext(Dispatchers.IO) {
+                    val source = storage.flattenedFile(project.id).takeIf { it.isFile } ?: return@withContext null
+                    source to storage.exportsDir(project.id)
+                } ?: return null
+            val name =
+                project.name
+                    .filter { it.isLetterOrDigit() || it in " -_" }
+                    .trim()
+                    .ifEmpty { "Artwork" }
+                    .take(MAX_STACK_NAME)
+            return ShareExportFiles.copy(paths.second, "$name.png", paths.first)
+        }
 
         /** Puts an artwork in a gallery stack; a blank name returns it to the main gallery. */
         fun moveToStack(
@@ -318,14 +332,18 @@ class MainViewModel
         }
 
         fun delete(project: Project) {
-            viewModelScope.launch(galleryErrors) {
-                projectRepository.deleteProjectById(project.id)
-                PendingImports.discardProject(project.id)
-                withContext(Dispatchers.IO) { storage.deleteProjectFiles(project.id) }
-                storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
-                publish()
-                messages.send("Deleted ${project.name}")
-            }
+            val deletion = galleryShares.beginDeletion(project.id) ?: return
+            viewModelScope
+                .launch(galleryErrors) {
+                    deletion.complete {
+                        projectRepository.deleteProjectById(project.id)
+                        PendingImports.discardProject(project.id)
+                        withContext(Dispatchers.IO) { storage.deleteProjectFiles(project.id) }
+                    }
+                    storageBytes = withContext(Dispatchers.IO) { storage.totalStorageBytes() }
+                    publish()
+                    messages.send("Deleted ${project.name}")
+                }.invokeOnCompletion { deletion.release() }
         }
 
         /** Saves a canvas size under its name, replacing a saved preset of the same name. */
@@ -404,6 +422,10 @@ class MainViewModel
             viewModelScope.launch(galleryErrors) { settingsRepository.setHaptics(enabled) }
         }
 
+        fun setTimelapseRecordingAllowed(enabled: Boolean) {
+            viewModelScope.launch(galleryErrors) { settingsRepository.update { it.copy(recordTimelapse = enabled) } }
+        }
+
         fun setAutosave(
             enabled: Boolean,
             intervalMs: Long,
@@ -464,13 +486,58 @@ class MainViewModel
             stream.bufferedWriter(Charsets.UTF_8).use { it.write(original) }
         }
 
+        internal fun refreshSharedCopies() = updateSharedCopyStorage(remove = false)
+
+        internal fun removeSharedCopies() = updateSharedCopyStorage(remove = true)
+
+        private fun updateSharedCopyStorage(remove: Boolean) {
+            if (sharedCopyStorageState.value.busy) return
+            sharedCopyStorageState.value = sharedCopyStorageState.value.copy(refreshing = !remove, removing = remove, error = null)
+            viewModelScope.launch(galleryErrors) {
+                try {
+                    val (summary, total, cleanup) =
+                        withContext(Dispatchers.IO) {
+                            val cleanup = if (remove) storage.removeSharedCopies() else null
+                            Triple(cleanup?.remaining ?: storage.sharedCopySummary(), storage.totalStorageBytes(), cleanup)
+                        }
+                    storageBytes = total
+                    publish()
+                    sharedCopyStorageState.value = SharedCopyStorageState(summary = summary)
+                    cleanup?.let { messages.send(sharedCopyCleanupMessage(it)) }
+                } catch (failed: IOException) {
+                    sharedCopyStorageFailure(failed)
+                } catch (failed: SecurityException) {
+                    sharedCopyStorageFailure(failed)
+                } finally {
+                    sharedCopyStorageState.value = sharedCopyStorageState.value.copy(refreshing = false, removing = false)
+                }
+            }
+        }
+
+        private fun sharedCopyStorageFailure(failure: Exception) {
+            Timber.w(failure, "Could not refresh shared-copy storage")
+            val message = "Shared-copy storage could not be refreshed. Check again to see which copies remain."
+            sharedCopyStorageState.value = SharedCopyStorageState(error = message)
+            messages.trySend(message)
+        }
+
+        private fun sharedCopyCleanupMessage(result: SharedCopyCleanupResult): String {
+            val copies = if (result.removedCount == 1) "1 shared copy" else "${result.removedCount} shared copies"
+            val removed = "Removed $copies (${result.removedBytes} bytes)."
+            return if (result.failedCount > 0) {
+                "$removed Some shared-copy folders could not be cleaned; their remaining files were kept."
+            } else {
+                removed
+            }
+        }
+
         fun storageSummary(): String {
             val bytes = storageBytes
             // Double division: Float mantissa precision loses visible accuracy once the value
             // exceeds 16 MB of bytes.
             return when {
-                bytes < 1024 * 1024 -> "%.0f KB on device".format(bytes / 1024f)
-                bytes < 1024L * 1024 * 1024 -> "%.1f MB on device".format(bytes / (1024f * 1024f))
+                bytes < 1024 * 1024 -> "%.0f KB on device".format(bytes / 1024.0)
+                bytes < 1024L * 1024 * 1024 -> "%.1f MB on device".format(bytes / (1024.0 * 1024.0))
                 else ->
                     "%.2f GB on device".format(
                         bytes.toDouble() / (1024.0 * 1024.0 * 1024.0),

@@ -63,9 +63,7 @@ internal object Mp4Encoder {
         val format =
             MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
-                setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT601_NTSC)
-                setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
-                setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+                describeEncodedColour(this)
                 setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileBaseline)
                 setInteger(MediaFormat.KEY_BIT_RATE, options.videoBitrate.coerceIn(500_000, 40_000_000))
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
@@ -153,7 +151,10 @@ internal object Mp4Encoder {
                     MediaCodec.INFO_TRY_AGAIN_LATER -> if (!waitForEnd) return
                     MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                         check(track == -1) { "The encoder changed format after video writing started" }
-                        track = muxer.addTrack(codec.outputFormat)
+                        // Some codecs omit or replace requested color aspects. The muxer must
+                        // describe the YUV samples we supplied while retaining codec-specific data.
+                        val encodedFormat = codec.outputFormat.apply { describeEncodedColour(this) }
+                        track = muxer.addTrack(encodedFormat)
                         muxer.start()
                     }
                     MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> Unit
@@ -196,6 +197,14 @@ internal object Mp4Encoder {
         }
     }
 
+    private fun describeEncodedColour(format: MediaFormat) {
+        // fillImage converts sRGB to BT.709's transfer curve before its limited-range matrix.
+        // Repeat these aspects on the output: older OMX codecs can omit them from outputFormat.
+        format.setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+        format.setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
+        format.setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+    }
+
     /** Image.Plane declares both strides; flexible YUV is not necessarily NV12 or tightly packed. */
     private suspend fun fillImage(
         image: Image,
@@ -207,10 +216,14 @@ internal object Mp4Encoder {
         check(image.format == ImageFormat.YUV_420_888 && image.planes.size == 3) { "Unsupported encoder input image" }
         check(image.width >= width && image.height >= height) { "The encoder input is smaller than the artwork" }
         val matte = background or (0xFF shl 24)
-        val pixels = IntArray(width * height) { matte }
+        val videoMatte = Bt709VideoColor.fromSrgb(matte)
+        val pixels = IntArray(width * height) { videoMatte }
         for (y in 0 until frame.height) {
             currentCoroutineContext().ensureActive()
-            for (x in 0 until frame.width) pixels[y * width + x] = BlendModes.sourceOver(matte, frame.pixels[y * frame.width + x])
+            for (x in 0 until frame.width) {
+                val opaqueSrgb = BlendModes.sourceOver(matte, frame.pixels[y * frame.width + x])
+                pixels[y * width + x] = Bt709VideoColor.fromSrgb(opaqueSrgb)
+            }
         }
         val luma = PlaneWriter(image.planes[0])
         val u = PlaneWriter(image.planes[1])
@@ -218,44 +231,17 @@ internal object Mp4Encoder {
         for (y in 0 until height) {
             currentCoroutineContext().ensureActive()
             for (x in 0 until width) {
-                val color = pixels[y * width + x]
-                val red = color shr 16 and 255
-                val green = color shr 8 and 255
-                val blue = color and 255
-                luma.put(x, y, ((66 * red + 129 * green + 25 * blue + 128) shr 8) + 16)
+                luma.put(x, y, Bt709VideoColor.luma(pixels[y * width + x]))
             }
         }
         for (y in 0 until height step 2) {
             currentCoroutineContext().ensureActive()
             for (x in 0 until width step 2) {
-                val rgb = averagedRgb(pixels, width, x, y)
-                val red = rgb shr 16 and 255
-                val green = rgb shr 8 and 255
-                val blue = rgb and 255
-                u.put(x / 2, y / 2, ((-38 * red - 74 * green + 112 * blue + 128) shr 8) + 128)
-                v.put(x / 2, y / 2, ((112 * red - 94 * green - 18 * blue + 128) shr 8) + 128)
+                val rgb = Bt709VideoColor.average2x2(pixels, width, x, y)
+                u.put(x / 2, y / 2, Bt709VideoColor.chromaBlue(rgb))
+                v.put(x / 2, y / 2, Bt709VideoColor.chromaRed(rgb))
             }
         }
-    }
-
-    private fun averagedRgb(
-        pixels: IntArray,
-        width: Int,
-        x: Int,
-        y: Int,
-    ): Int {
-        var red = 0
-        var green = 0
-        var blue = 0
-        for (dy in 0..1) {
-            for (dx in 0..1) {
-                val color = pixels[(y + dy) * width + x + dx]
-                red += color shr 16 and 255
-                green += color shr 8 and 255
-                blue += color and 255
-            }
-        }
-        return ((red / 4) shl 16) or ((green / 4) shl 8) or (blue / 4)
     }
 
     private class PlaneWriter(

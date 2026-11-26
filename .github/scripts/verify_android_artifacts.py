@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Check APK/AAB integrity and packaged native alignment, without third-party modules.
+"""Check APK/AAB integrity, native alignment, and required project notices.
 
 This is a binary preflight, not a substitute for testing on a 16 KB device.
+Notice presence and byte identity do not certify distribution-license compliance.
 See https://developer.android.com/guide/practices/page-sizes .
 """
 from __future__ import annotations
@@ -107,7 +108,13 @@ def verify_relro(loads: list[tuple[int, int, int, int]],
     return errors
 
 
-def verify_archive(path: Path) -> tuple[list[str], list[str]]:
+def verify_archive(path: Path, expected_notices: dict[str, bytes] | None = None
+                   ) -> tuple[list[str], list[str]]:
+    """Check a binary, optionally requiring exact notices at application-root paths.
+
+    Generic callers may omit project-specific notices; the CLI always supplies them.
+    AAB Java resources live beneath base/root, unlike their APK counterparts.
+    """
     errors: list[str] = []
     inventory: list[str] = []
     if path.suffix.lower() not in {'.apk', '.aab'}:
@@ -122,6 +129,15 @@ def verify_archive(path: Path) -> tuple[list[str], list[str]]:
         manifest = 'AndroidManifest.xml' if path.suffix.lower() == '.apk' else 'base/manifest/AndroidManifest.xml'
         if manifest not in names:
             errors.append(f'missing {manifest}')
+        resource_prefix = '' if path.suffix.lower() == '.apk' else 'base/root/'
+        for notice, expected in (expected_notices or {}).items():
+            packaged_path = resource_prefix + notice
+            if packaged_path not in names:
+                errors.append(f'missing required notice {packaged_path}')
+                continue
+            entry = archive.getinfo(packaged_path)
+            if entry.file_size != len(expected) or archive.read(entry) != expected:
+                errors.append(f'required notice {packaged_path} differs from repository source')
         libraries = {}
         for entry in archive.infolist():
             if not entry.filename.endswith('.so'):
@@ -158,10 +174,22 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('artifacts', nargs='+', type=Path)
     args = parser.parse_args()
+    root = Path(__file__).resolve().parents[2]
+    notice_sources = {
+        'META-INF/ARTFLOW-LICENSE.txt': root / 'LICENSE',
+        'META-INF/UNICODE-LICENSE.txt': root / 'app/src/main/resources/META-INF/UNICODE-LICENSE.txt',
+    }
+    try:
+        expected_notices = {name: source.read_bytes() for name, source in notice_sources.items()}
+        if any(not content for content in expected_notices.values()):
+            raise ValueError('required notice source is empty')
+    except (OSError, ValueError) as error:
+        print(f'FAIL: cannot load required project notices: {error}', file=sys.stderr)
+        return 1
     failed = False
     for path in args.artifacts:
         try:
-            errors, inventory = verify_archive(path)
+            errors, inventory = verify_archive(path, expected_notices)
         except (OSError, ValueError, zipfile.BadZipFile, struct.error) as error:
             errors, inventory = [str(error)], []
         print(f'{path}: {"FAIL" if errors else "PASS"}')

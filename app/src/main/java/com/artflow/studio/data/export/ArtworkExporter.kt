@@ -31,6 +31,7 @@ import com.artflow.studio.core.export.PsdCodec
 import com.artflow.studio.core.export.PsdFolders
 import com.artflow.studio.core.export.TiffCodec
 import com.artflow.studio.core.export.readAtMost
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
@@ -38,6 +39,7 @@ import com.artflow.studio.core.pixels.SelectionMask
 import com.artflow.studio.core.three.MaterialChannel
 import com.artflow.studio.core.three.ObjExport
 import com.artflow.studio.data.local.ProjectStorage
+import com.artflow.studio.data.local.ShareExportFiles
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
@@ -1029,13 +1031,40 @@ class ArtworkExporter
             }
         }
 
-        /** Share intent for an exported file, routed through the app's FileProvider. */
-        fun shareIntent(
+        /**
+         * Shares or opens a copy owned by this request, without blocking the UI while copying videos.
+         * Launched copies remain in the project's export storage until explicit deletion; a later
+         * export may replace the original filename, but never a URI already given to another app.
+         */
+        suspend fun launchExport(
             result: ExportResult,
-            chooserTitle: String = "Share artwork",
+            open: Boolean,
+            isCurrent: () -> Boolean,
+            launch: (Intent) -> Unit,
+        ) {
+            var file: File? = null
+            withCleanup({ file?.let { ShareExportFiles.finish(it) } }) {
+                withContext(Dispatchers.Main.immediate) {
+                    if (!isCurrent()) return@withContext
+                    val source = withContext(Dispatchers.IO) { storage.exportedFile(result.filePath) }
+                    val prepared = ShareExportFiles.copy(requireNotNull(source.parentFile), result.fileName, source)
+                    file = prepared
+                    currentCoroutineContext().ensureActive()
+                    if (!isCurrent()) return@withContext
+                    launch(if (open) viewIntent(result, prepared) else shareIntent(result, prepared))
+                    // Mark this before any suspension: the receiver now owns its URI grant.
+                    ShareExportFiles.markPublished(prepared)
+                }
+            }
+        }
+
+        /** The caller retains the exact copied file only after the system chooser launches. */
+        private fun shareIntent(
+            result: ExportResult,
+            file: File,
         ): Intent {
             val authority = "${context.packageName}.fileprovider"
-            val uri = FileProvider.getUriForFile(context, authority, storage.exportedFile(result.filePath))
+            val uri = FileProvider.getUriForFile(context, authority, file)
             val send =
                 Intent(Intent.ACTION_SEND).apply {
                     type = result.format.mimeType
@@ -1044,13 +1073,16 @@ class ArtworkExporter
                     putExtra(Intent.EXTRA_SUBJECT, result.fileName)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-            return Intent.createChooser(send, chooserTitle)
+            return Intent.createChooser(send, "Share artwork")
         }
 
-        /** Open-in-place intent for the exported file (PDF viewers, image apps). */
-        fun viewIntent(result: ExportResult): Intent {
+        /** A viewer gets its own immutable copy too, with a read grant for just that URI. */
+        private fun viewIntent(
+            result: ExportResult,
+            file: File,
+        ): Intent {
             val authority = "${context.packageName}.fileprovider"
-            val uri = FileProvider.getUriForFile(context, authority, storage.exportedFile(result.filePath))
+            val uri = FileProvider.getUriForFile(context, authority, file)
             return Intent(Intent.ACTION_VIEW).apply {
                 clipData = ClipData.newRawUri(result.fileName, uri)
                 setDataAndType(uri, result.format.mimeType)

@@ -192,10 +192,11 @@ class ExportDeviceTest {
     fun exportedFilesCanBeReadAndCopiedButEditableDocumentsCannotBeShared() =
         runBlocking {
             val image = still(PixelBuffer.filled(32, 16, Color.RED), ExportFormat.PNG)
-            val chooser = exporter.shareIntent(image)
+            var chooser: Intent? = null
+            exporter.launchExport(image, open = false, isCurrent = { true }) { chooser = it }
 
             @Suppress("DEPRECATION")
-            val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
+            val send = requireNotNull(chooser).getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
             assertEquals("image/png", send.type)
             assertTrue(send.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
             val uri = send.clipData!!.getItemAt(0).uri
@@ -206,7 +207,8 @@ class ExportDeviceTest {
             exporter.writeToDocument(image.filePath, targetUri)
             assertArrayEquals(shared, target.readBytes())
             storage.documentFile(projectId).writeText("private artwork")
-            assertTrue(runCatching { exporter.shareIntent(image.copy(filePath = storage.documentFile(projectId).absolutePath)) }.isFailure)
+            val privateResult = image.copy(filePath = storage.documentFile(projectId).absolutePath)
+            assertTrue(runCatching { exporter.launchExport(privateResult, open = false, isCurrent = { true }) {} }.isFailure)
         }
 
     @Test
@@ -347,14 +349,16 @@ class ExportDeviceTest {
             for (color in listOf(Color.RED, Color.GREEN, Color.BLUE)) {
                 recorder.capture(projectId, PixelBuffer.filled(64, 32, color))
             }
-            val originalFrames = recorder.frameFiles(projectId).associate { it.name to it.readBytes() }
+            val originalFrames = recorder.withFrameSnapshot(projectId) { files -> files.associate { it.name to it.readBytes() } }
             val result = recorder.export(projectId, "Recorded", fullLength = true).getOrThrow()
 
             assertEquals(3, result.frameCount)
             assertEquals(File(result.filePath).length(), result.byteCount)
             assertEquals(listOf(result.fileName), storage.exportsDir(projectId).list()!!.toList())
-            assertEquals(originalFrames.keys, recorder.frameFiles(projectId).map { it.name }.toSet())
-            recorder.frameFiles(projectId).forEach { assertArrayEquals(originalFrames.getValue(it.name), it.readBytes()) }
+            recorder.withFrameSnapshot(projectId) { files ->
+                assertEquals(originalFrames.keys, files.map { it.name }.toSet())
+                files.forEach { assertArrayEquals(originalFrames.getValue(it.name), it.readBytes()) }
+            }
             val extractor = MediaExtractor()
             try {
                 extractor.setDataSource(result.filePath)

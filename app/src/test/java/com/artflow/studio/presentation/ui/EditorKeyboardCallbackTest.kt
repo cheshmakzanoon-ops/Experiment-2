@@ -2,6 +2,7 @@ package com.artflow.studio.presentation.ui
 
 import android.view.KeyEvent
 import android.view.Window
+import com.artflow.studio.core.canvas.KeyChord
 import com.artflow.studio.core.canvas.ShortcutAction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,6 +75,34 @@ class EditorKeyboardCallbackTest {
         `when`(delegate.dispatchKeyEvent(undo)).thenReturn(true)
         assertTrue(callback.dispatchKeyEvent(undo))
         verify(delegate).dispatchKeyEvent(undo)
+    }
+
+    @Test
+    fun twoWindowCallbacksUseTheirOwnRegistrationAndOverridesAfterTheOtherWindowCloses() {
+        val firstHost = ShortcutHost()
+        val secondHost = ShortcutHost()
+        val secondDelegate = mock(Window.Callback::class.java)
+        val secondActions = mutableListOf<ShortcutAction>()
+        firstHost.register { actions.add(it) }
+        val releaseSecond = secondHost.register { secondActions.add(it) }
+        val chord = KeyChord("k", primary = true)
+        firstHost.overrides = mapOf(ShortcutAction.UNDO to chord)
+        secondHost.overrides = mapOf(ShortcutAction.REDO to chord)
+        val first = EditorKeyboardCallback(delegate, { false }, { firstHost.handler }, { firstHost.overrides })
+        val second = EditorKeyboardCallback(secondDelegate, { false }, { secondHost.handler }, { secondHost.overrides })
+
+        assertTrue(first.dispatchKeyEvent(key(KeyEvent.KEYCODE_K, primary = true)))
+        assertEquals(listOf(ShortcutAction.UNDO), actions)
+        assertTrue(secondActions.isEmpty())
+        assertTrue(second.dispatchKeyEvent(key(KeyEvent.KEYCODE_K, primary = true)))
+        assertEquals(listOf(ShortcutAction.REDO), secondActions)
+        releaseSecond()
+        assertTrue(first.dispatchKeyEvent(key(KeyEvent.KEYCODE_K, primary = true)))
+        assertEquals(listOf(ShortcutAction.UNDO, ShortcutAction.UNDO), actions)
+        val closedKey = key(KeyEvent.KEYCODE_K, primary = true)
+        assertFalse(second.dispatchKeyEvent(closedKey))
+        verify(secondDelegate).dispatchKeyEvent(closedKey)
+        verifyNoInteractions(delegate)
     }
 
     private fun callback(textEditor: Boolean = false): EditorKeyboardCallback =

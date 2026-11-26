@@ -1057,6 +1057,12 @@ class ProjectStorage
                 StorageFileTree.sizeBytes(File(context.filesDir, folder), context.filesDir)
             }
 
+        /** Explicit Settings housekeeping is limited to marked copies below the export root. */
+        internal fun sharedCopySummary(): SharedCopySummary = ShareExportFiles.summary(ownedPath(EXPORTS_DIR), context.filesDir)
+
+        internal suspend fun removeSharedCopies(): SharedCopyCleanupResult =
+            ShareExportFiles.removeCompleted(ownedPath(EXPORTS_DIR), context.filesDir)
+
         /** Deletes leftover export files older than [olderThanMs]. */
         fun pruneOldExports(
             projectId: Long,

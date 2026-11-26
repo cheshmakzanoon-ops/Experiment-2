@@ -63,6 +63,8 @@
         android:enableOnBackInvokedCallback="true"
         tools:targetApi="36">
 
+        <!-- One editable canvas repository is shared in this process. External opens return to
+             this activity and queue their files until the artist returns to the gallery. -->
         <activity
             android:name=".presentation.ui.MainActivity"
             android:exported="true"
@@ -70,7 +72,8 @@
             android:windowSoftInputMode="adjustResize"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|smallestScreenSize"
             android:resizeableActivity="true"
-            android:launchMode="singleTop">
+            android:launchMode="singleTask"
+            android:documentLaunchMode="never">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
