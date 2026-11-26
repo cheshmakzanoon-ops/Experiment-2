@@ -46,6 +46,7 @@ data class PressureMapping(
         for (index in 1 until points.size) {
             val end = points[index]
             if (pressure <= end.input) {
+                if (pressure == end.input) return end.output
                 val start = points[index - 1]
                 val fraction = (pressure - start.input) / (end.input - start.input)
                 return start.output + fraction * (end.output - start.output)

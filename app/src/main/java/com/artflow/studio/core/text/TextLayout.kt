@@ -15,8 +15,6 @@ import kotlin.math.sqrt
  * rasterisation happens in `data/renderer/TextLayerRenderer` on the device.
  */
 object TextLayout {
-    private val GRAPHEME = Regex("\\X")
-
     @kotlinx.serialization.Serializable
     enum class Alignment(
         val displayName: String,
@@ -41,7 +39,7 @@ object TextLayout {
         val strikeThrough: Boolean = false,
         /** Extra spacing between letters, in pixels. */
         val letterSpacing: Float = 0f,
-        /** Extra spacing between words, in pixels. */
+        /** Extra advance after each standalone space, in pixels; tabs and marked spaces stay intact. */
         val wordSpacing: Float = 0f,
         /** Line height as a multiple of the font size. */
         val lineHeight: Float = 1.2f,
@@ -99,7 +97,8 @@ object TextLayout {
     /**
      * Lays out [text] inside a box anchored at ([originX], [originY]).
      *
-     * @param measureWidth measures the rendered width of a string in pixels (the platform font).
+     * @param measureWidth measures the platform font, including letter spacing but excluding
+     * [TextStyle.wordSpacing], which the layout applies to the same runs the renderer draws.
      * @param measureAscent distance from the baseline to the top of the tallest glyph.
      * @param measureDescent distance from the baseline to the bottom of the lowest glyph.
      */
@@ -128,11 +127,12 @@ object TextLayout {
         val ascent = measureAscent()
         val descent = measureDescent()
         val lineHeight = style.lineHeightPx
-        val widest = wrapped.maxOfOrNull { measureWidth(it) } ?: 0f
+        val measureSpaced: (String) -> Float = { wordSpacedWidth(it, style.wordSpacing, measureWidth) }
+        val widest = wrapped.maxOfOrNull(measureSpaced) ?: 0f
 
         val lines =
             wrapped.mapIndexed { index, lineText ->
-                val lineWidth = measureWidth(lineText)
+                val lineWidth = measureSpaced(lineText)
                 val baselineY = originY + ascent + index * lineHeight
                 val startX =
                     when (style.alignment) {
@@ -140,11 +140,17 @@ object TextLayout {
                         Alignment.CENTER -> originX + ((maxWidth ?: widest) - lineWidth) / 2f
                         Alignment.RIGHT -> originX + (maxWidth ?: widest) - lineWidth
                     }
-                val runs =
+                val positioned =
                     if (style.alignment == Alignment.JUSTIFY && index < wrapped.size - 1) {
-                        justify(lineText, measureWidth, maxWidth ?: lineWidth, startX)
+                        justify(lineText, measureSpaced, maxWidth ?: lineWidth, startX)
                     } else {
                         listOf(PositionedText(lineText, startX, baselineY, lineWidth))
+                    }
+                val runs =
+                    positioned.flatMap { run ->
+                        wordSpacedRuns(run.text, style.wordSpacing, measureWidth).map {
+                            it.copy(x = run.x + it.x, y = baselineY)
+                        }
                     }
                 LaidOutLine(
                     text = lineText,
@@ -163,6 +169,7 @@ object TextLayout {
      * Greedy word wrap preserving authored spaces and tabs within each line. Separator whitespace
      * is consumed only at a soft line break. Overlong words break between grapheme clusters;
      * a single cluster wider than the box stays intact rather than becoming damaged text.
+     * [measureWidth] supplies font advances; [TextStyle.wordSpacing] is added here.
      */
     fun wrap(
         paragraph: String,
@@ -174,6 +181,7 @@ object TextLayout {
         if (maxWidth <= 0f) return listOf(paragraph)
 
         val segments = wordSegments(paragraph)
+        val measureSpaced: (String) -> Float = { wordSpacedWidth(it, style.wordSpacing, measureWidth) }
 
         val lines = mutableListOf<String>()
         var current = StringBuilder()
@@ -188,7 +196,7 @@ object TextLayout {
         segments.forEach { segment ->
             val segmentText = paragraph.substring(segment.start, segment.endExclusive)
             val candidate = "$current$segmentText"
-            if (measureWidth(candidate) <= maxWidth) {
+            if (measureSpaced(candidate) <= maxWidth) {
                 current = StringBuilder(candidate)
                 return@forEach
             }
@@ -198,7 +206,7 @@ object TextLayout {
             // A space with a combining mark is part of its word, not removable whitespace.
             val word = if (current.isNotEmpty()) paragraph.substring(segment.wordStart, segment.endExclusive) else segmentText
             flush()
-            if (measureWidth(word) <= maxWidth) {
+            if (measureSpaced(word) <= maxWidth) {
                 current = StringBuilder(word)
                 return@forEach
             }
@@ -206,7 +214,7 @@ object TextLayout {
             var fragment = StringBuilder()
             glyphs(word).forEach { glyph ->
                 val attempt = StringBuilder(fragment).append(glyph).toString()
-                if (measureWidth(attempt) > maxWidth && fragment.isNotEmpty()) {
+                if (measureSpaced(attempt) > maxWidth && fragment.isNotEmpty()) {
                     lines += fragment.toString()
                     fragment = StringBuilder(glyph)
                 } else {
@@ -230,15 +238,15 @@ object TextLayout {
         val segments = mutableListOf<WordSegment>()
         var segmentStart = 0
         var wordStart = -1
-        GRAPHEME.findAll(text).forEach { glyph ->
-            if (glyph.value == " " || glyph.value == "\t") {
+        GraphemeClusters.ranges(text).forEach { glyph ->
+            if (glyph.first == glyph.last && (text[glyph.first] == ' ' || text[glyph.first] == '\t')) {
                 if (wordStart >= 0) {
-                    segments += WordSegment(segmentStart, wordStart, glyph.range.first)
-                    segmentStart = glyph.range.first
+                    segments += WordSegment(segmentStart, wordStart, glyph.first)
+                    segmentStart = glyph.first
                     wordStart = -1
                 }
             } else if (wordStart < 0) {
-                wordStart = glyph.range.first
+                wordStart = glyph.first
             }
         }
         if (segmentStart < text.length) {
@@ -247,7 +255,46 @@ object TextLayout {
         return segments
     }
 
-    /** Distributes leftover width across the gaps of an already-wrapped line. */
+    /**
+     * Runs whose advances include extra word spacing. The platform measures and draws each run
+     * unchanged; an extra advance is inserted only after a whole, standalone space cluster.
+     * Keeping zero-spacing text in one run preserves its original platform shaping.
+     */
+    internal fun wordSpacedRuns(
+        text: String,
+        wordSpacing: Float,
+        measureWidth: (String) -> Float,
+    ): List<PositionedText> {
+        if (wordSpacing == 0f) return listOf(PositionedText(text, 0f, 0f, measureWidth(text)))
+
+        val runs = mutableListOf<PositionedText>()
+        var start = 0
+        var cursor = 0f
+        GraphemeClusters.ranges(text).forEach { glyph ->
+            if (glyph.first == glyph.last && text[glyph.first] == ' ') {
+                val end = glyph.last + 1
+                val runText = text.substring(start, end)
+                val advance = measureWidth(runText) + wordSpacing
+                runs += PositionedText(runText, cursor, 0f, advance)
+                cursor += advance
+                start = end
+            }
+        }
+        if (start < text.length || runs.isEmpty()) {
+            val runText = text.substring(start)
+            runs += PositionedText(runText, cursor, 0f, measureWidth(runText))
+        }
+        return runs
+    }
+
+    /** The exact total advance of [wordSpacedRuns], including authored leading and trailing spaces. */
+    internal fun wordSpacedWidth(
+        text: String,
+        wordSpacing: Float,
+        measureWidth: (String) -> Float,
+    ): Float = wordSpacedRuns(text, wordSpacing, measureWidth).let { it.last().x + it.last().width }
+
+    /** Distributes leftover width across gaps; [measureWidth] includes any configured word spacing. */
     internal fun justify(
         lineText: String,
         measureWidth: (String) -> Float,
@@ -283,7 +330,7 @@ object TextLayout {
     ): List<CurvedGlyph> {
         if (text.isEmpty() || radius == 0f) return emptyList()
         val arcRadius = abs(radius)
-        val totalWidth = measureWidth(text)
+        val totalWidth = wordSpacedWidth(text, style.wordSpacing, measureWidth)
         // A glyph at angle theta sits at (cx + r sin(theta), cy + r cos(theta)) with the sign of
         // `radius` deciding whether the arc curves up (arch) or down (smile).
         val totalAngle = totalWidth / arcRadius
@@ -291,7 +338,7 @@ object TextLayout {
         val direction = if (radius < 0f) -1f else 1f
 
         return glyphs(text).map { glyph ->
-            val glyphWidth = measureWidth(glyph)
+            val glyphWidth = measureWidth(glyph) + if (glyph == " ") style.wordSpacing else 0f
             val halfAngle = (glyphWidth / 2f) / arcRadius
             angle += halfAngle
             val x = centerX + direction * arcRadius * sin(angle)
@@ -362,7 +409,7 @@ object TextLayout {
         text: String,
         style: TextStyle,
         measureWidth: (String) -> Float,
-    ): Boolean = style.maxWidth?.let { measureWidth(text) > it } ?: false
+    ): Boolean = style.maxWidth?.let { wordSpacedWidth(text, style.wordSpacing, measureWidth) > it } ?: false
 
     /** The text as drawn: in capitals when [TextStyle.allCaps] is on. */
     fun displayText(
@@ -370,8 +417,8 @@ object TextLayout {
         style: TextStyle,
     ): String = if (style.allCaps) text.uppercase() else text
 
-    /** One extended grapheme per string, so vertical text keeps accents and joined emoji together. */
-    fun glyphs(text: String): List<String> = GRAPHEME.findAll(text).map { it.value }.toList()
+    /** Unicode 17.0.0 extended graphemes, identical on Android and the JVM regardless of their ICU versions. */
+    fun glyphs(text: String): List<String> = GraphemeClusters.ranges(text).map { text.substring(it) }.toList()
 
     /** Word count, shown in the text panel. */
     fun wordCount(text: String): Int = text.trim().split(Regex("\\s+")).count { it.isNotEmpty() }

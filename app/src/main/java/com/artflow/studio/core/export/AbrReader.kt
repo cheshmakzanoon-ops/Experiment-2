@@ -188,6 +188,7 @@ object AbrReader {
                     }
                 }
             }
+            require(d == rowEnd) { DAMAGED }
             at = end
         }
     }

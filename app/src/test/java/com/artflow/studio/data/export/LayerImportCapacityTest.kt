@@ -33,6 +33,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
+import java.io.ByteArrayOutputStream
+import java.util.zip.DeflaterOutputStream
 import java.util.zip.ZipInputStream
 
 /** Imports use the editor's complete persisted-plane budget, including existing frames and independent masks. */
@@ -208,6 +210,84 @@ class LayerImportCapacityTest {
             assertEquals(history, repository.historyMark)
         }
 
+    @Test
+    fun aDamagedCompositeCannotPublishThroughTheMemoryFallback() =
+        runTest {
+            openEditedCanvas()
+            assertDamagedCompositeRejected(procreate(withMasks = false, damagedComposite = true), rasterBudgetBytes = 0)
+        }
+
+    @Test
+    fun aDamagedCompositeCannotPublishWhenLayerMasksExceedRemainingCapacity() =
+        runTest {
+            openEditedCanvas()
+            assertDamagedCompositeRejected(procreate(withMasks = true, damagedComposite = true))
+        }
+
+    @Test
+    fun aDamagedCompositeCannotPublishWhenGroupSlotsForceTheFallback() =
+        runTest {
+            openEditedCanvas()
+            assertDamagedCompositeRejected(procreate(withMasks = false, damagedComposite = true), checked = withLayerSlotLimit(2))
+        }
+
+    @Test
+    fun aDamagedCompositeWithoutReadableLayersPreservesTheDestinationAndHistory() =
+        runTest {
+            openEditedCanvas()
+            assertDamagedCompositeRejected(procreate(withMasks = false, withLayers = false, damagedComposite = true))
+        }
+
+    @Test
+    fun aDamagedCompositeCannotReplaceTheBlankArtworkOrChangeItsProfileAndBackground() =
+        runTest {
+            openCanvas()
+            assertDamagedCompositeRejected(
+                procreate(withMasks = false, withLayers = false, damagedComposite = true),
+                preserveDocumentProfile = true,
+            )
+        }
+
+    private suspend fun openEditedCanvas() {
+        openCanvas()
+        assertTrue(repository.setLayerPixels(repository.getActiveLayerId(), PixelBuffer.filled(SIZE, SIZE, PAINT), "Existing paint"))
+        repository.addLayer("Keep this redo")
+        assertTrue(repository.undo())
+        assertTrue(repository.undoDepth > 0)
+        assertTrue(repository.redoDepth > 0)
+    }
+
+    private suspend fun assertDamagedCompositeRejected(
+        document: ProcreateReader.Document,
+        checked: CanvasRepository = repository,
+        preserveDocumentProfile: Boolean = false,
+        rasterBudgetBytes: Long = Long.MAX_VALUE,
+    ) {
+        val before = state()
+        assertEquals(0, document.damagedTileCount)
+        val failure =
+            expectFailure {
+                LayerImports.importProcreate(checked, document, preserveDocumentProfile, rasterBudgetBytes)
+            }
+        assertEquals(1, document.damagedTileCount)
+        assertTrue(failure.message.orEmpty().contains("damaged tile(s)"))
+        assertTrue(failure.message.orEmpty().contains("Re-save it in Procreate"))
+        assertEquals(before, state())
+    }
+
+    private suspend fun state(): List<Any?> =
+        listOf(
+            repository.frames(),
+            repository.getAllLayers().associate { it.id to repository.layerPixels(it.id)?.pixels?.toList() },
+            repository.getColorProfile(),
+            repository.getBackgroundColor(),
+            repository.contentRevision,
+            repository.undoDepth,
+            repository.redoDepth,
+            repository.historyMark,
+            repository.getActiveLayerId(),
+        )
+
     private fun withLayerSlotLimit(maxAddedLayers: Int): CanvasRepository =
         object : CanvasRepository by repository {
             override suspend fun importLayers(prepare: suspend (LayerImportDestination) -> PreparedLayerImport): List<Layer> =
@@ -253,6 +333,7 @@ class LayerImportCapacityTest {
         withMasks: Boolean,
         includeComposite: Boolean = true,
         withLayers: Boolean = true,
+        damagedComposite: Boolean = false,
     ): ProcreateReader.Document {
         val pixels = PixelBuffer.filled(SIZE, SIZE, PAINT)
         val mask = if (withMasks) SelectionMask(SIZE, SIZE, ByteArray(SIZE * SIZE) { 255.toByte() }) else null
@@ -280,11 +361,12 @@ class LayerImportCapacityTest {
         ZipInputStream(bytes.inputStream()).use { zip ->
             generateSequence { zip.nextEntry }.forEach { files[it.name] = zip.readBytes() }
         }
-        if (!includeComposite) {
+        if (!includeComposite || damagedComposite) {
             val archive = KeyedArchive(BinaryPlist.read(files.getValue("Document.archive")))
             val root = requireNotNull(archive.root)
             val uuid = requireNotNull(archive.string(archive.map(root["composite"])?.get("UUID")))
             files.keys.removeAll { it.startsWith("$uuid/") }
+            if (damagedComposite) files["$uuid/0~0.tile"] = damagedTile()
         }
         return ProcreateReader.open(
             object : ProcreateReader.Files {
@@ -293,6 +375,15 @@ class LayerImportCapacityTest {
                 override fun read(name: String): ByteArray? = files[name]
             },
         ) { null }
+    }
+
+    /** Complete RGBA pixel data with the zlib checksum truncated; the reader must report actual tile damage. */
+    private fun damagedTile(): ByteArray {
+        val raw = ByteArray(SIZE * SIZE * 4) { if (it % 4 == 3) 255.toByte() else 68 }
+        val output = ByteArrayOutputStream()
+        DeflaterOutputStream(output).use { it.write(raw) }
+        val packed = output.toByteArray()
+        return packed.copyOf(packed.size - 1)
     }
 
     private companion object {

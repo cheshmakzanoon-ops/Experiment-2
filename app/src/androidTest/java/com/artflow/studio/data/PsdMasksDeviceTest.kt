@@ -117,20 +117,22 @@ class PsdMasksDeviceTest {
                 val decoded = requireNotNull(PsdCodec.read(File(result.filePath).readBytes()))
                 assertEquals(2, decoded.width)
                 assertEquals(1, decoded.height)
+                assertEquals(2, decoded.layers.size)
+                val editable = decoded.layers.single { it.name == "Ink" }
+                assertFalse(editable.isVisible)
                 assertArrayEquals(
                     intArrayOf(0x80FFFFFF.toInt(), 0x80FFFFFF.toInt()),
-                    decoded.layers
-                        .single()
-                        .pixels.pixels,
+                    editable.pixels.pixels,
                 )
                 assertArrayEquals(
                     byteArrayOf(128.toByte(), 128.toByte()),
-                    decoded.layers
-                        .single()
-                        .mask!!
-                        .coverage,
+                    requireNotNull(editable.mask).coverage,
                 )
-                assertEquals(64, decoded.composite!!.pixels[0] ushr 24)
+                val visible = decoded.layers.single { it.isVisible }
+                assertEquals("Artwork (feathered selection)", visible.name)
+                assertArrayEquals(intArrayOf(0x40FFFFFF, 0x40FFFFFF), visible.pixels.pixels)
+                assertArrayEquals(visible.pixels.pixels, requireNotNull(decoded.composite).pixels)
+                assertTrue(requireNotNull(result.warning).contains("Feathered selection coverage"))
             } finally {
                 source.dispose()
             }

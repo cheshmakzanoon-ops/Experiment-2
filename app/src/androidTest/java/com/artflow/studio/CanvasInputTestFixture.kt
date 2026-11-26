@@ -224,6 +224,7 @@ abstract class CanvasInputTestFixture {
         val pressure: Float = 1f,
         val tilt: Float = 0f,
         val orientation: Float = 0f,
+        val size: Float = 0.1f,
     )
 
     protected fun send(
@@ -233,6 +234,7 @@ abstract class CanvasInputTestFixture {
         changed: Int = 0,
         flags: Int = 0,
         viewCoordinates: Boolean = false,
+        hover: Boolean = false,
         trace: ((MotionEvent) -> Unit)? = null,
     ) {
         eventTime += 10
@@ -253,7 +255,7 @@ abstract class CanvasInputTestFixture {
                         x = point.first
                         y = point.second
                         pressure = touch.pressure
-                        size = 0.1f
+                        size = touch.size
                         setAxisValue(MotionEvent.AXIS_TILT, touch.tilt)
                         setAxisValue(MotionEvent.AXIS_ORIENTATION, touch.orientation)
                     }
@@ -284,7 +286,7 @@ abstract class CanvasInputTestFixture {
             )
         try {
             trace?.invoke(event)
-            assertTrue(canvas.onTouchEvent(event))
+            assertTrue(if (hover) canvas.onHoverEvent(event) else canvas.onTouchEvent(event))
         } finally {
             event.recycle()
         }

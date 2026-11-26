@@ -95,6 +95,10 @@ class StrokeRasterizer(
         val reach = StrokeReach.bounds(points, params, target.width, target.height)
         if (reach.isEmpty) return
         val buffer = scratchPool.obtain(target.width, target.height, clear = false)
+        val maskedPhysical =
+            physicalPlane != null &&
+                (params.waterAmount > 0f || params.impastoThickness > 0f) &&
+                (params.blendTexture || params.dual != null)
         var dual: DualMarks? = null
         try {
             clear(buffer, reach)
@@ -109,13 +113,32 @@ class StrokeRasterizer(
                 canvas = target,
                 physicalPlane = physicalPlane,
                 physicalCoverage = if (physicalPlane == null) null else physicalCoverage(target, buffer, strokeAlpha, mask, alphaLock),
+                rasterize = !maskedPhysical,
             )
             dual = params.dual?.let { drawDual(target, stroke, it, reach) }
+            val how = Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points), grainPressure(params, points), random)
+            if (maskedPhysical) {
+                // Grain jitter uses the post-dab random state. The first traversal resolves that
+                // state without painting or retaining dabs; now both material and color can use
+                // the same texture and dual marks. Only this masked physical path walks twice.
+                drawStrokeInto(
+                    buffer,
+                    stroke,
+                    params,
+                    points,
+                    alphaLock = false,
+                    mask = null,
+                    random = Random(stroke.id),
+                    canvas = target,
+                    physicalPlane = physicalPlane,
+                    physicalCoverage = physicalCoverage(target, buffer, strokeAlpha, mask, alphaLock, how, dual),
+                )
+            }
             depositCoverage(
                 target,
                 buffer,
                 reach,
-                Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points), grainPressure(params, points), random),
+                how,
                 dual,
             )
             lastDabCount = dabCount.get()
@@ -125,19 +148,34 @@ class StrokeRasterizer(
         }
     }
 
-    /** Physical paint must obey the same selection, alpha lock and opacity as its visible marks. */
+    /** Physical paint obeys selection, alpha lock and opacity, plus the resolved grain and dual marks when present. */
     private fun physicalCoverage(
         canvas: PixelBuffer,
         marks: PixelBuffer,
         opacity: Float,
         selection: SelectionMask?,
         alphaLock: Boolean,
+        how: Deposit? = null,
+        dual: DualMarks? = null,
     ): (Int, Int) -> Float =
-        { x, y ->
-            val mark = (marks.getSafe(x, y) ushr 24) / 255f
+        coverage@{ x, y ->
+            if (x !in 0 until marks.width || y !in 0 until marks.height) return@coverage 0f
+            val canvasX = originX + x
+            val canvasY = originY + y
+            val index = y * marks.width + x
+            val source = dual?.combine(marks.pixels[index], index, canvasX, canvasY) ?: marks.pixels[index]
+            val mark = (source ushr 24) / 255f
             val selected = selection?.let { it.coverageAt(x, y) / 255f } ?: 1f
             val existing = if (alphaLock) (canvas.getSafe(x, y) ushr 24) / 255f else 1f
-            mark * opacity * selected * existing
+            val textureFactor =
+                how?.let {
+                    val grain = it.texture?.coverage(canvasX - it.grain.first, canvasY - it.grain.second) ?: 1f
+                    grainFactor(source, grain, it.params) * wetEdgeFactor(source, it.wetEdges)
+                } ?: 1f
+            // Keep continuous material amounts, but do not allocate material for a visible mark
+            // that the grain/dual mask reduces below the final color buffer's alpha precision.
+            if (how != null && (Channels.scaleAlpha(source, opacity * selected * textureFactor) ushr 24) == 0) return@coverage 0f
+            mark * opacity * selected * existing * textureFactor
         }
 
     /** How a stroke's coverage becomes paint on its layer. */
@@ -147,8 +185,8 @@ class StrokeRasterizer(
         val mask: SelectionMask?,
         val alphaLock: Boolean,
         val grain: Pair<Int, Int>,
-        strokePressure: Float = 1f,
-        grainRandom: Random? = null,
+        strokePressure: Float,
+        grainRandom: Random,
     ) {
         val texture =
             if (BrushTexture.hasPressureCurves(params)) {
@@ -316,13 +354,24 @@ class StrokeRasterizer(
         val kept = if (end.isEmpty) null else coverage.crop(end)
         val carried = live.walk.carried
         try {
-            stampEnd(DabContext(coverage, stroke, params, 0f, false, null, live.random.copy(), tip, canvas), points.takeLast(2), live.walk)
+            // Grain jitter follows the closing dab in replay, without consuming the next live dab's random state.
+            val frameRandom = live.random.copy()
+            stampEnd(DabContext(coverage, stroke, params, 0f, false, null, frameRandom, tip, canvas), points.takeLast(2), live.walk)
             val reach = IntBounds(left - originX, top - originY, right - originX, bottom - originY)
             depositCoverage(
                 target = target,
                 buffer = coverage,
                 reach = reach,
-                how = Deposit(params, strokeAlpha, mask, alphaLock, grainOrigin(params, points, canvasCoordinates = true)),
+                how =
+                    Deposit(
+                        params,
+                        strokeAlpha,
+                        mask,
+                        alphaLock,
+                        grainOrigin(params, points, canvasCoordinates = true),
+                        grainPressure(params, points),
+                        frameRandom,
+                    ),
                 srcOffsetX = originX,
                 srcOffsetY = originY,
             )
@@ -404,7 +453,16 @@ class StrokeRasterizer(
             val eraseShape = stroke.copy(color = 0xFFFFFFFF.toInt())
             drawStrokeInto(buffer, eraseShape, params, points, alphaLock = false, mask = null, random = random)
             dual = params.dual?.let { drawDual(target, eraseShape, it, reach) }
-            val how = Deposit(params, strokeAlpha, mask, alphaLock = false, grain = grainOrigin(params, points))
+            val how =
+                Deposit(
+                    params,
+                    strokeAlpha,
+                    mask,
+                    alphaLock = false,
+                    grain = grainOrigin(params, points),
+                    strokePressure = grainPressure(params, points),
+                    grainRandom = random,
+                )
             applyEraseCoverage(target, buffer, reach, how, dual)
             lastDabCount = dabCount.get()
         } finally {
@@ -466,6 +524,7 @@ class StrokeRasterizer(
         canvas: PixelBuffer? = null,
         physicalPlane: PhysicalPaintPlane? = null,
         physicalCoverage: ((Int, Int) -> Float)? = null,
+        rasterize: Boolean = true,
     ) {
         if (canUseCapsule(params, points) && physicalPlane == null) {
             drawSegment(target, stroke, params, points.first(), points.last(), alphaLock, mask, random)
@@ -489,6 +548,7 @@ class StrokeRasterizer(
                 canvas,
                 physicalPlane,
                 physicalCoverage,
+                rasterize,
             )
         val walk = DabWalk()
         walkSegments(context, points, 1, walk)
@@ -640,6 +700,8 @@ class StrokeRasterizer(
         val physicalPlane: PhysicalPaintPlane? = null,
         /** Visible stamp coverage; kept separate from scratch-buffer stamping restrictions. */
         val physicalCoverage: ((Int, Int) -> Float)? = null,
+        /** False advances only dab geometry and random state before resolving physical grain. */
+        val rasterize: Boolean = true,
     )
 
     private fun drawDabAt(
@@ -734,6 +796,8 @@ class StrokeRasterizer(
             val offsetScale = if (dabs == 1) 0f else (index / (dabs - 1f) - 0.5f) * params.size * 0.5f
             val offsetX = jitterX + offsetScale * perpX + longJitter * dirX
             val offsetY = jitterY + offsetScale * perpY + longJitter * dirY
+            val tip = tipFor(context.tip, params, pressure, azimuth, random)
+            if (!context.rasterize) return@repeat
 
             Stamping.dab(
                 target = target,
@@ -751,7 +815,7 @@ class StrokeRasterizer(
                 mode = if (rendering.blending) Stamping.Mode.SOURCE_OVER else Stamping.Mode.MAX_COVERAGE,
                 alphaLock = alphaLock,
                 mask = mask,
-                tip = tipFor(context.tip, params, pressure, azimuth, random),
+                tip = tip,
             )
             context.physicalPlane?.let { plane ->
                 if (params.waterAmount > 0f) {
@@ -1084,12 +1148,13 @@ class StrokeRasterizer(
         try {
             // [reach] already covers the second brush; marks are read only inside it.
             clear(marks, reach)
-            drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = Random(stroke.id + DUAL_SEED))
+            val random = Random(stroke.id + DUAL_SEED)
+            drawStrokeInto(marks, stroke, params, stroke.points, alphaLock = false, mask = null, random = random)
             val result =
                 DualMarks(
                     dual.mode,
                     marks,
-                    BrushTexture.from(params),
+                    BrushTexture.from(params, grainPressure(params, stroke.points), random),
                     dual.params.opacity,
                     grainOrigin(params, stroke.points),
                     params.grainBlend,

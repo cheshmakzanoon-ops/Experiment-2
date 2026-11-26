@@ -75,7 +75,9 @@ class PointerGestureRouter(
     /** Navigation begun by a palm pair: a third contact is ignored, so it cannot scrub, redo or count as a tap. */
     private var palmPair = false
     private var maxPointers = 0
+    private var activePointerCount = 0
     private var tapEligible = false
+    private var tapConsumed = false
     private val lastPositions = mutableMapOf<Int, Pointer>()
     private val travel = mutableMapOf<Int, Float>()
     private val firstPositions = mutableMapOf<Int, Pointer>()
@@ -90,7 +92,9 @@ class PointerGestureRouter(
         palmPair = false
         mode = Mode.SUPPRESSED
         owner = -1
+        activePointerCount = 0
         tapEligible = false
+        tapConsumed = false
         lastPositions.clear()
         travel.clear()
         firstPositions.clear()
@@ -102,7 +106,7 @@ class PointerGestureRouter(
 
     /** Two or three fingers resting still since the touch began, else 0: Procreate's rapid undo and redo. */
     fun heldFingers(): Int {
-        if (Gesture.HOLD_RAPID_UNDO_REDO !in enabled) return 0
+        if (Gesture.HOLD_RAPID_UNDO_REDO !in enabled || activePointerCount != maxPointers) return 0
         return if (mode == Mode.NAVIGATION && tapEligible && maxPointers in 2..3) maxPointers else 0
     }
 
@@ -115,7 +119,7 @@ class PointerGestureRouter(
 
     /** A hold that already undid or redid must not also count as a tap when the fingers lift. */
     fun consumeTap() {
-        tapEligible = false
+        tapConsumed = true
     }
 
     /** Include batched movement, including an excursion which returns to its initial position. */
@@ -151,6 +155,7 @@ class PointerGestureRouter(
             suppress()
             startedAt = timeMillis
             maxPointers = 0
+            activePointerCount = pointers.size
             tapEligible = true
             observe(pointers)
             if (palm) {
@@ -158,6 +163,25 @@ class PointerGestureRouter(
                 return Route(if (cancelPrevious) Action.CANCEL else Action.IGNORE)
             }
             return start(pointers, changedIndex, cancelPrevious)
+        }
+        activePointerCount =
+            when (event) {
+                Event.POINTER_UP -> pointers.size - 1
+                Event.UP -> 0
+                else -> pointers.size
+            }
+        if (event == Event.POINTER_DOWN) {
+            // Android can reuse the ID of a lifted contact within the same touch stream.
+            val id = pointers[changedIndex].id
+            lastPositions.remove(id)
+            travel.remove(id)
+            firstPositions.remove(id)
+        }
+        if (event == Event.POINTER_DOWN || event == Event.POINTER_UP) {
+            // Contact changes can move the centroid without any finger dragging.
+            scrubDirection = 0
+            scrubReversals = 0
+            scrubTracking = false
         }
         observe(pointers)
         if (cancelled) tapEligible = false
@@ -257,7 +281,7 @@ class PointerGestureRouter(
                 mode = Mode.IDLE
                 palmPair = false
                 val elapsed = timeMillis - startedAt
-                val tapped = tapEligible && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4
+                val tapped = tapEligible && !tapConsumed && elapsed in 0 until tapTimeoutMillis && maxPointers in 2..4
                 val count = if (tapped && tapEnabled(maxPointers)) maxPointers else 0
                 Route(Action.FINISH_NAVIGATION, historyPointers = count)
             }

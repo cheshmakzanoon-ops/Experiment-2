@@ -55,6 +55,16 @@ class OnionSkinMemoryTest {
         assertNull(OnionSkinMemory.plan(1024, 1024, listOf(complex), 32 * MIB, 0))
     }
 
+    @Test
+    fun thinCanvasShadowsReserveTheirHaloBeforeAnyGhostIsRendered() {
+        val sharp = plain.single().copy(effects = LayerEffects(shadow = LayerEffects.Shadow(blur = 0f)))
+        val soft = sharp.copy(effects = LayerEffects(shadow = LayerEffects.Shadow(blur = LayerEffects.MAX_SHADOW_BLUR)))
+        assertNotNull(OnionSkinMemory.plan(8192, 1, listOf(listOf(sharp)), 8 * MIB, 0))
+        assertNull(OnionSkinMemory.plan(8192, 1, listOf(listOf(soft)), 8 * MIB, 0))
+        assertNotNull(OnionSkinMemory.plan(8192, 1, listOf(listOf(soft)), 12 * MIB, 0))
+        assertNull(OnionSkinMemory.plan(8192, 1, listOf(listOf(soft, soft.copy(id = 2))), 12 * MIB, 0))
+    }
+
     private companion object {
         const val MIB = 1024L * 1024
     }

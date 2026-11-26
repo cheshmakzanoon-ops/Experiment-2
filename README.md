@@ -92,7 +92,7 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
 | Layers | Raster layers, blending, nested groups, clipping, independent masks, adjustment/filter layers, selections, transforms, multi-selection, persistent links, and undo/redo. Link selected layers in the Layers panel; use Whole-layer transform in Tool options for linked masks. |
 | Storage | Version-7 documents, checksum-first legacy migration, atomic manifests, immutable raster generations, autosave/recovery, independent duplication, and gallery management. |
 | Portable artworks | Native packages contain layers, frames, masks, document settings, custom grains, and font dependency metadata. Optional font content fingerprints identify same-name substitutions; imported saved pixels remain intact when a font is missing, different or unverified. Third-party font binaries are not automatically redistributed. |
-| Text | Editable text, platform/imported fonts, wrapping, alignment, letter spacing, and styling. Pixel transforms, crop, and canvas resize can rasterize text; full affine vector typography remains unfinished. |
+| Text | Editable text, platform/imported fonts, wrapping, alignment, letter/word spacing, styling, and consistent Unicode 17 grapheme boundaries across supported Android versions. Font coverage and shaping remain platform-dependent. Pixel transforms, crop, and canvas resize can rasterize text; full affine vector typography remains unfinished. |
 | Color | sRGB and Display P3 documents, conversion/tagging, palettes, harmonies, and an approximate fixed-ink CMYK preview. This is not printer-profile-managed CMYK editing. |
 | Animation | Frames, duration/role controls, onion skins, playback, GIF/APNG/MP4 and frame-sequence export, and timelapse recording. Device encoder and memory limits apply. |
 | 3D | Model import, UV-based painting, selected color/metallic/roughness channels, and a GLES model shader. Simultaneous three-channel stamping is not integrated. |
@@ -132,9 +132,13 @@ backup, codec, and CI hardening from [PR #40](https://github.com/cheshmakzanoon-
   fallback does not remove CPU memory limits or qualify large canvases for interactive performance.
 - **Undo and saved selections:** undo and redo share a limit of 30 retained states and a separate
   memory allowance. The number of available steps depends on artwork size and device memory;
-  some large artworks can have no undo available. Adding a saved selection must fit both memory
-  and document-storage limits. Rejection leaves existing slots unchanged. Readable older documents
-  keep their compressed saved selections, subject to the device's memory limit, and those slots
+  some large artworks can have no undo available.
+  Each changed pointer drag of layer opacity or mask density/feather uses one undo step, including
+  the canvas opacity overlay. Cancellation keeps the last accepted value and seals that step;
+  separate fast drags stay separate, while ordinary opacity keyboard repeats still coalesce.
+  Adding a saved selection must fit both memory and document-storage limits. Rejection leaves
+  existing slots unchanged. Readable older documents keep their compressed saved selections,
+  subject to the device's memory limit, and those slots
   can still be removed. See the [selection memory boundaries](docs/verification/selection-memory.md)
   for the exact allowances and regression coverage.
 - **Photo insertion:** image picker and camera decoding can downsample to fit the requested size

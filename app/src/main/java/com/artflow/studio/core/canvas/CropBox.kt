@@ -2,6 +2,7 @@ package com.artflow.studio.core.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import kotlin.math.abs
+import kotlin.math.floor
 import kotlin.math.min
 import kotlin.math.roundToInt
 
@@ -17,8 +18,23 @@ object CropBox {
         val width: Float get() = right - left
         val height: Float get() = bottom - top
 
-        /** Whole pixels covered by the box, as inclusive bounds. */
-        fun toBounds(): IntBounds = IntBounds(left.roundToInt(), top.roundToInt(), right.roundToInt() - 1, bottom.roundToInt() - 1)
+        /** Rounded inclusive bounds, keeping a positive subpixel span on its centre pixel. */
+        fun toBounds(): IntBounds {
+            val x = pixelRange(left, right)
+            val y = pixelRange(top, bottom)
+            return IntBounds(x.first, y.first, x.last, y.last)
+        }
+
+        private fun pixelRange(
+            start: Float,
+            end: Float,
+        ): IntRange {
+            val first = start.roundToInt()
+            val last = end.roundToInt() - 1
+            if (last >= first || end <= start) return first..last
+            val pixel = floor((start.toDouble() + end) / 2.0).toInt()
+            return pixel..pixel
+        }
 
         companion object {
             fun of(
@@ -64,12 +80,17 @@ object CropBox {
     ): Grip? {
         val nearX = y in box.top - tolerance..box.bottom + tolerance
         val nearY = x in box.left - tolerance..box.right + tolerance
+        val leftDistance = abs(x - box.left)
+        val rightDistance = abs(x - box.right)
+        val topDistance = abs(y - box.top)
+        val bottomDistance = abs(y - box.bottom)
         val grip =
             Grip(
-                left = nearX && abs(x - box.left) <= tolerance,
-                top = nearY && abs(y - box.top) <= tolerance,
-                right = nearX && abs(x - box.right) <= tolerance,
-                bottom = nearY && abs(y - box.bottom) <= tolerance,
+                // On small or zoomed-out boxes, opposite handles overlap: grab the nearer one only.
+                left = nearX && leftDistance <= tolerance && leftDistance <= rightDistance,
+                top = nearY && topDistance <= tolerance && topDistance <= bottomDistance,
+                right = nearX && rightDistance <= tolerance && rightDistance < leftDistance,
+                bottom = nearY && bottomDistance <= tolerance && bottomDistance < topDistance,
             )
         val inside = x in box.left..box.right && y in box.top..box.bottom
         return if (!grip.moves || inside) grip else null
@@ -111,10 +132,13 @@ object CropBox {
             val y = dy.coerceIn(-start.top, h - start.bottom)
             return Box(start.left + x, start.top + y, start.right + x, start.bottom + y)
         }
-        val left = if (grip.left) (start.left + dx).coerceIn(0f, start.right - MIN_SIZE) else start.left
-        val top = if (grip.top) (start.top + dy).coerceIn(0f, start.bottom - MIN_SIZE) else start.top
-        val right = if (grip.right) (start.right + dx).coerceIn(left + MIN_SIZE, w) else start.right
-        val bottom = if (grip.bottom) (start.bottom + dy).coerceIn(top + MIN_SIZE, h) else start.bottom
+        // Existing crops and supported canvases can be smaller than the usual handle spacing.
+        val minWidth = min(MIN_SIZE, start.width)
+        val minHeight = min(MIN_SIZE, start.height)
+        val left = if (grip.left) (start.left + dx).coerceIn(0f, start.right - minWidth) else start.left
+        val top = if (grip.top) (start.top + dy).coerceIn(0f, start.bottom - minHeight) else start.top
+        val right = if (grip.right) (start.right + dx).coerceIn(left + minWidth, w) else start.right
+        val bottom = if (grip.bottom) (start.bottom + dy).coerceIn(top + minHeight, h) else start.bottom
         return Box(left, top, right, bottom)
     }
 
@@ -150,6 +174,9 @@ object CropBox {
                 horizontal -> free.width
                 else -> free.height * ratio
             }
+        // Apply the preferred minimum before fitting. Restoring it afterwards can exceed the
+        // available room, especially for one-pixel canvases or a locked crop next to an edge.
+        boxWidth = maxOf(boxWidth, min(MIN_SIZE, start.width), min(MIN_SIZE, start.height) * ratio)
         var boxHeight = boxWidth / ratio
         val roomX =
             when {
@@ -166,13 +193,6 @@ object CropBox {
         val fit = min(1f, min(roomX / boxWidth, roomY / boxHeight))
         boxWidth *= fit
         boxHeight *= fit
-        if (boxWidth < MIN_SIZE) {
-            boxWidth = MIN_SIZE
-            boxHeight = MIN_SIZE / ratio
-        } else if (boxHeight < MIN_SIZE) {
-            boxHeight = MIN_SIZE
-            boxWidth = MIN_SIZE * ratio
-        }
         val left =
             when {
                 grip.left -> anchorX - boxWidth
@@ -189,7 +209,12 @@ object CropBox {
         // clamp against rounding so a locked box can never leave the artwork.
         val clampedLeft = left.coerceIn(0f, maxOf(0f, canvasWidth - boxWidth))
         val clampedTop = top.coerceIn(0f, maxOf(0f, canvasHeight - boxHeight))
-        return Box(clampedLeft, clampedTop, clampedLeft + boxWidth, clampedTop + boxHeight)
+        return Box(
+            clampedLeft,
+            clampedTop,
+            min(canvasWidth.toFloat(), clampedLeft + boxWidth),
+            min(canvasHeight.toFloat(), clampedTop + boxHeight),
+        )
     }
 
     private const val MIN_SIZE = 8f

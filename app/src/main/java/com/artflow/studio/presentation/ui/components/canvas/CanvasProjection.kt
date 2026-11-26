@@ -88,7 +88,6 @@ private class ArtworkScreen(
     display: Display,
 ) : Presentation(context, display) {
     private lateinit var view: ImageView
-    private var shown: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,14 +103,13 @@ private class ArtworkScreen(
 
     fun show(bitmap: Bitmap) {
         if (!::view.isInitialized) return
+        // Replacing the drawable does not retire the renderer's previous draw commands.
+        // Published bitmaps must stay usable until those references are released by Android.
         view.setImageBitmap(bitmap)
-        shown?.recycle()
-        shown = bitmap
     }
 
     override fun onStop() {
+        if (::view.isInitialized) view.setImageDrawable(null)
         super.onStop()
-        shown?.recycle()
-        shown = null
     }
 }

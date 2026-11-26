@@ -922,29 +922,31 @@ object PsdCodec {
         var section = Section.NONE
         var folderBlend: BlendMode? = null
         var maskHeader: MaskHeader? = null
-        if (extraLength <= 0 || reader.remaining() < 8) {
+        if (extraLength == 0) {
             return ExtraLayerData(name, section, folderBlend, maskHeader)
         }
+        require(extraLength >= 8) { "Truncated PSD extra layer data" }
         val maskLength = reader.readInt()
-        require(maskLength >= 0) { "Invalid PSD mask length" }
+        require(maskLength in 0..(extraEnd - reader.position)) { "Invalid PSD mask length" }
         val maskStart = reader.position
-        if (maskLength >= MASK_HEADER_LENGTH && reader.remaining() >= MASK_HEADER_LENGTH) {
+        if (maskLength >= MASK_HEADER_LENGTH) {
             val maskTop = reader.readInt()
             val maskLeft = reader.readInt()
             val maskBottom = reader.readInt()
             val maskRight = reader.readInt()
             maskHeader = MaskHeader(maskTop, maskLeft, maskBottom, maskRight, reader.readByte(), reader.readByte())
         }
-        reader.position = (maskStart.toLong() + maskLength).coerceAtMost(extraEnd.toLong()).toInt()
-        if (reader.position + 4 <= extraEnd) {
-            val blendingRangesLength = reader.readInt()
-            require(blendingRangesLength >= 0) { "Invalid PSD blending ranges length" }
-            reader.position = (reader.position.toLong() + blendingRangesLength).coerceAtMost(extraEnd.toLong()).toInt()
-        }
+        reader.position = maskStart + maskLength
+        require(extraEnd - reader.position >= 4) { "Truncated PSD blending ranges length" }
+        val blendingRangesLength = reader.readInt()
+        require(blendingRangesLength in 0..(extraEnd - reader.position)) { "Invalid PSD blending ranges length" }
+        reader.skip(blendingRangesLength)
         if (reader.position < extraEnd) {
             val nameLength = reader.readByte()
+            val namePadding = (4 - (nameLength + 1) % 4) % 4
+            require(nameLength + namePadding <= extraEnd - reader.position) { "Truncated PSD layer name" }
             if (nameLength > 0) name = reader.readAscii(nameLength)
-            reader.skip((4 - (nameLength + 1) % 4) % 4)
+            reader.skip(namePadding)
         }
         val blocks = parseExtraBlocks(reader, extraEnd)
         return ExtraLayerData(

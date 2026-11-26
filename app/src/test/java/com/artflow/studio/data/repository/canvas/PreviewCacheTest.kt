@@ -2,11 +2,15 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.StrokeRasterizer
 import com.artflow.studio.core.render.StrokeReach
 import com.artflow.studio.domain.model.brush.BrushParams
+import com.artflow.studio.domain.model.brush.DualBrush
+import com.artflow.studio.domain.model.brush.PressureMapping
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.model.brush.StrokePoint
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -88,4 +92,57 @@ class PreviewCacheTest {
         assertNull(frame(cache, "doc", emptyList(), PreviewCache.Damage.NONE, raster = 2).dirty)
         assertNull("Unknown damage forces a full composite", frame(cache, "doc", emptyList(), null, raster = 2).dirty)
     }
+
+    @Test
+    fun pressureGrainOnEitherBrushRecompositesEarlierPixelsWhenAStrokeGrows() =
+        runBlocking {
+            val pressure = PressureMapping(listOf(PressureMapping.Point(0f, 0.1f), PressureMapping.Point(1f, 0.9f)))
+            val textured =
+                params.copy(
+                    size = 14f,
+                    pressureToSize = 0f,
+                    pressureToOpacity = 0f,
+                    textureId = "canvas",
+                    blendTexture = true,
+                    grainDepth = 0.7f,
+                    importedAuxiliaryCurves =
+                        mapOf(
+                            "dynamicsPressureGrainDepthCurve" to pressure,
+                            "dynamicsPressureGrainDepthJitterCurve" to pressure,
+                        ),
+                )
+            val primary = params.copy(size = 20f, pressureToSize = 0f, pressureToOpacity = 0f)
+            for (brush in listOf(textured, primary.copy(dual = DualBrush(textured)))) {
+                for (erase in listOf(false, true)) {
+                    val cache = PreviewCache()
+                    val whole =
+                        stroke(20.5f, 50.5f, 140.5f).copy(
+                            brushParams = brush,
+                            isEraser = erase,
+                            points =
+                                listOf(
+                                    StrokePoint(20.5f, 50.5f, pressure = 0.2f, timestamp = 0L),
+                                    StrokePoint(50.5f, 50.5f, pressure = 0.3f, timestamp = 20L),
+                                    StrokePoint(140.5f, 50.5f, pressure = 0.9f, timestamp = 50L),
+                                ),
+                        )
+                    for (count in listOf(2, 3)) {
+                        val partial = whole.copy(points = whole.points.take(count))
+                        val expected = PixelBuffer.filled(200, 100, if (erase) 0xFF7799BB.toInt() else 0)
+                        StrokeRasterizer().draw(expected, partial)
+                        val actual =
+                            cache.frame(key("grain"), PreviewCache.Damage.NONE, listOf(partial), 200, 100) { region ->
+                                // The region renderer supplies the correct current pixels; the cache
+                                // must request all changed pixels, including the old stroke beginning.
+                                if (region == null) expected.copy() else expected.crop(region)
+                            }
+                        assertArrayEquals(
+                            "dual=${brush.dual != null} / erase=$erase / count=$count",
+                            expected.pixels,
+                            actual.buffer.pixels,
+                        )
+                    }
+                }
+            }
+        }
 }

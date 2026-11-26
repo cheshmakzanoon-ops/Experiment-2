@@ -2,6 +2,7 @@ package com.artflow.studio.core.render
 
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.pixels.checkedPixelCount
 import com.artflow.studio.domain.model.layer.LayerEffects
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -27,7 +28,13 @@ object LayerEffectsRenderer {
         val coverage = FloatArray(count) { (content.pixels[it] ushr 24) / 255f }
         if (coverage.none { it > 0f }) return
 
-        val outline = effects.outline?.let { outlineCoverage(coverage, width, height, it.width) }
+        val outline =
+            effects.outline?.let { style ->
+                val opacity = (style.color ushr 24) / 255f
+                outlineCoverage(coverage, width, height, style.width).also { alpha ->
+                    for (i in alpha.indices) alpha[i] *= opacity
+                }
+            }
         val back = IntArray(count)
         effects.shadow?.let { shadow ->
             // The shadow is cast by everything in front of it: the paint and its outline.
@@ -42,10 +49,9 @@ object LayerEffectsRenderer {
         }
         effects.outline?.let { style ->
             val rgb = style.color and 0x00FFFFFF
-            val strength = (style.color ushr 24) / 255f
             val ring = checkNotNull(outline)
             for (i in 0 until count) {
-                val alpha = (ring[i] * strength * 255f).roundToInt()
+                val alpha = (ring[i] * 255f).roundToInt()
                 if (alpha > 0) back[i] = BlendModes.sourceOver(back[i], (alpha shl 24) or rgb)
             }
         }
@@ -70,31 +76,62 @@ object LayerEffectsRenderer {
         return FloatArray(coverage.size) { i -> (reach + 0.5f - sqrt(distance[i])).coerceIn(0f, 1f) }
     }
 
-    /** [caster] moved by the shadow's offset and softened by its blur. */
+    /**
+     * [caster] moved by the shadow's offset and softened by its blur. The canvas crop occupies the
+     * first [width] * [height] entries; the returned array retains its halo to avoid a second plane.
+     */
     internal fun shadowCoverage(
         caster: FloatArray,
         width: Int,
         height: Int,
         shadow: LayerEffects.Shadow,
     ): FloatArray {
+        require(caster.size == checkedPixelCount(width, height)) { "Shadow coverage must match its canvas" }
         val distance = shadow.distance.coerceIn(0f, LayerEffects.MAX_SHADOW_DISTANCE)
         val radians = Math.toRadians(shadow.angleDegrees.toDouble())
         val dx = (cos(radians) * distance).roundToInt()
         val dy = (sin(radians) * distance).roundToInt()
-        val moved = FloatArray(caster.size)
-        for (y in 0 until height) {
-            val sourceY = y - dy
+        // Each pass can carry coverage another radius toward the canvas, including from off-canvas
+        // offsets. Keep the full three-pass support until the final crop (at most 96 on each side).
+        val radius = shadowRadius(shadow)
+        val halo = BOX_PASSES * radius
+        val paddedWidth = width + 2 * halo
+        val paddedHeight = height + 2 * halo
+        // Only the source is subject to document limits; these bounded scratch edges can exceed 8192.
+        val moved = FloatArray(paddedWidth * paddedHeight)
+        for (y in 0 until paddedHeight) {
+            val sourceY = y - halo - dy
             if (sourceY !in 0 until height) continue
-            for (x in 0 until width) {
-                val sourceX = x - dx
-                if (sourceX in 0 until width) moved[y * width + x] = caster[sourceY * width + sourceX]
+            for (x in 0 until paddedWidth) {
+                val sourceX = x - halo - dx
+                if (sourceX in 0 until width) moved[y * paddedWidth + x] = caster[sourceY * width + sourceX]
             }
         }
         // Three box passes of this radius have about the spread of a Gaussian with sigma = blur / 2.
-        val radius = (shadow.blur.coerceIn(0f, LayerEffects.MAX_SHADOW_BLUR) / 2f).roundToInt()
-        if (radius > 0) repeat(BOX_PASSES) { boxBlur(moved, width, height, radius) }
+        if (radius > 0) {
+            val line = FloatArray(maxOf(paddedWidth, paddedHeight))
+            repeat(BOX_PASSES) { boxBlur(moved, paddedWidth, paddedHeight, radius, line) }
+            for (y in 0 until height) {
+                System.arraycopy(moved, (y + halo) * paddedWidth + halo, moved, y * width, width)
+            }
+        }
         return moved
     }
+
+    /** Extra bytes beyond one canvas-sized float plane, including one line reused by all passes. */
+    internal fun shadowPaddingBytes(
+        width: Int,
+        height: Int,
+        shadow: LayerEffects.Shadow,
+    ): Long {
+        val diameter = 2L * BOX_PASSES * shadowRadius(shadow)
+        if (diameter == 0L) return 0L
+        val extraPixels = diameter * (width.toLong() + height) + diameter * diameter
+        val linePixels = maxOf(width, height).toLong() + diameter
+        return (extraPixels + linePixels) * Float.SIZE_BYTES
+    }
+
+    private fun shadowRadius(shadow: LayerEffects.Shadow): Int = (shadow.blur.coerceIn(0f, LayerEffects.MAX_SHADOW_BLUR) / 2f).roundToInt()
 
     /**
      * Squared Euclidean distance from each pixel to the nearest pixel at least half covered, by the
@@ -183,9 +220,8 @@ object LayerEffectsRenderer {
         width: Int,
         height: Int,
         radius: Int,
+        line: FloatArray,
     ) {
-        val longest = maxOf(width, height)
-        val line = FloatArray(longest)
         val scale = 1f / (2 * radius + 1)
         for (y in 0 until height) {
             System.arraycopy(values, y * width, line, 0, width)

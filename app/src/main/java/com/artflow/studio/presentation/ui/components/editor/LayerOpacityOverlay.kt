@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.artflow.studio.R
+import com.artflow.studio.domain.repository.canvas.CanvasRepository.LayerParameter
 import kotlin.math.roundToInt
 
 /**
@@ -29,20 +30,35 @@ fun LayerOpacityOverlay(
     onChange: (Float) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
+    layerId: Long = 0L,
+    parameterGestures: LayerParameterGestureActions? = null,
 ) {
     val current by rememberUpdatedState(opacity)
+    val currentDone by rememberUpdatedState(onDone)
     var value by remember { mutableFloatStateOf(opacity) }
+    val gesture = rememberLayerParameterGesture(layerId, LayerParameter.OPACITY, parameterGestures, onChange)
     val sliderDescription = stringResource(R.string.layeropacityoverlay_slide_to_set_opacity)
     Box(
         modifier
             .fillMaxSize()
             .semantics { contentDescription = sliderDescription }
-            .pointerInput(Unit) { detectTapGestures { onDone() } }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(onDragStart = { value = current }) { change, amount ->
+            .pointerInput(gesture) {
+                detectTapGestures {
+                    gesture.finish()
+                    currentDone()
+                }
+            }.pointerInput(gesture) {
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        value = current
+                        gesture.start(layerId, LayerParameter.OPACITY)
+                    },
+                    onDragEnd = { gesture.finish() },
+                    onDragCancel = { gesture.finish() },
+                ) { change, amount ->
                     change.consume()
                     value = (value + amount / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                    onChange(value)
+                    gesture.change(value)
                 }
             },
     ) {
@@ -57,7 +73,10 @@ fun LayerOpacityOverlay(
                     "Opacity ${(opacity * 100).roundToInt()}% · slide across the canvas",
                     style = MaterialTheme.typography.labelLarge,
                 )
-                TextButton(onClick = onDone) { Text(stringResource(R.string.layeropacityoverlay_done)) }
+                TextButton(onClick = {
+                    gesture.finish()
+                    currentDone()
+                }) { Text(stringResource(R.string.layeropacityoverlay_done)) }
             }
         }
     }

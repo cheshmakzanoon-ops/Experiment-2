@@ -2,6 +2,7 @@ package com.artflow.studio.core.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -171,11 +172,15 @@ object CanvasOperations {
         degrees: Float,
         properties: CanvasProperties,
     ): Result {
-        val radians = Math.toRadians(degrees.toDouble())
-        val cos = kotlin.math.abs(kotlin.math.cos(radians)).toFloat()
-        val sin = kotlin.math.abs(kotlin.math.sin(radians)).toFloat()
-        val newWidth = (buffer.width * cos + buffer.height * sin).roundToInt().coerceIn(1, MAX_DIMENSION)
-        val newHeight = (buffer.width * sin + buffer.height * cos).roundToInt().coerceIn(1, MAX_DIMENSION)
+        require(degrees.isFinite()) { "Rotation must be finite" }
+        val normalized = degrees % 360f
+        if (normalized % 90f == 0f) return rotate(buffer, normalized.toInt(), properties)
+        val radians = Math.toRadians(normalized.toDouble())
+        val cos = kotlin.math.abs(kotlin.math.cos(radians))
+        val sin = kotlin.math.abs(kotlin.math.sin(radians))
+        val newWidth = ceil(buffer.width * cos + buffer.height * sin).toInt()
+        val newHeight = ceil(buffer.width * sin + buffer.height * cos).toInt()
+        require(isSizeSafe(newWidth, newHeight)) { "Rotated canvas exceeds the supported size" }
         val rotated =
             buffer.transformed(
                 targetWidth = newWidth,
@@ -184,7 +189,7 @@ object CanvasOperations {
                 translateY = (newHeight - buffer.height) / 2f,
                 scaleX = 1f,
                 scaleY = 1f,
-                rotationDegrees = degrees,
+                rotationDegrees = normalized,
                 pivotX = buffer.width / 2f,
                 pivotY = buffer.height / 2f,
             )
@@ -235,9 +240,12 @@ object CanvasOperations {
     ): Result {
         val content = buffer.contentBounds() ?: return Result(buffer, properties)
         val padding = margin.coerceAtLeast(0)
-        val padded = content.inflated(padding)
-        val width = padded.width.coerceIn(1, MAX_DIMENSION)
-        val height = padded.height.coerceIn(1, MAX_DIMENSION)
+        val paddedWidth = content.width.toLong() + padding * 2L
+        val paddedHeight = content.height.toLong() + padding * 2L
+        require(paddedWidth <= MAX_DIMENSION && paddedHeight <= MAX_DIMENSION) { "Padded canvas exceeds the supported size" }
+        val width = paddedWidth.toInt()
+        val height = paddedHeight.toInt()
+        require(isSizeSafe(width, height)) { "Padded canvas exceeds the supported pixel budget" }
         // Move the artwork's own bounds to the margin, not the whole buffer to the centre, so the
         // content keeps an even margin on every side and is never pushed out of the canvas.
         val canvas = PixelBuffer(width, height)
@@ -260,11 +268,13 @@ object CanvasOperations {
         properties: CanvasProperties,
         dpi: Int,
     ): Result {
+        require(properties.dpi > 0) { "Source DPI must be positive" }
         val targetDpi = dpi.coerceIn(MIN_DPI, MAX_DPI)
         if (targetDpi == properties.dpi) return Result(buffer, properties)
-        val scale = targetDpi / properties.dpi.toFloat()
-        val width = (buffer.width * scale).roundToInt().coerceIn(1, MAX_DIMENSION)
-        val height = (buffer.height * scale).roundToInt().coerceIn(1, MAX_DIMENSION)
+        // Integer arithmetic keeps exact half-pixel ties from rounding down after a lossy scale calculation.
+        val width = ((buffer.width.toLong() * targetDpi + properties.dpi / 2) / properties.dpi).toInt().coerceAtLeast(1)
+        val height = ((buffer.height.toLong() * targetDpi + properties.dpi / 2) / properties.dpi).toInt().coerceAtLeast(1)
+        require(isSizeSafe(width, height)) { "Resampled canvas exceeds the supported size" }
         val scaled = buffer.scaled(width, height)
         return Result(scaled, properties.copy(width = width, height = height, dpi = targetDpi))
     }
@@ -388,20 +398,14 @@ object CanvasOperations {
         width: Int,
         height: Int,
         targetWidth: Int,
-    ): Pair<Int, Int> {
-        val ratio = height / width.toFloat()
-        return targetWidth to max(1, (targetWidth * ratio).roundToInt())
-    }
+    ): Pair<Int, Int> = targetWidth to max(1, (targetWidth.toDouble() * height / width).roundToInt())
 
     /** Aspect-ratio-preserving size for a target height. */
     fun scaleToHeight(
         width: Int,
         height: Int,
         targetHeight: Int,
-    ): Pair<Int, Int> {
-        val ratio = width / height.toFloat()
-        return max(1, (targetHeight * ratio).roundToInt()) to targetHeight
-    }
+    ): Pair<Int, Int> = max(1, (targetHeight.toDouble() * width / height).roundToInt()) to targetHeight
 
     /** Scales so the artwork fits inside [maxWidth] x [maxHeight]. */
     fun fitInside(

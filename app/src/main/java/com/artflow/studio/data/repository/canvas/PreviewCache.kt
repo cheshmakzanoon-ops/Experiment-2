@@ -2,6 +2,7 @@ package com.artflow.studio.data.repository.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.BrushTexture
 import com.artflow.studio.core.render.StrokeReach
 import com.artflow.studio.domain.model.brush.Stroke
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -133,7 +134,8 @@ internal class PreviewCache {
 
     /**
      * True when [now] only added points after [before]'s and its earlier pixels cannot change.
-     * Tapers depend on the stroke's total length, so a tapered stroke redraws completely.
+     * Tapers depend on total length; pressure-controlled grain uses the stroke's mean pressure
+     * and final random state. Either can change earlier coverage on either brush component.
      */
     private fun appends(
         now: Stroke,
@@ -141,8 +143,12 @@ internal class PreviewCache {
     ): Boolean {
         val params = now.brushParams
         val count = before.points.size
+        val changingGrain =
+            (params.blendTexture && BrushTexture.hasPressureCurves(params)) ||
+                params.dual?.params?.let { it.blendTexture && BrushTexture.hasPressureCurves(it) } == true
         return params.taperStart <= 0f &&
             params.taperEnd <= 0f &&
+            !changingGrain &&
             count > 0 &&
             now.points.size >= count &&
             now.points[count - 1] == before.points[count - 1]

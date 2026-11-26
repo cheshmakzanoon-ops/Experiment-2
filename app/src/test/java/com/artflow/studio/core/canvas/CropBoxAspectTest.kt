@@ -1,5 +1,6 @@
 package com.artflow.studio.core.canvas
 
+import com.artflow.studio.core.pixels.IntBounds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -70,5 +71,43 @@ class CropBoxAspectTest {
             assertTrue("${preset.label} kept its ratio", box.aspectIs(preset))
         }
         assertEquals(listOf("1:1", "4:3", "3:2", "16:9"), CropBox.Aspect.presets.map { it.label })
+    }
+
+    @Test
+    fun aLockedBoxFitsCanvasesSmallerThanThePreferredMinimum() {
+        for ((width, height) in listOf(1 to 1, 10 to 4, 4 to 10)) {
+            for (aspect in CropBox.Aspect.presets) {
+                val box = CropBox.drag(CropBox.Box.of(width, height), corner, -100f, -100f, width, height, aspect)
+                assertTrue(box.left >= 0f && box.top >= 0f)
+                assertTrue(box.right <= width && box.bottom <= height)
+                assertTrue(box.width > 0f && box.height > 0f)
+                assertTrue(box.aspectIs(aspect))
+            }
+        }
+    }
+
+    @Test
+    fun fittingALockedBoxKeepsItsOppositeCornerFixed() {
+        val box =
+            CropBox.drag(
+                CropBox.Box(10f, 10f, 18f, 18f),
+                corner,
+                20f,
+                20f,
+                18,
+                18,
+                CropBox.Aspect.SixteenNine,
+            )
+        assertEquals(10f, box.left, 0f)
+        assertEquals(10f, box.top, 0f)
+        assertEquals(18f, box.right, 0f)
+        assertTrue(box.aspectIs(CropBox.Aspect.SixteenNine))
+    }
+
+    @Test
+    fun movingALockedCropOnAOnePixelWideCanvasKeepsAnApplicableCrop() {
+        val locked = CropBox.drag(CropBox.Box.of(1, 4), corner, 0f, 0f, 1, 4, CropBox.Aspect.SixteenNine)
+        val moved = CropBox.drag(locked, CropBox.Grip(), 0f, 0.8f, 1, 4, CropBox.Aspect.SixteenNine)
+        assertEquals(IntBounds(0, 1, 0, 1), moved.toBounds())
     }
 }

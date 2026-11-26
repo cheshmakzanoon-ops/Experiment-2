@@ -4,6 +4,7 @@ import com.artflow.studio.core.canvas.CanvasOperations
 import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.PixelBuffer
+import com.artflow.studio.core.render.LayerEffectsRenderer
 import com.artflow.studio.domain.model.layer.Layer
 
 /** A small sRGB view of the current artwork, independent of export format/settings. */
@@ -23,8 +24,14 @@ internal object ArtworkPreview {
         availableBytes: Long,
     ): Boolean {
         if (width <= 0 || height <= 0) return false
-        val allowance = minOf(availableBytes, MAX_RENDER_BYTES) - THUMBNAIL_BYTES
+        var allowance = minOf(availableBytes, MAX_RENDER_BYTES) - THUMBNAIL_BYTES
         if (allowance <= 0) return false
+        for (layer in layers) {
+            val shadow = layer.effects?.shadow ?: continue
+            val padding = LayerEffectsRenderer.shadowPaddingBytes(width, height, shadow)
+            if (padding > allowance) return false
+            allowance -= padding
+        }
         val groups = layers.count { it.isGroup }.toLong()
         val effects = layers.count { it.effects != null || it.filterType != null || it.adjustmentType != null }.toLong()
         val feathers = layers.count { it.hasActiveMask() && it.maskFeather > 0f }.toLong()

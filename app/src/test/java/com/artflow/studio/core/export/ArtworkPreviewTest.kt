@@ -4,6 +4,7 @@ import com.artflow.studio.core.color.ColorProfile
 import com.artflow.studio.core.color.ColorProfiles
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.model.layer.LayerEffects
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -48,5 +49,16 @@ class ArtworkPreviewTest {
         assertTrue(ArtworkPreview.canRender(1024, 1024, emptyList(), budget))
         val groups = List(8) { Layer(it.toLong(), "Group", it, isGroup = true) }
         assertFalse(ArtworkPreview.canRender(1024, 1024, groups, budget))
+    }
+
+    @Test
+    fun shadowHaloIsChargedForEachLayerEvenOnAThinCanvas() {
+        val sharp = Layer(1, "Shadow", 0, effects = LayerEffects(shadow = LayerEffects.Shadow(blur = 0f)))
+        val soft = sharp.copy(effects = LayerEffects(shadow = LayerEffects.Shadow(blur = LayerEffects.MAX_SHADOW_BLUR)))
+        assertTrue(ArtworkPreview.canRender(8192, 1, listOf(sharp), 8L * 1024 * 1024))
+        assertFalse(ArtworkPreview.canRender(8192, 1, listOf(soft), 8L * 1024 * 1024))
+        assertTrue(ArtworkPreview.canRender(8192, 1, listOf(soft), 12L * 1024 * 1024))
+        assertFalse(ArtworkPreview.canRender(8192, 1, listOf(soft, soft.copy(id = 2)), 12L * 1024 * 1024))
+        assertFalse(ArtworkPreview.canRender(Int.MAX_VALUE, Int.MAX_VALUE, listOf(soft), Long.MAX_VALUE))
     }
 }

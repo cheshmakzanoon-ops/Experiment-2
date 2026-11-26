@@ -141,7 +141,12 @@ object LayerImports {
                 val composite =
                     if (flattened) {
                         check(bytes * WORKING_COPIES <= importBudget()) { MEMORY_MESSAGE }
-                        document.composite()
+                        val pixels = document.composite()
+                        check(document.damagedTileCount == 0) {
+                            "This Procreate file has ${document.damagedTileCount} damaged tile(s), so it was not imported. " +
+                                "Re-save it in Procreate and try again."
+                        }
+                        pixels
                             ?: error("This Procreate document cannot be imported as layers and has no flattened image to import")
                     } else {
                         null

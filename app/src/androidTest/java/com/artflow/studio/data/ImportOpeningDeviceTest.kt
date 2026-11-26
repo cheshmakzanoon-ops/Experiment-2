@@ -1,16 +1,21 @@
 package com.artflow.studio.data
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.graphics.BitmapFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.artflow.studio.TestEvidence
+import com.artflow.studio.core.export.KeyedArchiveBuilder
 import com.artflow.studio.core.export.ProcreateWriter
 import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.core.render.CustomGrains
+import com.artflow.studio.data.export.LayerImports
 import com.artflow.studio.data.export.ProcreateImport
+import com.artflow.studio.data.local.ProjectStorage
 import com.artflow.studio.data.local.StorageFileTree
 import com.artflow.studio.data.renderer.BitmapPixelBridge
+import com.artflow.studio.data.repository.canvas.CanvasRepositoryImpl
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -22,6 +27,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -32,6 +38,7 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.DeflaterOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipInputStream
@@ -153,6 +160,61 @@ class ImportOpeningDeviceTest {
         }
 
     @Test
+    fun damagedFallbackClosesItsStagedArchiveAndPreservesSavedArtworkAndHistory() =
+        runBlocking(Dispatchers.Main) {
+            val application = ApplicationProvider.getApplicationContext<Context>()
+            val context =
+                object : ContextWrapper(application) {
+                    override fun getFilesDir(): File = directory
+                }
+            val storage = ProjectStorage(context)
+            var repository = CanvasRepositoryImpl(storage)
+            val expected = pixels()
+            try {
+                assertNotNull(repository.loadOrCreate(PROJECT, WIDTH, HEIGHT, 72))
+                assertTrue(repository.setLayerPixels(repository.getActiveLayerId(), expected, "Existing paint"))
+                assertNotNull(repository.saveCanvas(PROJECT))
+                repository.addLayer("Keep this redo")
+                assertTrue(repository.undo())
+                assertTrue(repository.undoDepth > 0)
+                assertTrue(repository.redoDepth > 0)
+                val before = state(repository)
+                ProcreateImport.open(archive(expected).inputStream(), staging, BUDGET).use { live ->
+                    val filesBefore = fileSnapshot()
+                    val failure =
+                        runCatching {
+                            ProcreateImport.useOpened(staging, { damagedArchive().inputStream() }) { opened, _ ->
+                                assertEquals(0, opened.document.damagedTileCount)
+                                try {
+                                    LayerImports.importProcreate(repository, opened.document, rasterBudgetBytes = 0)
+                                } finally {
+                                    assertEquals(1, opened.document.damagedTileCount)
+                                }
+                            }
+                        }.exceptionOrNull()
+                    assertTrue(failure.toString(), failure is IllegalStateException)
+                    assertTrue(failure.toString(), failure?.message.orEmpty().contains("damaged tile(s)"))
+                    assertEquals(before, state(repository))
+                    assertEquals(filesBefore, fileSnapshot())
+                    assertEquals(1, stagedFiles().size)
+                    assertArrayEquals(expected.pixels, requireNotNull(live.document.composite()).pixels)
+                }
+                assertNoStagedFiles()
+                assertTrue(repository.redo())
+                assertTrue(repository.getAllLayers().any { it.name == "Keep this redo" })
+                assertTrue(repository.undo())
+                assertArrayEquals(expected.pixels, requireNotNull(repository.layerPixels(repository.getActiveLayerId())).pixels)
+                repository.dispose()
+                repository = CanvasRepositoryImpl(storage)
+                assertNotNull(repository.loadCanvas(PROJECT))
+                assertEquals(1, repository.getAllLayers().size)
+                assertArrayEquals(expected.pixels, requireNotNull(repository.layerPixels(repository.getActiveLayerId())).pixels)
+            } finally {
+                repository.dispose()
+            }
+        }
+
+    @Test
     fun brushBitmapDecoderKeepsExactPixelsAndRejectsOversizedImagesWithoutPublishingATile() {
         val expected =
             PixelBuffer(
@@ -206,6 +268,57 @@ class ImportOpeningDeviceTest {
         return output.toByteArray()
     }
 
+    /** The ZIP is valid; only the stored composite's independent zlib checksum is truncated. */
+    private fun damagedArchive(): ByteArray {
+        val archive = KeyedArchiveBuilder()
+        val layer = archive.instance("SilicaLayer", mapOf("name" to "Ink", "UUID" to "INK"))
+        val composite = archive.instance("SilicaLayer", mapOf("UUID" to "COMPOSITE"))
+        val metadata =
+            archive.encode(
+                mapOf(
+                    "size" to "{$WIDTH, $HEIGHT}",
+                    "tileSize" to 16L,
+                    "layers" to archive.array(listOf(layer)),
+                    "composite" to composite,
+                ),
+            )
+        val raw = ByteArray(WIDTH * HEIGHT * 4) { if (it % 4 == 3) 255.toByte() else 68 }
+        val compressed = ByteArrayOutputStream()
+        DeflaterOutputStream(compressed).use { it.write(raw) }
+        val packed = compressed.toByteArray()
+        val entries =
+            mapOf(
+                "Document.archive" to metadata,
+                "INK/0~0.tile" to raw,
+                "COMPOSITE/0~0.tile" to packed.copyOf(packed.size - 1),
+            )
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            entries.forEach { (name, bytes) ->
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(bytes)
+                zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
+    }
+
+    private suspend fun state(repository: CanvasRepositoryImpl): List<Any?> =
+        listOf(
+            repository.frames(),
+            repository.getAllLayers().associate { it.id to repository.layerPixels(it.id)?.pixels?.toList() },
+            repository.getColorProfile(),
+            repository.getBackgroundColor(),
+            repository.contentRevision,
+            repository.undoDepth,
+            repository.redoDepth,
+            repository.historyMark,
+            repository.getActiveLayerId(),
+        )
+
+    private fun fileSnapshot(): Map<String, List<Byte>> =
+        directory.walkTopDown().filter { it.isFile }.associate { it.relativeTo(directory).path to it.readBytes().toList() }
+
     private fun zipEntry(
         name: String,
         comments: Boolean,
@@ -227,6 +340,7 @@ class ImportOpeningDeviceTest {
     private fun assertNoStagedFiles() = assertEquals(emptyList<File>(), stagedFiles())
 
     private companion object {
+        const val PROJECT = 133L
         const val WIDTH = 16
         const val HEIGHT = 12
         const val BUDGET = 4L * 1024 * 1024

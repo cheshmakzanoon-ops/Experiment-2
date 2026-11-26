@@ -57,6 +57,7 @@ import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.FilterType
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.repository.canvas.CanvasRepository.LayerParameter
 import kotlin.math.roundToInt
 
 // ---------------------------------------------------------------------------------------------
@@ -107,6 +108,7 @@ data class LayerRowActions(
     val onSolo: (Long) -> Unit = {},
     /** Enabled layer gestures, supplied from the user's gesture preferences. */
     val twoFingerGestures: Set<TwoFingerLayerGesture.Kind> = TwoFingerLayerGesture.Kind.entries.toSet(),
+    val parameterGestures: LayerParameterGestureActions? = null,
 )
 
 data class LayerStackActions(
@@ -145,6 +147,7 @@ data class LayerMaskActions(
     val onMaskDensity: (Float) -> Unit,
     val onMaskFeather: (Float) -> Unit,
     val onPaintMask: (Boolean) -> Unit,
+    val parameterGestures: LayerParameterGestureActions? = null,
 )
 
 @Composable
@@ -465,12 +468,18 @@ private fun LayerMaskControls(
             value = layer.maskDensity,
             range = 0f..1f,
             onChange = actions.onMaskDensity,
+            layerId = layer.id,
+            parameter = LayerParameter.MASK_DENSITY,
+            parameterGestures = actions.parameterGestures,
         )
         LabeledSlider(
             label = stringResource(R.string.editorsheets_feather),
             value = layer.maskFeather,
             range = 0f..64f,
             onChange = actions.onMaskFeather,
+            layerId = layer.id,
+            parameter = LayerParameter.MASK_FEATHER,
+            parameterGestures = actions.parameterGestures,
         )
     }
 }
@@ -1592,6 +1601,9 @@ private fun LabeledSlider(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onChange: (Float) -> Unit,
+    layerId: Long = 0L,
+    parameter: LayerParameter? = null,
+    parameterGestures: LayerParameterGestureActions? = null,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -1605,12 +1617,25 @@ private fun LabeledSlider(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Slider(
-            value = value.coerceIn(range.start, range.endInclusive),
-            onValueChange = onChange,
-            valueRange = range,
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
-        )
+        val sliderModifier = Modifier.fillMaxWidth().semantics { contentDescription = label }
+        if (parameter == null) {
+            Slider(
+                value = value.coerceIn(range.start, range.endInclusive),
+                onValueChange = onChange,
+                valueRange = range,
+                modifier = sliderModifier,
+            )
+        } else {
+            LayerParameterSlider(
+                layerId = layerId,
+                parameter = parameter,
+                value = value.coerceIn(range.start, range.endInclusive),
+                onChange = onChange,
+                actions = parameterGestures,
+                valueRange = range,
+                modifier = sliderModifier,
+            )
+        }
     }
 }
 

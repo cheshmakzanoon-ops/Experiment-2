@@ -17,6 +17,14 @@ class PressureMappingTest {
         assertEquals(0.1f, response.map(2f), 0.00001f)
     }
 
+    @Test fun linearInterpolationRetainsExactStoredKnotValues() {
+        val response = curve(0f to 1f, 0.25f to 1e-8f, 0.5f to 0.8f, 0.75f to Float.MIN_VALUE, 1f to 0.1f)
+        for (point in response.points) {
+            assertEquals("input=${point.input}", point.output, response.map(point.input), 0f)
+        }
+        assertEquals(response.points.last().output, response.map(2f), 0f)
+    }
+
     @Test fun malformedControlPointsFailClosed() {
         for (points in listOf(
             emptyList(),

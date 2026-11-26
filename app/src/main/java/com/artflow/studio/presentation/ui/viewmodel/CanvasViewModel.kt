@@ -146,6 +146,8 @@ class CanvasViewModel
         private val exporter: ArtworkExporter,
         private val timelapse: TimelapseRecorder,
     ) : ViewModel() {
+        val layerParameters = LayerParameterController(canvasRepository, ::refreshLayers, ::reportLayerFailure)
+
         private val _uiState = MutableStateFlow<CanvasUiState>(CanvasUiState.Loading)
         val uiState: StateFlow<CanvasUiState> = _uiState.asStateFlow()
 
@@ -288,6 +290,7 @@ class CanvasViewModel
 
         fun open(projectId: Long) {
             if (currentProjectId == projectId && _uiState.value is CanvasUiState.Ready) return
+            layerParameters.cancel()
             exportController.reset()
             canvasPreview.reset()
             frameClipboard.reset()
@@ -773,7 +776,10 @@ class CanvasViewModel
             updateInput { it.copy(transformInterpolation = interpolation) }
 
         private fun updateInput(transform: (EditorInput) -> EditorInput) {
-            _input.value = transform(_input.value)
+            val previous = _input.value
+            val next = transform(previous)
+            if (next.tool != previous.tool || next.strokeDestination != previous.strokeDestination) layerParameters.cancel()
+            _input.value = next
         }
 
         fun onViewChanged(
@@ -826,12 +832,19 @@ class CanvasViewModel
         /** The live document's unsaved state, read at the moment of the call rather than from a collected snapshot. */
         fun hasUnsavedChanges(): Boolean = canvasRepository.hasUnsavedChanges()
 
-        fun undo() = if (canvasRepository.undo()) afterHistoryMove() else notify("Nothing to undo")
+        fun undo() {
+            layerParameters.cancel()
+            if (canvasRepository.undo()) afterHistoryMove() else notify("Nothing to undo")
+        }
 
-        fun redo() = if (canvasRepository.redo()) afterHistoryMove() else notify("Nothing to redo")
+        fun redo() {
+            layerParameters.cancel()
+            if (canvasRepository.redo()) afterHistoryMove() else notify("Nothing to redo")
+        }
 
         /** Undoes or redoes until [step] steps of history lie behind the artwork, for the History scrubber. */
         fun jumpToHistory(step: Int) {
+            layerParameters.cancel()
             var moved = false
             while (canvasRepository.undoDepth > step && canvasRepository.undo()) moved = true
             while (canvasRepository.undoDepth < step && canvasRepository.redo()) moved = true
@@ -1135,6 +1148,7 @@ class CanvasViewModel
         }
 
         fun setActiveLayer(layerId: Long) {
+            layerParameters.cancel()
             updateInput { it.copy(strokeDestination = StrokeDestination.LAYER) }
             canvasRepository.setActiveLayer(layerId)
             refreshLayers()
@@ -1194,10 +1208,14 @@ class CanvasViewModel
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
-                    Timber.e(error, "Layer operation failed")
-                    notify(error.message ?: "The layer operation failed")
+                    reportLayerFailure(error)
                 }
             }
+
+        private fun reportLayerFailure(error: Exception) {
+            Timber.e(error, "Layer operation failed")
+            notify(error.message ?: "The layer operation failed")
+        }
 
         // -----------------------------------------------------------------------------------------
         // Adjustments and filters
@@ -1333,6 +1351,7 @@ class CanvasViewModel
         }
 
         fun selectFrame(index: Int) {
+            layerParameters.cancel()
             stopPlayback()
             viewModelScope.launch(editorErrors) { canvasRepository.selectFrame(index) }
         }
@@ -1648,6 +1667,7 @@ class CanvasViewModel
 
         override fun onCleared() {
             super.onCleared()
+            layerParameters.cancel()
             imports.cancel()
             loadJob?.cancel()
             observationJob?.cancel()

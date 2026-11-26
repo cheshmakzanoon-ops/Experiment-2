@@ -15,7 +15,8 @@ object TextRasterizer {
         height: Int,
         content: TextLayerContent,
     ): PixelBuffer {
-        val style = content.style
+        // Both settings are additive pixel advances. The existing canvas transform scales them once.
+        val style = content.style.copy(wordSpacing = content.style.wordSpacing + content.wordSpacing)
         val buffer = PixelBuffer(width, height)
         val bitmap = BitmapPixelBridge.toBitmap(buffer)
         val canvas = Canvas(bitmap)
@@ -84,7 +85,7 @@ object TextRasterizer {
                     style.alignment,
                     stretch && style.alignment == TextLayout.Alignment.JUSTIFY && style.maxWidth != null,
                     content.curveAmount,
-                    content.wordSpacing,
+                    style.wordSpacing,
                 ),
             )
             baseline += style.lineHeightPx
@@ -116,35 +117,23 @@ object TextRasterizer {
             return
         }
         if (at.justified) {
-            TextLayout.justify(line, { paint.measureText(it) }, at.boxWidth, at.x).forEach {
-                canvas.drawText(it.text, it.x, at.baseline, paint)
-            }
-            return
-        }
-        val words = if (at.wordSpacing != 0f) line.split(' ') else null
-        if (words != null && words.size > 1) {
-            val spaceWidth = paint.measureText(" ") + at.wordSpacing
-            val totalWidth = words.sumOf { paint.measureText(it).toDouble() }.toFloat() + spaceWidth * (words.size - 1)
-            var cursor =
-                when (at.alignment) {
-                    TextLayout.Alignment.CENTER -> at.x + (at.boxWidth - totalWidth) / 2f
-                    TextLayout.Alignment.RIGHT -> at.x + at.boxWidth - totalWidth
-                    else -> at.x
+            val measureSpaced: (String) -> Float = { TextLayout.wordSpacedWidth(it, at.wordSpacing) { text -> paint.measureText(text) } }
+            TextLayout.justify(line, measureSpaced, at.boxWidth, at.x).forEach { run ->
+                TextLayout.wordSpacedRuns(run.text, at.wordSpacing) { paint.measureText(it) }.forEach {
+                    canvas.drawText(it.text, run.x + it.x, at.baseline, paint)
                 }
-            words.forEach { word ->
-                canvas.drawText(word, cursor, at.baseline, paint)
-                cursor += paint.measureText(word) + spaceWidth
             }
             return
         }
-        val measured = paint.measureText(line)
+        val runs = TextLayout.wordSpacedRuns(line, at.wordSpacing) { paint.measureText(it) }
+        val measured = runs.last().x + runs.last().width
         val startX =
             when (at.alignment) {
                 TextLayout.Alignment.CENTER -> at.x + (at.boxWidth - measured) / 2f
                 TextLayout.Alignment.RIGHT -> at.x + at.boxWidth - measured
                 else -> at.x
             }
-        canvas.drawText(line, startX, at.baseline, paint)
+        runs.forEach { canvas.drawText(it.text, startX + it.x, at.baseline, paint) }
     }
 
     /** Renders [line] along a smooth circular arc determined by [Placement.curveAmount] (-1..1). */
@@ -154,7 +143,8 @@ object TextRasterizer {
         line: String,
         at: Placement,
     ) {
-        val measured = paint.measureText(line).coerceAtLeast(1f)
+        val runs = TextLayout.wordSpacedRuns(line, at.wordSpacing) { paint.measureText(it) }
+        val measured = (runs.last().x + runs.last().width).coerceAtLeast(1f)
         val startX =
             when (at.alignment) {
                 TextLayout.Alignment.CENTER -> at.x + (at.boxWidth - measured) / 2f
@@ -176,7 +166,7 @@ object TextRasterizer {
             val rect = android.graphics.RectF(midX - radius, cy - radius, midX + radius, cy + radius)
             path.addArc(rect, 90f - sweepDegrees / 2f, sweepDegrees)
         }
-        canvas.drawTextOnPath(line, path, 0f, 0f, paint)
+        runs.forEach { canvas.drawTextOnPath(it.text, path, it.x, 0f, paint) }
     }
 
     /** Vertical text: each paragraph is a column of centred letters, columns running left to right. */

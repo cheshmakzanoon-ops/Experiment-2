@@ -1,6 +1,7 @@
 package com.artflow.studio.core.animation
 
 import com.artflow.studio.core.canvas.CanvasOperations
+import com.artflow.studio.core.render.LayerEffectsRenderer
 import com.artflow.studio.domain.model.layer.Layer
 
 /** Conservative admission for the full compositor and every overlapping ghost representation. */
@@ -95,6 +96,10 @@ internal object OnionSkinMemory {
         val feathers = layers.count { it.hasActiveMask() && it.maskFeather > 0f }.toLong()
         val strokes = if (layers.any { it.strokes.isNotEmpty() }) 10L else 0L
         val planes = 6L + groups * 2L + effects * 10L + filters * 6L + feathers * 3L + strokes
-        return width.toLong() * height * 4L * planes
+        val shadowPadding =
+            layers.sumOf { layer ->
+                layer.effects?.shadow?.let { LayerEffectsRenderer.shadowPaddingBytes(width, height, it) } ?: 0L
+            }
+        return width.toLong() * height * 4L * planes + shadowPadding
     }
 }

@@ -14,6 +14,7 @@ import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.layer.AdjustmentType
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.ProjectRepository
+import com.artflow.studio.domain.repository.canvas.CanvasRepository.LayerParameter
 import com.artflow.studio.domain.repository.settings.SettingsRepository
 import com.artflow.studio.presentation.ui.viewmodel.CanvasUiState
 import com.artflow.studio.presentation.ui.viewmodel.CanvasViewModel
@@ -23,6 +24,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -39,6 +41,62 @@ import org.mockito.Mockito.`when`
 /** The real repository's metadata notifications must reach the state used by the exit dialog. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CanvasMetadataViewModelTest {
+    @Test
+    fun changingToolsSealsTheLayerSliderAndRejectsItsQueuedSamples() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                val id = fixture.repository.getActiveLayerId()
+                val controls = fixture.viewModel.layerParameters
+                val first = requireNotNull(controls.begin(id, LayerParameter.OPACITY))
+                controls.update(first, 0.6f)
+                runCurrent()
+                launch(Dispatchers.Main) { controls.update(first, 0.1f) }
+                fixture.viewModel.setTool(ToolType.ERASER)
+                runCurrent()
+                assertEquals(0.6f, requireNotNull(fixture.repository.getActiveLayer()).opacity, 0f)
+
+                val second = requireNotNull(controls.begin(id, LayerParameter.OPACITY))
+                controls.update(second, 0.4f)
+                runCurrent()
+                controls.end(second)
+                assertEquals(2, fixture.repository.undoDepth)
+                fixture.viewModel.undo()
+                assertEquals(0.6f, requireNotNull(fixture.repository.getActiveLayer()).opacity, 0f)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
+    @Test
+    fun openingAnotherArtworkRejectsSliderSamplesBeforeTheLoadCompletes() =
+        runTest {
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val fixture = Fixture()
+            try {
+                fixture.viewModel.open(1L)
+                runCurrent()
+                val controls = fixture.viewModel.layerParameters
+                val first = requireNotNull(controls.begin(fixture.repository.getActiveLayerId(), LayerParameter.OPACITY))
+                controls.update(first, 0.6f)
+                runCurrent()
+                launch(Dispatchers.Main) { controls.update(first, 0.2f) }
+                fixture.viewModel.open(2L)
+                controls.update(first, 0.1f)
+                runCurrent()
+                assertEquals(2L, fixture.repository.projectId())
+                assertEquals(1f, requireNotNull(fixture.repository.getActiveLayer()).opacity, 0f)
+                assertEquals(0, fixture.repository.undoDepth)
+            } finally {
+                fixture.close()
+                Dispatchers.resetMain()
+            }
+        }
+
     @Test
     fun openingANewSameSizeArtworkClearsTheFrameClipboardAndPasteAffordance() =
         runTest {

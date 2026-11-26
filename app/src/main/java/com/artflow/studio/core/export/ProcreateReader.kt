@@ -558,7 +558,18 @@ object ProcreateReader {
             try {
                 inflater.setInput(data)
                 val out = ByteArray(size)
-                val written = inflater.inflate(out)
+                var written = 0
+                while (written < size && !inflater.finished()) {
+                    val count = inflater.inflate(out, written, size - written)
+                    require(count > 0 || inflater.finished()) { "The compressed data is incomplete" }
+                    written += count
+                }
+                if (written == size && !inflater.finished()) {
+                    // A full pixel buffer is not proof that the stream ended: consume its trailer,
+                    // but refuse even one more decoded byte instead of accepting a truncated tile.
+                    require(inflater.inflate(ByteArray(1)) == 0) { "The compressed tile is too large" }
+                }
+                require(inflater.finished() && inflater.remaining == 0) { "The compressed data is damaged" }
                 return if (written == size) out else out.copyOf(written)
             } catch (damaged: java.util.zip.DataFormatException) {
                 throw IllegalArgumentException("The compressed data is damaged", damaged)

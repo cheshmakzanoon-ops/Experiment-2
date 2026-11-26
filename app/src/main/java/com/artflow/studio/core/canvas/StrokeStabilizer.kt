@@ -63,15 +63,19 @@ class StrokeStabilizer(
     ): List<Pair<Float, Float>> {
         if (!started || string > 0f) return emptyList()
         val distance = hypot(rawX - x, rawY - y)
-        if (distance < 0.5f) return emptyList()
+        if (distance == 0f) return emptyList()
         val steps = min(MAX_CATCH_UP_STEPS, max(1, (distance / CATCH_UP_SPACING).toInt()))
         val fromX = x
         val fromY = y
         x = rawX
         y = rawY
         return List(steps) { i ->
-            val t = (i + 1f) / steps
-            (fromX + (rawX - fromX) * t) to (fromY + (rawY - fromY) * t)
+            if (i == steps - 1) {
+                rawX to rawY
+            } else {
+                val t = (i + 1f) / steps
+                (fromX + (rawX - fromX) * t) to (fromY + (rawY - fromY) * t)
+            }
         }
     }
 

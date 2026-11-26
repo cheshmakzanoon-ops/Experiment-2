@@ -2,6 +2,7 @@ package com.artflow.studio.core.pixels
 
 import com.artflow.studio.core.pixels.LiveAdjustments.Kind
 import com.artflow.studio.core.pixels.LiveAdjustments.Settings
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -88,6 +89,29 @@ class LiveAdjustmentsTest {
         for (a in results.indices) for (b in a + 1 until results.size) assertFalse(results[a].contentEquals(results[b]))
         val untouched = LiveAdjustments.apply(Kind.GLITCH, source, Settings(0f, mapOf(LiveAdjustments.GLITCH_STYLE to 2f)))
         assertTrue(untouched.pixels.contentEquals(source.pixels))
+    }
+
+    @Test fun separatedGlitchChannelsDoNotExposeHiddenRgb() {
+        val clear = PixelBuffer(64, 24)
+        val hidden = PixelBuffer.filled(64, 24, 0x00FFFFFF)
+        for (y in 0 until 24) {
+            for (x in 16 until 48) {
+                clear.pixels[y * 64 + x] = 0xFF4080C0.toInt()
+                hidden.pixels[y * 64 + x] = 0xFF4080C0.toInt()
+            }
+        }
+        val before = hidden.pixels.copyOf()
+        listOf(LiveAdjustments.GlitchStyle.SIGNAL, LiveAdjustments.GlitchStyle.DIVERGE).forEach { style ->
+            val settings = Settings(1f, mapOf(LiveAdjustments.GLITCH_STYLE to style.ordinal.toFloat()))
+            val expected = LiveAdjustments.apply(Kind.GLITCH, clear, settings)
+            val actual = LiveAdjustments.apply(Kind.GLITCH, hidden, settings)
+            for (i in actual.pixels.indices) {
+                assertEquals("${style.name} alpha at $i", expected.pixels[i] ushr 24, actual.pixels[i] ushr 24)
+                if (expected.pixels[i] ushr 24 > 0) assertEquals("${style.name} colour at $i", expected.pixels[i], actual.pixels[i])
+            }
+            assertArrayEquals(before, hidden.pixels)
+            assertArrayEquals(actual.pixels, LiveAdjustments.apply(Kind.GLITCH, hidden, settings).pixels)
+        }
     }
 
     @Test fun recolorReplacesTheTouchedColourAndKeepsShading() {

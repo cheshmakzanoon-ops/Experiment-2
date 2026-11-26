@@ -476,6 +476,34 @@ interface CanvasRepository {
         opacity: Float,
     ): Boolean
 
+    enum class LayerParameter { OPACITY, MASK_DENSITY, MASK_FEATHER }
+
+    /** Opaque identity for one pointer gesture; only the repository that opened it may accept it. */
+    class LayerParameterGesture(
+        val layerId: Long,
+        val parameter: LayerParameter,
+    )
+
+    /**
+     * Opens one live parameter gesture without creating history. Its first actual change uses the
+     * normal bounded undo admission; later samples share that entry until the gesture ends.
+     * Opening another gesture, changing the destination or moving history invalidates the old one.
+     * Ordinary setters remain available for keyboard/accessibility edits with their existing behavior.
+     * Like stroke pointer callbacks, begin/update/end must all run on the editor's UI thread.
+     */
+    fun beginLayerParameterGesture(
+        layerId: Long,
+        parameter: LayerParameter,
+    ): LayerParameterGesture? = null
+
+    fun updateLayerParameterGesture(
+        gesture: LayerParameterGesture,
+        value: Float,
+    ): Boolean = false
+
+    /** Release and pointer cancellation keep accepted values, then seal their undo group. */
+    fun endLayerParameterGesture(gesture: LayerParameterGesture) = Unit
+
     suspend fun setLayerName(
         layerId: Long,
         newName: String,

@@ -252,6 +252,72 @@ class PointerGestureRouterTest {
         assertEquals("Moving turns the hold into navigation", 0, router.heldFingers())
     }
 
+    @Test
+    fun consumingATapAllowsAStillHoldToRepeatUntilTheFingersMove() {
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        repeat(3) {
+            assertEquals("Each repeat still has both fingers held", 2, router.heldFingers())
+            router.consumeTap()
+        }
+        send(Event.POINTER_UP, finger, other, changed = 1)
+        assertEquals(0, send(Event.UP, finger).historyPointers)
+
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        router.consumeTap()
+        send(Event.MOVE, finger.copy(x = 80f), other)
+        assertEquals("Consuming the tap does not prevent movement from ending the hold", 0, router.heldFingers())
+    }
+
+    @Test
+    fun liftingAnyHoldContactStopsRapidHistoryBeforeAnotherMoveArrives() {
+        val fingers = listOf(finger, other, Pointer(22, 200f, 10f))
+        for (count in 2..3) {
+            send(Event.DOWN, fingers[0])
+            for (size in 2..count) send(Event.POINTER_DOWN, *fingers.take(size).toTypedArray(), changed = size - 1)
+            assertEquals(count, router.heldFingers())
+            send(Event.POINTER_UP, *fingers.take(count).toTypedArray(), changed = 0)
+            assertEquals("A lifted contact is not still held", 0, router.heldFingers())
+            send(Event.MOVE, *fingers.take(count).drop(1).toTypedArray())
+            assertEquals("Remaining contacts cannot repeat the original hold", 0, router.heldFingers())
+            send(Event.CANCEL, *fingers.take(count).drop(1).toTypedArray())
+        }
+    }
+
+    @Test
+    fun reusedPointerIdStartsANewSwipeOrigin() {
+        val third = Pointer(22, 200f, 10f)
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        send(Event.POINTER_DOWN, finger, other, third, changed = 2)
+        send(Event.POINTER_UP, finger, other, third, changed = 2)
+        val replacement = third.copy(y = 610f)
+        send(Event.POINTER_DOWN, finger, other, replacement, changed = 2)
+        assertEquals(
+            "A new contact has not swiped from the old contact's position",
+            Action.IGNORE,
+            send(Event.MOVE, finger, other, replacement).action,
+        )
+    }
+
+    @Test
+    fun replacingStationaryContactsCannotCountAsScrubReversals() {
+        val third = Pointer(22, 200f, 10f)
+        send(Event.DOWN, finger)
+        send(Event.POINTER_DOWN, finger, other, changed = 1)
+        send(Event.POINTER_DOWN, finger, other, third, changed = 2)
+        send(Event.MOVE, finger, other, third)
+        var previous = third
+        for (offset in listOf(600f, 0f, 600f, 0f)) {
+            send(Event.POINTER_UP, finger, other, previous, changed = 2)
+            val replacement = third.copy(x = third.x + offset)
+            send(Event.POINTER_DOWN, finger, other, replacement, changed = 2)
+            assertEquals("Only actual finger movement can scrub", Action.IGNORE, send(Event.MOVE, finger, other, replacement).action)
+            previous = replacement
+        }
+    }
+
     /** Feeds one scripted touch to a router and logs what it reported, in order. */
     private class Touch(
         val router: PointerGestureRouter,

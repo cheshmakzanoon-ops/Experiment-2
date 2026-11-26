@@ -219,7 +219,9 @@ private fun ExportPreview(bytes: ByteArray?) {
             }
             value = decoded
             published = true
-            awaitDispose { decoded?.recycle() }
+            // ImageBitmap and the platform display list can retain a published bitmap after
+            // this producer is replaced or disposed. Let those references govern its lifetime;
+            // only a decode that never reached the UI can be recycled here.
         } finally {
             if (!published) decoded?.recycle()
         }

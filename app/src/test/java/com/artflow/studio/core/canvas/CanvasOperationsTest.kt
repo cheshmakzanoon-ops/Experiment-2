@@ -2,10 +2,12 @@ package com.artflow.studio.core.canvas
 
 import com.artflow.studio.core.pixels.IntBounds
 import com.artflow.studio.core.pixels.PixelBuffer
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -226,6 +228,18 @@ class CanvasOperationsTest {
         assertEquals(1, result.buffer.pixels.count { (it ushr 24) != 0 })
     }
 
+    @Test
+    fun `expandToContent rejects unsupported and overflowing margins without losing artwork`() {
+        val source = dotBuffer()
+        val original = source.pixels.copyOf()
+        for (margin in intArrayOf(CanvasOperations.MAX_DIMENSION, Int.MAX_VALUE)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                CanvasOperations.expandToContent(source, properties(), margin)
+            }
+            assertArrayEquals(original, source.pixels)
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // Rotate / flip
     // ---------------------------------------------------------------------------------------
@@ -255,6 +269,37 @@ class CanvasOperationsTest {
 
         assertTrue("expected a bigger canvas, got ${result.buffer.width}", result.buffer.width > 20)
         assertEquals(result.buffer.width, result.properties.width)
+    }
+
+    @Test
+    fun `free rotation rounds the enclosing size outward`() {
+        val result = CanvasOperations.rotateFree(PixelBuffer.filled(1, 1, red), 45f, properties(1, 1))
+        assertEquals(2, result.buffer.width)
+        assertEquals(2, result.buffer.height)
+    }
+
+    @Test
+    fun `free rotation keeps exact quarter turns pixel perfect`() {
+        val source =
+            PixelBuffer(31, 1).apply {
+                setUnchecked(0, 0, red)
+                setUnchecked(30, 0, blue)
+            }
+        val result = CanvasOperations.rotateFree(source, -90f, properties(31, 1))
+        assertEquals(1, result.buffer.width)
+        assertEquals(31, result.buffer.height)
+        assertEquals(red, result.buffer.getUnchecked(0, 30))
+        assertEquals(blue, result.buffer.getUnchecked(0, 0))
+        assertEquals(2, result.buffer.opaquePixelCount())
+    }
+
+    @Test
+    fun `free rotation rejects unsupported growth instead of clipping the artwork`() {
+        val source = PixelBuffer.filled(CanvasOperations.MAX_DIMENSION, 2, red)
+        assertThrows(IllegalArgumentException::class.java) {
+            CanvasOperations.rotateFree(source, 0.01f, properties(source.width, source.height))
+        }
+        assertTrue(source.pixels.all { it == red })
     }
 
     @Test
@@ -297,6 +342,36 @@ class CanvasOperationsTest {
         val result = CanvasOperations.resampleToDpi(buffer, properties(100, 50, 300), 300)
 
         assertSame(buffer, result.buffer)
+    }
+
+    @Test
+    fun `resampleToDpi rounds exact half pixel sizes up`() {
+        val result = CanvasOperations.resampleToDpi(PixelBuffer.filled(19, 19, red), properties(19, 19, 38), 89)
+        assertEquals(45, result.buffer.width)
+        assertEquals(45, result.buffer.height)
+        assertEquals(89, result.properties.dpi)
+    }
+
+    @Test
+    fun `resampleToDpi rejects unsupported growth instead of changing the printed size`() {
+        val source = PixelBuffer.filled(CanvasOperations.MAX_DIMENSION, 1, red)
+        assertThrows(IllegalArgumentException::class.java) {
+            CanvasOperations.resampleToDpi(source, properties(source.width, source.height, 72), 144)
+        }
+        assertEquals(CanvasOperations.MAX_DIMENSION, source.width)
+        assertTrue(source.pixels.all { it == red })
+    }
+
+    @Test
+    fun `resampleToDpi rejects a nonpositive source DPI`() {
+        val source = dotBuffer()
+        val original = source.pixels.copyOf()
+        for (dpi in intArrayOf(0, -72)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                CanvasOperations.resampleToDpi(source, properties(dpi = dpi), 144)
+            }
+            assertArrayEquals(original, source.pixels)
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -352,6 +427,12 @@ class CanvasOperationsTest {
         // Already small enough: fitInside must not upscale.
         assertEquals(50 to 50, CanvasOperations.fitInside(50, 50, 100, 100))
         assertEquals(CanvasOperations.centeredSquare(100, 50), IntBounds(25, 0, 74, 49))
+    }
+
+    @Test
+    fun `aspect helpers round exact half pixel dimensions up`() {
+        assertEquals(19 to 45, CanvasOperations.scaleToWidth(38, 89, 19))
+        assertEquals(45 to 19, CanvasOperations.scaleToHeight(89, 38, 19))
     }
 
     @Test

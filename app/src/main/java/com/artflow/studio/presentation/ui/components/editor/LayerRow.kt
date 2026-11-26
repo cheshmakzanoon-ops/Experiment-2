@@ -39,6 +39,7 @@ import com.artflow.studio.core.pixels.PixelBuffer
 import com.artflow.studio.data.renderer.BitmapPixelBridge
 import com.artflow.studio.domain.model.layer.BlendMode
 import com.artflow.studio.domain.model.layer.Layer
+import com.artflow.studio.domain.repository.canvas.CanvasRepository.LayerParameter
 import com.artflow.studio.presentation.ui.theme.LocalArtFlowFlags
 import kotlin.math.max
 
@@ -181,7 +182,14 @@ internal fun LayerRow(
                 }
             }
             if (isActive) {
-                Slider(value = layer.opacity, onValueChange = { actions.onOpacity(layer.id, it) }, modifier = Modifier.fillMaxWidth())
+                LayerParameterSlider(
+                    layerId = layer.id,
+                    parameter = LayerParameter.OPACITY,
+                    value = layer.opacity,
+                    onChange = { actions.onOpacity(layer.id, it) },
+                    actions = actions.parameterGestures,
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Layer opacity" },
+                )
             }
         }
     }

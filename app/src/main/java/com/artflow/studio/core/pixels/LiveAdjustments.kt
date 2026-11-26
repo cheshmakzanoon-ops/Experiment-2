@@ -402,9 +402,9 @@ object LiveAdjustments {
         val split = (source.width * DIVERGE_REACH * amount).roundToInt()
         for (y in 0 until source.height) {
             for (x in 0 until source.width) {
-                val p = source.getSafe(x, y)
-                val red = source.getSafe(x + split, y)
-                val blue = source.getSafe(x - split, y)
+                val p = visiblePixel(source.getSafe(x, y))
+                val red = visiblePixel(source.getSafe(x + split, y))
+                val blue = visiblePixel(source.getSafe(x - split, y))
                 val alpha = maxOf(p ushr 24, red ushr 24, blue ushr 24)
                 out.pixels[y * source.width + x] =
                     (alpha shl 24) or (red and 0x00FF0000) or (p and 0x0000FF00) or (blue and 0x000000FF)
@@ -425,12 +425,15 @@ object LiveAdjustments {
             val shift = if (hash(band) % 3 == 0) (hash(band * 7 + 1) % (2 * maxShift + 1)) - maxShift else 0
             for (x in 0 until source.width) {
                 val p = source.getSafe(x - shift, y)
-                val red = source.getSafe(x - shift - split, y)
+                val red = visiblePixel(source.getSafe(x - shift - split, y))
                 out.pixels[y * source.width + x] = (p and 0xFF00FFFF.toInt()) or (red and 0x00FF0000)
             }
         }
         return out
     }
+
+    /** Sampling a separate channel must not expose RGB stored beneath zero alpha. */
+    private fun visiblePixel(pixel: Int): Int = if (pixel ushr 24 == 0) 0 else pixel
 
     /** Procreate's Halftone styles: dots in each area's colour, CMY screen print, or black newspaper dots. */
     enum class HalftoneStyle(
@@ -564,15 +567,17 @@ object LiveAdjustments {
         for (y in cy until y1) {
             for (x in cx until x1) {
                 val p = source.pixels[y * source.width + x]
-                a += (p ushr 24) and 0xFF
-                r += (p shr 16) and 0xFF
-                g += (p shr 8) and 0xFF
-                b += p and 0xFF
+                val alpha = p ushr 24
+                a += alpha
+                r += ((p shr 16) and 0xFF).toLong() * alpha
+                g += ((p shr 8) and 0xFF).toLong() * alpha
+                b += (p and 0xFF).toLong() * alpha
                 count++
             }
         }
         if (count == 0 || a == 0L) return
-        val color = Channels.argb((a / count).toInt(), (r / count).toInt(), (g / count).toInt(), (b / count).toInt())
+        // Average premultiplied channels so clear and faint pixels cannot tint the visible dots.
+        val color = Channels.argb((a / count).toInt(), (r / a).toInt(), (g / a).toInt(), (b / a).toInt())
         val darkness = 1f - Channels.luminance(color)
         val radius = cell * 0.5f * sqrt(darkness.coerceIn(0.05f, 1f)) * 1.15f
         val centerX = cx + cell / 2f

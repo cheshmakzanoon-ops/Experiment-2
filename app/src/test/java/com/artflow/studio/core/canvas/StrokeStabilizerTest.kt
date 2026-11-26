@@ -37,4 +37,28 @@ class StrokeStabilizerTest {
         assertEquals(false, StrokeStabilizer(0f).isActive)
         assertEquals(false, StrokeStabilizer(0f, Float.NaN).isActive)
     }
+
+    @Test
+    fun finishingPreservesASubpixelLiftCoordinate() {
+        val stabilizer = StrokeStabilizer(amount = 1f).apply { start(0f, 0f) }
+        stabilizer.add(0.25f, -0.25f)
+
+        assertEquals(listOf(0.25f to -0.25f), stabilizer.finish(0.25f, -0.25f))
+        assertTrue(stabilizer.finish(0.25f, -0.25f).isEmpty())
+    }
+
+    @Test
+    fun finishingPreservesTheExactFractionalEndpointAfterALongMovement() {
+        val stabilizer = StrokeStabilizer(amount = 1f).apply { start(3_000f, -3_000f) }
+        stabilizer.add(0.1f, -0.1f)
+
+        assertEquals(0.1f to -0.1f, stabilizer.finish(0.1f, -0.1f).last())
+    }
+
+    @Test
+    fun finishingATapDoesNotEmitADuplicatePoint() {
+        val stabilizer = StrokeStabilizer(amount = 1f).apply { start(4f, 7f) }
+
+        assertTrue(stabilizer.finish(4f, 7f).isEmpty())
+    }
 }

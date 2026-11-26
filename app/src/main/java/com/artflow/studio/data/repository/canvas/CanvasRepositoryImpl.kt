@@ -208,6 +208,18 @@ class CanvasRepositoryImpl
         private val undoStack = ArrayDeque<Snapshot>()
         private val redoStack = ArrayDeque<Snapshot>()
 
+        /** Metadata only: the original state belongs to the normal, memory-bounded undo stack. */
+        private data class PendingLayerParameterGesture(
+            val gesture: CanvasRepository.LayerParameterGesture,
+            val projectId: Long,
+            val frameId: Long,
+            val selectedLayerId: Long,
+            var revision: Long,
+            var changed: Boolean = false,
+        )
+
+        private var layerParameterGesture: PendingLayerParameterGesture? = null
+
         private var editRevision = 0L
         override val contentRevision: Long get() = editRevision
         private var dirty = false
@@ -288,6 +300,8 @@ class CanvasRepositoryImpl
         ): Long {
             require(CanvasOperations.isSizeSafe(width, height)) { CanvasOperations.sizeWarning(width, height) ?: "Invalid canvas size" }
             requireCanvasMemory(width, height)
+            layerParameterGesture = null
+            opacityRun = null
             canvasWidth = width
             canvasHeight = height
             canvasDpi = dpi.coerceIn(CanvasOperations.MIN_DPI, CanvasOperations.MAX_DPI)
@@ -473,6 +487,8 @@ class CanvasRepositoryImpl
                     }.toMutableList()
             coroutineContext.ensureActive()
             beforePublication()
+            layerParameterGesture = null
+            opacityRun = null
             frameClipboard = null
             editRevision++
             currentProjectId = projectId
@@ -1563,6 +1579,7 @@ class CanvasRepositoryImpl
             // Empty coverage means select nothing, not select everything. Only null deselects.
             // Own both sides of the boundary so an asynchronous tool cannot mutate a live mask.
             val owned = mask?.copy()
+            layerParameterGesture = null
             pendingSelection = null
             activeSelection = owned
             emitAsync(CanvasInvalidationEvent.Full)
@@ -2055,7 +2072,8 @@ class CanvasRepositoryImpl
                 if (!opacity.isFinite()) return@withState false
                 val clamped = opacity.coerceIn(0f, 1f)
                 if (layer.opacity == clamped) return@withState true
-                // A slider drag is one undo step: changes to the same layer in quick succession merge.
+                // Keyboard/accessibility repeats retain their existing coalescing. Pointer sliders
+                // use the explicit gesture API below, so separate fast drags cannot join this run.
                 val now = System.currentTimeMillis()
                 if (!continuesOpacityRun(layerId, now)) pushUndo()
                 opacityRun = OpacityRun(layerId, undoPushes, now)
@@ -2064,6 +2082,73 @@ class CanvasRepositoryImpl
                 emit(CanvasInvalidationEvent.LayersChanged)
                 true
             }
+
+        override fun beginLayerParameterGesture(
+            layerId: Long,
+            parameter: CanvasRepository.LayerParameter,
+        ): CanvasRepository.LayerParameterGesture? {
+            layerParameterGesture = null
+            opacityRun = null
+            val frame = frameList.getOrNull(activeFrame) ?: return null
+            val layer = frame.layers.firstOrNull { it.id == layerId } ?: return null
+            if (activeStrokes.isNotEmpty() || pendingEdits.isNotEmpty() || pendingSelection != null) return null
+            if (parameter != CanvasRepository.LayerParameter.OPACITY && layer.mask == null) return null
+            val gesture = CanvasRepository.LayerParameterGesture(layerId, parameter)
+            layerParameterGesture = PendingLayerParameterGesture(gesture, currentProjectId, frame.id, activeLayerId(), editRevision)
+            return gesture
+        }
+
+        override fun updateLayerParameterGesture(
+            gesture: CanvasRepository.LayerParameterGesture,
+            value: Float,
+        ): Boolean {
+            val pending = layerParameterGesture?.takeIf { it.gesture === gesture } ?: return false
+            if (!ownsLayerParameterGesture(pending)) {
+                layerParameterGesture = null
+                return false
+            }
+            if (!value.isFinite()) return false
+            val layer = currentLayers().firstOrNull { it.id == gesture.layerId } ?: return false
+            val clamped = value.coerceIn(0f, if (gesture.parameter == CanvasRepository.LayerParameter.MASK_FEATHER) 64f else 1f)
+            val current =
+                when (gesture.parameter) {
+                    CanvasRepository.LayerParameter.OPACITY -> layer.opacity
+                    CanvasRepository.LayerParameter.MASK_DENSITY -> layer.maskDensity
+                    CanvasRepository.LayerParameter.MASK_FEATHER -> layer.maskFeather
+                }
+            if (current == clamped) return true
+            if (!pending.changed) pushUndo()
+            when (gesture.parameter) {
+                CanvasRepository.LayerParameter.OPACITY -> layer.opacity = clamped
+                CanvasRepository.LayerParameter.MASK_DENSITY -> layer.maskDensity = clamped
+                CanvasRepository.LayerParameter.MASK_FEATHER -> layer.maskFeather = clamped
+            }
+            dirty = true
+            pending.changed = true
+            pending.revision = editRevision
+            layerParameterGesture = pending
+            emit(
+                if (gesture.parameter == CanvasRepository.LayerParameter.OPACITY) {
+                    CanvasInvalidationEvent.LayersChanged
+                } else {
+                    CanvasInvalidationEvent.Full
+                },
+            )
+            return true
+        }
+
+        private fun ownsLayerParameterGesture(pending: PendingLayerParameterGesture): Boolean =
+            pending.projectId == currentProjectId &&
+                pending.frameId == frameList.getOrNull(activeFrame)?.id &&
+                pending.selectedLayerId == activeLayerId() &&
+                pending.revision == editRevision &&
+                activeStrokes.isEmpty() &&
+                pendingEdits.isEmpty() &&
+                pendingSelection == null
+
+        override fun endLayerParameterGesture(gesture: CanvasRepository.LayerParameterGesture) {
+            if (layerParameterGesture?.gesture === gesture) layerParameterGesture = null
+        }
 
         override suspend fun setLayerName(
             layerId: Long,
@@ -3331,6 +3416,8 @@ class CanvasRepositoryImpl
             withState {
                 val clamped = index.coerceIn(0, frameList.lastIndex.coerceAtLeast(0))
                 if (clamped == activeFrame) return@withState
+                layerParameterGesture = null
+                opacityRun = null
                 pendingSelection = null
                 editRun = null
                 activeFrame = clamped
@@ -4206,6 +4293,7 @@ class CanvasRepositoryImpl
         // -----------------------------------------------------------------------------------------
 
         override fun undo(): Boolean {
+            layerParameterGesture = null
             opacityRun = null
             val snapshot = undoStack.removeLastOrNull() ?: return false
             historyMark++
@@ -4219,6 +4307,7 @@ class CanvasRepositoryImpl
         }
 
         override fun redo(): Boolean {
+            layerParameterGesture = null
             opacityRun = null
             val snapshot = redoStack.removeLastOrNull() ?: return false
             historyMark++
@@ -4232,6 +4321,7 @@ class CanvasRepositoryImpl
         }
 
         private fun pushUndo() {
+            layerParameterGesture = null
             undoPushes++
             historyMark++
             historyPosition++
@@ -4496,7 +4586,11 @@ class CanvasRepositoryImpl
         }
 
         private fun setActiveLayerId(layerId: Long) {
-            if (activeLayerId() != layerId) pendingSelection = null
+            if (activeLayerId() != layerId) {
+                pendingSelection = null
+                layerParameterGesture = null
+                opacityRun = null
+            }
             frameList.getOrNull(activeFrame)?.activeLayerId = layerId
         }
 
@@ -4719,6 +4813,8 @@ class CanvasRepositoryImpl
 
         override fun dispose() {
             belowCache.release()
+            layerParameterGesture = null
+            opacityRun = null
             pendingSelection = null
             editRevision++
             compositor.release()

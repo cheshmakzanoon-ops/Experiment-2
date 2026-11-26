@@ -7,6 +7,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.atan2
 import kotlin.math.hypot
 
 /**
@@ -73,7 +74,8 @@ class SymmetryEngineTest {
         val instances = SymmetryEngine.instances(40f, 20f, width, height, vertical(), brushRotation = 30f)
 
         assertEquals(30f, instances[0].rotationDegrees, 0.001f)
-        assertEquals(-30f, instances[1].rotationDegrees, 0.001f)
+        // A directional tip at 30 degrees reflects to 150 degrees across the vertical axis.
+        assertEquals(150f, instances[1].rotationDegrees, 0.001f)
     }
 
     @Test
@@ -191,6 +193,50 @@ class SymmetryEngineTest {
     }
 
     @Test
+    fun `radial guides follow the configured centre and span the canvas`() {
+        val settings =
+            SymmetryEngine.Settings(
+                type = SymmetryEngine.SymmetryType.RADIAL,
+                centreX = 0.2f,
+                centreY = 0.3f,
+                offsetX = 0.05f,
+                offsetY = -0.05f,
+                radialCount = 4,
+            )
+        val lines = SymmetryEngine.guideLines(width, height, settings)
+
+        lines.forEach { line ->
+            assertEquals(50f, line.startX, 0.001f)
+            assertEquals(25f, line.startY, 0.001f)
+        }
+        assertTrue(lines[0].endX >= width)
+        assertTrue(lines[1].endY >= height)
+        assertTrue(lines[2].endX <= 0f)
+        assertTrue(lines[3].endY <= 0f)
+    }
+
+    @Test
+    fun `odd and even mirrored radial patterns show every reflection axis`() {
+        for (count in listOf(3, 4, 5, 32)) {
+            val settings =
+                SymmetryEngine.Settings(
+                    type = SymmetryEngine.SymmetryType.RADIAL,
+                    radialCount = count,
+                    radialAngleDegrees = 15f,
+                    mirroredSegments = true,
+                )
+            val lines = SymmetryEngine.guideLines(width, height, settings)
+            assertEquals(2 * count, lines.size)
+            lines.forEachIndexed { index, line ->
+                val angle = atan2(line.endY - line.startY, line.endX - line.startX)
+                val expected = Math.toRadians(15.0) + Math.PI * index / count
+                assertEquals(kotlin.math.cos(expected), kotlin.math.cos(angle.toDouble()), 0.0001)
+                assertEquals(kotlin.math.sin(expected), kotlin.math.sin(angle.toDouble()), 0.0001)
+            }
+        }
+    }
+
+    @Test
     fun `snapToAxis pulls nearby points onto the guide and leaves the rest`() {
         val settings = vertical()
 
@@ -204,6 +250,14 @@ class SymmetryEngineTest {
     fun `snapToAxis is inert without symmetry`() {
         val result = SymmetryEngine.snapToAxis(3f, 4f, width, height, SymmetryEngine.Settings(), tolerance = 100f)
         assertEquals(3f to 4f, result)
+    }
+
+    @Test
+    fun `snapToAxis includes the visible secondary axis`() {
+        for (type in listOf(SymmetryEngine.SymmetryType.VERTICAL, SymmetryEngine.SymmetryType.HORIZONTAL)) {
+            val settings = SymmetryEngine.Settings(type = type, secondaryAxis = true)
+            assertEquals(100f to 50f, SymmetryEngine.snapToAxis(103f, 48f, width, height, settings, tolerance = 5f))
+        }
     }
 
     @Test
@@ -227,6 +281,26 @@ class SymmetryEngineTest {
         assertEquals(1f, sanitized.offsetY, 0.001f)
         assertEquals(32, sanitized.radialCount)
         assertEquals(40f, sanitized.radialAngleDegrees, 0.001f)
+    }
+
+    @Test
+    fun `sanitize replaces nonfinite centres offsets and angles before expansion`() {
+        for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            val settings =
+                SymmetryEngine.sanitize(
+                    SymmetryEngine.Settings(
+                        type = SymmetryEngine.SymmetryType.RADIAL,
+                        centreX = invalid,
+                        centreY = invalid,
+                        offsetX = invalid,
+                        offsetY = invalid,
+                        radialAngleDegrees = invalid,
+                        mirroredSegments = true,
+                    ),
+                )
+            assertEquals(SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, mirroredSegments = true), settings)
+            assertTrue(SymmetryEngine.instances(40f, 20f, width, height, settings).all { it.x.isFinite() && it.y.isFinite() })
+        }
     }
 
     @Test
@@ -257,6 +331,12 @@ class SymmetryEngineTest {
             32,
             SymmetryEngine.stampsPerSample(
                 SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 32),
+            ),
+        )
+        assertEquals(
+            64,
+            SymmetryEngine.stampsPerSample(
+                SymmetryEngine.Settings(type = SymmetryEngine.SymmetryType.RADIAL, radialCount = 32, mirroredSegments = true),
             ),
         )
     }

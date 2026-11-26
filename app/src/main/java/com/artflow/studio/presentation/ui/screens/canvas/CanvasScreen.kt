@@ -120,6 +120,7 @@ import com.artflow.studio.presentation.ui.components.editor.LayerEffectsDialog
 import com.artflow.studio.presentation.ui.components.editor.LayerMaskActions
 import com.artflow.studio.presentation.ui.components.editor.LayerOpacityOverlay
 import com.artflow.studio.presentation.ui.components.editor.LayerOptionActions
+import com.artflow.studio.presentation.ui.components.editor.LayerParameterGestureActions
 import com.artflow.studio.presentation.ui.components.editor.LayerRowActions
 import com.artflow.studio.presentation.ui.components.editor.LayerStackActions
 import com.artflow.studio.presentation.ui.components.editor.LayersSheet
@@ -230,6 +231,14 @@ fun CanvasScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val exportActions = rememberExportActions(viewModel)
+    val layerParameterGestures =
+        remember(viewModel) {
+            LayerParameterGestureActions(
+                viewModel.layerParameters::begin,
+                viewModel.layerParameters::update,
+                viewModel.layerParameters::end,
+            )
+        }
 
     var panel by remember { mutableStateOf(EditorPanel.NONE) }
     var canvasView by remember { mutableStateOf<ArtFlowCanvasView?>(null) }
@@ -384,7 +393,10 @@ fun CanvasScreen(
     var psdRequest by remember { mutableStateOf<CanvasImportController.Request<ByteArray>?>(null) }
     var cameraRequest by remember { mutableStateOf<CanvasImportController.Request<PixelBuffer>?>(null) }
     DisposableEffect(viewModel, projectId) {
-        onDispose { viewModel.imports.cancel() }
+        onDispose {
+            viewModel.imports.cancel()
+            viewModel.layerParameters.cancel()
+        }
     }
     val insertImageFrom = { uri: android.net.Uri ->
         canvasView?.cancelActiveGesture()
@@ -528,6 +540,7 @@ fun CanvasScreen(
                     }
 
                     Lifecycle.Event.ON_STOP -> {
+                        viewModel.layerParameters.cancel()
                         view?.cancelActiveGesture()
                         view?.pauseRendering()
                         viewModel.saveRecoveryOnBackground()
@@ -756,6 +769,7 @@ fun CanvasScreen(
                                 opacityLayer = id
                             },
                             twoFingerGestures = settings.gestureControls().layerGestures(),
+                            parameterGestures = layerParameterGestures,
                         ),
                     stackActions =
                         LayerStackActions(
@@ -802,6 +816,7 @@ fun CanvasScreen(
                             onMaskEnabled = { viewModel.setLayerMaskEnabled(it) },
                             onMaskDensity = { viewModel.setLayerMaskDensity(it) },
                             onMaskFeather = { viewModel.setLayerMaskFeather(it) },
+                            parameterGestures = layerParameterGestures,
                         ),
                     thumbnails = layerThumbnails,
                     optionActions =
@@ -1676,6 +1691,8 @@ fun CanvasScreen(
                         onChange = { viewModel.setLayerOpacity(id, it) },
                         onDone = { opacityLayer = null },
                         modifier = Modifier.zIndex(5f),
+                        layerId = id,
+                        parameterGestures = layerParameterGestures,
                     )
                 }
             }

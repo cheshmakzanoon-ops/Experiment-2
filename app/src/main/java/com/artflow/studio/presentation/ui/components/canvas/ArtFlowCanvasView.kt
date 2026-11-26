@@ -73,6 +73,7 @@ import com.artflow.studio.domain.model.animation.AnimationSettings
 import com.artflow.studio.domain.model.brush.BrushParams
 import com.artflow.studio.domain.model.brush.PressureResponse
 import com.artflow.studio.domain.model.brush.StrokeDestination
+import com.artflow.studio.domain.model.brush.StrokePoint
 import com.artflow.studio.domain.model.settings.AppSettings
 import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
@@ -441,7 +442,6 @@ class ArtFlowCanvasView
         private var navLastTimeMs = 0L
         private val strokeRawPoints = mutableListOf<Pair<Float, Float>>()
         private var strokePressureSum = 0f
-        private var strokeLastPressure = 1f
         private var quickShapeApplied = false
         private var quickShapeResult: QuickShape.Result? = null
         private var quickShapeAnchor = 0f to 0f
@@ -656,6 +656,7 @@ class ArtFlowCanvasView
         override fun onAttachedToWindow() {
             super.onAttachedToWindow()
             val attachment = ++rendererAttachment
+            palmRejection.reset()
             renderingPaused = false
             renderer.onStatusMessage = { message ->
                 post { if (isAttachedToWindow && attachment == rendererAttachment) onStatusMessage?.invoke(message) }
@@ -688,6 +689,8 @@ class ArtFlowCanvasView
         fun pauseRendering() {
             val previewWasAvailable = !renderingPaused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
             renderingPaused = true
+            // A hidden canvas may never receive the pen's UP or HOVER_EXIT.
+            palmRejection.reset()
             blockedPointerStream = true
             if (previewWasAvailable) cancelActiveGesture() else blockCanvasInput()
             if (rendererAttached) onPause()
@@ -696,6 +699,7 @@ class ArtFlowCanvasView
 
         fun resumeRendering() {
             if (rendererAttached) {
+                if (renderingPaused) palmRejection.reset()
                 renderingPaused = false
                 onResume()
                 requestRender()
@@ -777,6 +781,7 @@ class ArtFlowCanvasView
             val previewWasAvailable = !renderingPaused && renderer.previewAvailability == CanvasPreviewAvailability.AVAILABLE
             rendererAttachment++
             renderingPaused = true
+            palmRejection.reset()
             renderer.onStatusMessage = null
             renderer.onPreviewAvailabilityChanged = null
             removeCallbacks(rapidHistory)
@@ -1716,10 +1721,6 @@ class ArtFlowCanvasView
         }
 
         override fun onTouchEvent(event: MotionEvent): Boolean {
-            if (!acceptPreviewInput(event)) return true
-            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                requestUnbufferedDispatch(event)
-            }
             val action =
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> PointerGestureRouter.Event.DOWN
@@ -1730,7 +1731,12 @@ class ArtFlowCanvasView
                     MotionEvent.ACTION_CANCEL -> PointerGestureRouter.Event.CANCEL
                     else -> return false
                 }
-            if (observePalm(event, action)) return true
+            // Preview loss blocks edits, but the pen can still touch down or leave while it recovers.
+            val rejectedPalm = observePalm(event, action)
+            if (!acceptPreviewInput(event) || rejectedPalm) return true
+            if (action == PointerGestureRouter.Event.DOWN) {
+                requestUnbufferedDispatch(event)
+            }
             if (action == PointerGestureRouter.Event.MOVE) {
                 for (history in 0 until event.historySize) pointerRouter.observe(pointers(event, history))
             }
@@ -2009,8 +2015,9 @@ class ArtFlowCanvasView
 
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
-                    val time = StrokeClock.wallTime(event.eventTime, SystemClock.uptimeMillis(), System.currentTimeMillis())
-                    startStroke(canvasX, canvasY, pressure, tool, time)
+                    val eventTime = event.eventTime
+                    val time = StrokeClock.wallTime(eventTime, SystemClock.uptimeMillis(), System.currentTimeMillis())
+                    startStroke(canvasX, canvasY, pressure, tool, time, eventTime)
                 }
 
                 ToolType.SMUDGE -> {
@@ -2207,7 +2214,7 @@ class ArtFlowCanvasView
             when (tool) {
                 ToolType.BRUSH, ToolType.ERASER -> {
                     removeCallbacks(quickShapeCheck)
-                    if (drawing) finishStroke(canvasX, canvasY, cancelled)
+                    if (drawing) finishStroke(cancelled)
                     drawing = false
                     reportHistory()
                 }
@@ -2534,6 +2541,7 @@ class ArtFlowCanvasView
             pressure: Float,
             tool: ToolType,
             time: Long = System.currentTimeMillis(),
+            eventTime: Long = SystemClock.uptimeMillis(),
         ) {
             val chosen =
                 if (tool == ToolType.ERASER) {
@@ -2576,14 +2584,13 @@ class ArtFlowCanvasView
             motionFilter =
                 MotionFilter(input.motionFiltering, input.motionExpression)
                     .takeIf { it.isActive }
-                    ?.also { it.start(x, y, SystemClock.uptimeMillis()) }
+                    ?.also { it.start(x, y, eventTime) }
             pressureSmoother =
                 PressureSmoother(input.pressureSmoothing).takeIf { input.pressureSmoothing > 0f }?.also { it.start(pressure) }
             splineInterpolator.start(x, y, pressure, 0f, 0f, time)
             strokeRawPoints.clear()
             strokeRawPoints.add(x to y)
             strokePressureSum = pressure
-            strokeLastPressure = pressure
             quickShapeApplied = false
             removeCallbacks(quickShapeCheck)
             updateLiveStroke()
@@ -2666,12 +2673,8 @@ class ArtFlowCanvasView
         private fun activeLayerHasText(): Boolean =
             canvasRepository.getAllLayers().firstOrNull { it.id == activeLayerId }?.textContent != null
 
-        /** Lets the stabilised line catch up to the lift point, then commits or cancels the stroke. */
-        private fun finishStroke(
-            x: Float,
-            y: Float,
-            cancelled: Boolean,
-        ) {
+        /** Lets the filtered line catch up to the accepted lift point, then commits or cancels the stroke. */
+        private fun finishStroke(cancelled: Boolean) {
             clearPrediction()
             if (cancelled) {
                 splineInterpolator.reset()
@@ -2679,20 +2682,7 @@ class ArtFlowCanvasView
                 return
             }
             if (!quickShapeApplied) {
-                splineInterpolator.finish { sx, sy, spr, stx, sty, st ->
-                    canvasRepository.continueStroke(
-                        strokeId = currentStrokeId,
-                        x = sx,
-                        y = sy,
-                        pressure = spr,
-                        tiltX = stx,
-                        tiltY = sty,
-                        timestamp = st,
-                    )
-                }
-                stabilizer?.finish(x, y)?.forEach { (px, py) ->
-                    canvasRepository.continueStroke(currentStrokeId, px, py, strokeLastPressure)
-                }
+                finishStrokePath()
             } else {
                 splineInterpolator.reset()
             }
@@ -2708,6 +2698,24 @@ class ArtFlowCanvasView
                 shapeEdit = ShapeEdit(shape, quickShapePressure, quickShapeTool, activeLayerId, canvasRepository.historyMark)
                 editingShape = false
                 reportShapeEdit()
+            }
+        }
+
+        private fun finishStrokePath() {
+            var lastPoint: StrokePoint? = null
+            splineInterpolator.finish { sx, sy, spr, stx, sty, st ->
+                canvasRepository.continueStroke(currentStrokeId, sx, sy, spr, stx, sty, st)
+                lastPoint = StrokePoint(sx, sy, spr, stx, sty, timestamp = st)
+            }
+            val last = lastPoint ?: return
+            // The accepted sample already includes Drawing Assist; raw view coordinates can leave the guide.
+            val (x, y) = strokeRawPoints.last()
+            val catchUp =
+                stabilizer?.finish(x, y)
+                    ?: if (motionFilter != null && (last.x != x || last.y != y)) listOf(x to y) else emptyList()
+            // A pulled string deliberately supplies no catch-up, even when motion filtering is also active.
+            catchUp.forEach { (px, py) ->
+                canvasRepository.continueStroke(currentStrokeId, px, py, last.pressure, last.tiltX, last.tiltY, last.timestamp)
             }
         }
 
@@ -2821,7 +2829,6 @@ class ArtFlowCanvasView
         ) {
             strokeRawPoints.add(canvasX to canvasY)
             strokePressureSum += pressure
-            strokeLastPressure = pressure
             if (!input.quickShape) return
             if (strokeRawPoints.size == 2 || kotlin.math.hypot(viewX - holdAnchorX, viewY - holdAnchorY) > QUICKSHAPE_HOLD_SLOP) {
                 holdAnchorX = viewX
