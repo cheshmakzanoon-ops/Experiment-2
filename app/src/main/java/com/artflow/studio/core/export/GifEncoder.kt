@@ -183,6 +183,9 @@ object GifEncoder {
      * footprint while still producing good-looking ramps.
      */
     object Quantizer {
+        /** Full-colour lookup stays bounded independently of the number of distinct source pixels. */
+        private const val COLOR_CACHE_SIZE = 1 shl 15
+
         /** Named `Quantized` rather than `Result` so it cannot shadow `kotlin.Result`. */
         data class Quantized(
             val indices: ByteArray,
@@ -260,9 +263,10 @@ object GifEncoder {
             if (reserveTransparent) palette.add(0, 0) // index 0 is the transparent entry
             val paletteArray = palette.toIntArray()
 
-            // Nearest-palette-colour lookup with a small cache: consecutive pixels are usually
-            // similar, and the cache removes almost all of the distance computations.
-            val cache = HashMap<Int, Byte>(1 shl 14)
+            // Keep exact full-colour matches, but bound the cache even for high-entropy artwork.
+            // A collision replaces an entry; it must never reuse another colour's palette index.
+            val cacheColors = IntArray(COLOR_CACHE_SIZE)
+            val cacheIndices = IntArray(COLOR_CACHE_SIZE) { -1 }
             val indices = ByteArray(frame.size)
             for (i in opaque.indices) {
                 if (reserveTransparent && ((frame[i] ushr 24) and 0xFF) < HARD_EDGE_ALPHA) {
@@ -270,13 +274,15 @@ object GifEncoder {
                     continue
                 }
                 val color = opaque[i]
-                val cached = cache[color]
-                if (cached != null) {
-                    indices[i] = cached
+                val cacheSlot = (color xor (color ushr 15)) and (COLOR_CACHE_SIZE - 1)
+                val cached = cacheIndices[cacheSlot]
+                if (cached >= 0 && cacheColors[cacheSlot] == color) {
+                    indices[i] = cached.toByte()
                     continue
                 }
                 val nearest = nearestIndex(paletteArray, color, if (reserveTransparent) 1 else 0)
-                cache[color] = nearest.toByte()
+                cacheColors[cacheSlot] = color
+                cacheIndices[cacheSlot] = nearest
                 indices[i] = nearest.toByte()
             }
 
@@ -396,9 +402,9 @@ object GifEncoder {
             var b = 0L
             var count = 0L
             box.forEach { bucket ->
-                r += ((bucket.color shr 16) and 0xFF) * bucket.count
-                g += ((bucket.color shr 8) and 0xFF) * bucket.count
-                b += (bucket.color and 0xFF) * bucket.count
+                r += ((bucket.color shr 16) and 0xFF) * bucket.count.toLong()
+                g += ((bucket.color shr 8) and 0xFF) * bucket.count.toLong()
+                b += (bucket.color and 0xFF) * bucket.count.toLong()
                 count += bucket.count
             }
             if (count == 0L) return 0

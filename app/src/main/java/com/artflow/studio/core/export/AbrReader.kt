@@ -112,7 +112,7 @@ object AbrReader {
             require(nextLong <= end.toLong()) { DAMAGED }
             val next = nextLong.toInt()
             val keyLength = reader.byte(at + 4)
-            val key = reader.ascii(at + 5, keyLength)
+            val key = reader.ascii(at + 5, keyLength, retained = true)
             val pLong = at.toLong() + 4L + if (subversion == 1) V6_KEY_SHORT else V6_KEY_LONG
             require(pLong + 16L <= nextLong) { DAMAGED }
             val p = pLong.toInt()
@@ -207,9 +207,9 @@ object AbrReader {
         var at = start
         while (at + KEY_TEXT <= end) {
             when {
-                reader.matches(at, NAME_KEY) -> lastName = reader.unicode(at + NAME_KEY.length)
+                reader.matches(at, NAME_KEY) -> lastName = reader.unicode(at + NAME_KEY.length, end)
                 reader.matches(at, SAMPLED_KEY) -> {
-                    val key = reader.unicode(at + SAMPLED_KEY.length)
+                    val key = reader.unicode(at + SAMPLED_KEY.length, end)
                     if (key != null && lastName != null) names.putIfAbsent(normalised(key), lastName)
                 }
             }
@@ -258,8 +258,10 @@ object AbrReader {
         fun ascii(
             at: Int,
             length: Int,
+            retained: Boolean = false,
         ): String {
             require(at >= 0 && length in 0..size - at) { DAMAGED }
+            if (retained) budget?.retainText(length)
             return String(bytes, at, length, Charsets.ISO_8859_1)
         }
 
@@ -268,14 +270,18 @@ object AbrReader {
             characters: Int,
         ): String {
             require(at >= 0 && characters in 0..(size - at) / 2) { DAMAGED }
+            budget?.retainText(characters)
             return String(bytes, at, characters * 2, Charsets.UTF_16BE).trimEnd('\u0000')
         }
 
-        /** A descriptor's Unicode string: a character count, then UTF-16; null when it does not fit. */
-        fun unicode(at: Int): String? {
-            if (at.toLong() + 4L > size) return null
+        /** A descriptor's Unicode string: a character count, then UTF-16; null when it does not fit its section. */
+        fun unicode(
+            at: Int,
+            end: Int,
+        ): String? {
+            if (at < 0 || at.toLong() + 4L > end.toLong()) return null
             val characters = int(at)
-            if (characters !in 0..MAX_NAME || at.toLong() + 4L + characters.toLong() * 2L > size) return null
+            if (characters !in 0..MAX_NAME || at.toLong() + 4L + characters.toLong() * 2L > end.toLong()) return null
             return utf16(at + 4, characters).trim().takeIf { it.isNotEmpty() }
         }
 

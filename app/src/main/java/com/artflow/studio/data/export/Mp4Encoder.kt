@@ -9,6 +9,7 @@ import android.media.MediaFormat
 import android.os.SystemClock
 import androidx.media3.muxer.MediaMuxerCompat
 import com.artflow.studio.core.export.ExportOptions
+import com.artflow.studio.core.lifecycle.withCleanup
 import com.artflow.studio.core.pixels.BlendModes
 import com.artflow.studio.core.pixels.PixelBuffer
 import kotlinx.coroutines.currentCoroutineContext
@@ -88,9 +89,10 @@ internal object Mp4Encoder {
                 ?: throw UnsupportedOperationException("This device does not advertise an H.264 Baseline level")
         format.setInteger(MediaFormat.KEY_LEVEL, level)
         val codec = MediaCodec.createByCodecName(name)
-        try {
+        withCleanup({ codec.release() }) {
             val muxer = MediaMuxerCompat(output.absolutePath, MediaMuxerCompat.OUTPUT_FORMAT_MP4)
-            try {
+            // Release can finalize the muxer and fail; keep the encoding failure or cancellation primary.
+            withCleanup({ muxer.release() }) {
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
                 codec.start()
                 val session = EncodingSession(codec, muxer)
@@ -101,7 +103,8 @@ internal object Mp4Encoder {
                     require(frame.width <= width && frame.height <= height) { "Video frame sizes do not match" }
                     val inputIndex = session.inputIndex()
                     val image = requireNotNull(codec.getInputImage(inputIndex)) { "The encoder did not provide a writable YUV image" }
-                    fillImage(image, frame, width, height, options.backgroundColor)
+                    // Prepared pixels and the matte must use the same output colour profile.
+                    fillImage(image, frame, width, height, options.outputBackground)
                     // The codec owns the Image again after queueInputBuffer; never retain its planes.
                     codec.queueInputBuffer(inputIndex, 0, width * height * 3 / 2, presentationUs, 0)
                     val durationUs =
@@ -115,11 +118,7 @@ internal object Mp4Encoder {
                 session.drain(waitForEnd = true)
                 session.finish(presentationUs, frameCount)
                 codec.stop()
-            } finally {
-                muxer.release()
             }
-        } finally {
-            codec.release()
         }
         check(output.length() > 0L) { "The encoder produced an empty video" }
     }
@@ -164,7 +163,7 @@ internal object Mp4Encoder {
         }
 
         private fun writeOutput(index: Int) {
-            try {
+            withCleanup({ codec.releaseOutputBuffer(index, false) }) {
                 val eos = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
                 val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                 if (info.size > 0 && !config) {
@@ -179,8 +178,6 @@ internal object Mp4Encoder {
                     samplesWritten++
                 }
                 outputEnded = eos
-            } finally {
-                codec.releaseOutputBuffer(index, false)
             }
         }
 

@@ -26,6 +26,17 @@ internal class BrushDecodeBudget(
 
     fun retainPath(characters: Int) = retain(512L + characters.toLong() * 8)
 
+    /**
+     * ABR text reserves UTF-16 decoding, trimming and key-normalisation copies plus map bookkeeping.
+     * Sixteen bytes per code unit covers those copies; 512 bytes covers strings and their entries.
+     * Keep charges for temporary, empty and duplicate candidates too: descriptor scans may overlap,
+     * so releasing them would allow repeated decoding work to escape the input and memory limits.
+     */
+    fun retainText(characters: Int) {
+        require(characters >= 0) { MEMORY_MESSAGE }
+        retain(512L + characters.toLong() * 16L)
+    }
+
     /** Reserve ByteArrayOutputStream's growth buffer and returned copy before inflation. */
     fun entryLimit(formatLimit: Int): Int = minOf(formatLimit.toLong(), (bytes - retained) / 3).toInt()
 

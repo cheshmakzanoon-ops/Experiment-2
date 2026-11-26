@@ -283,7 +283,8 @@ class NativeCurvePersistenceDeviceTest {
             .put("formatVersion", 1)
             .put(
                 "scope",
-                "Native curve metadata preservation through Android import, Room and brush interchange; no rendering or native-app parity claim.",
+                "Native curve metadata preservation through Android import, Room and brush interchange; " +
+                    "no rendering or native-app parity claim.",
             ).put("sdk", Build.VERSION.SDK_INT)
             .put("fingerprint", Build.FINGERPRINT)
             .put("components", 2)

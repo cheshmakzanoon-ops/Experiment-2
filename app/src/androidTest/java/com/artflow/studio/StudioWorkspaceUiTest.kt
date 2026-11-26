@@ -454,9 +454,9 @@ class StudioWorkspaceUiTest {
                     }
                 }
                 observed = counts
-                val paper = counts.filterKeys { closeColor(it, background) }.maxByOrNull { it.value }
-                val ink = counts.filterKeys { closeColor(it, foreground) }.maxByOrNull { it.value }
-                if (paper == null || ink == null || paper.value < 12 || ink.value < 12) {
+                val paper = counts.filterKeys { closeColor(it, background) }.maxByOrNull { it.value }?.takeIf { it.value >= 12 }
+                val ink = counts.filterKeys { closeColor(it, foreground) }.maxByOrNull { it.value }?.takeIf { it.value >= 12 }
+                if (paper == null || ink == null) {
                     false
                 } else {
                     contrast = ColorUtils.calculateContrast(ink.key, paper.key)

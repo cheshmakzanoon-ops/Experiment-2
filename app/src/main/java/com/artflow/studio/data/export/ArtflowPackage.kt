@@ -167,12 +167,26 @@ object ArtflowPackage {
         return out.toByteArray()
     }
 
-    /** Streams an `.artflow` package directly to [destination] via an atomic temp file. */
+    /** Streams via an atomic temp file, checking the caller's cancellation before publication. */
     fun writeToFile(
         name: String,
         destination: File,
         sources: List<EntrySource>,
+        checkActive: () -> Unit = {},
+    ) = writeToFile(name, destination, sources, MAX_TOTAL_BYTES, StagedImport.MAX_PACKAGE_BYTES, checkActive)
+
+    /** Tests may narrow the import ceilings, but an export must never widen them. */
+    internal fun writeToFile(
+        name: String,
+        destination: File,
+        sources: List<EntrySource>,
+        maxTotalBytes: Long,
+        maxArchiveBytes: Long = StagedImport.MAX_PACKAGE_BYTES,
+        checkActive: () -> Unit = {},
     ) {
+        require(maxTotalBytes in 1..MAX_TOTAL_BYTES) { "Invalid artwork content size limit" }
+        require(maxArchiveBytes in 1..StagedImport.MAX_PACKAGE_BYTES) { "Invalid artwork archive size limit" }
+        checkActive()
         val seen = HashSet<String>(sources.size)
         sources.forEach { source ->
             require(ALLOWED.matches(source.path)) { "Unexpected file in an artwork: ${source.path}" }
@@ -185,7 +199,11 @@ object ArtflowPackage {
         check(parent.isDirectory || parent.mkdirs()) { "Cannot create export directory" }
         val temp = File.createTempFile(".${destination.name}-", ".tmp", parent)
         try {
-            writeTempArchive(temp, name, sources)
+            writeTempArchive(temp, name, sources, maxTotalBytes, checkActive)
+            // Gallery stages the compressed file before inspecting the expanded members.
+            require(temp.length() <= maxArchiveBytes) { "This artwork file is too large to export" }
+            // Observe cancellation during source/ZIP close before the atomic publication boundary.
+            checkActive()
             Files.move(
                 temp.toPath(),
                 destination.toPath(),
@@ -201,14 +219,21 @@ object ArtflowPackage {
         temp: File,
         name: String,
         sources: List<EntrySource>,
+        maxTotalBytes: Long,
+        checkActive: () -> Unit,
     ) {
         val buffer = ByteArray(BUFFER)
+        val marker = json.encodeToString(Marker.serializer(), Marker(name = name)).toByteArray()
+        require(marker.size <= minOf(MAX_METADATA_BYTES, maxTotalBytes)) { "This artwork metadata is too large to export" }
+        var remainingBytes = maxTotalBytes - marker.size
         FileOutputStream(temp).use { fileOut ->
             ZipOutputStream(BufferedOutputStream(fileOut)).use { zip ->
                 zip.putNextEntry(ZipEntry(MARKER))
-                zip.write(json.encodeToString(Marker.serializer(), Marker(name = name)).toByteArray())
+                zip.write(marker)
                 zip.closeEntry()
-                sources.forEach { source -> writeZipEntry(zip, source, buffer) }
+                sources.forEach { source ->
+                    remainingBytes -= writeZipEntry(zip, source, buffer, minOf(entryLimit(source.path), remainingBytes), checkActive)
+                }
                 zip.finish()
                 zip.flush()
                 fileOut.flush()
@@ -221,16 +246,24 @@ object ArtflowPackage {
         zip: ZipOutputStream,
         source: EntrySource,
         buffer: ByteArray,
-    ) {
+        limit: Long,
+        checkActive: () -> Unit,
+    ): Long {
+        checkActive()
+        var written = 0L
         zip.putNextEntry(ZipEntry(source.path))
         source.openStream().use { input ->
             while (true) {
+                checkActive()
                 val count = input.read(buffer)
                 if (count < 0) break
+                require(count <= limit - written) { "This artwork is too large to export" }
+                written += count
                 zip.write(buffer, 0, count)
             }
         }
         zip.closeEntry()
+        return written
     }
 
     /** Recognises a generic ZIP without inflating any payload; [openFile] performs full package validation. */

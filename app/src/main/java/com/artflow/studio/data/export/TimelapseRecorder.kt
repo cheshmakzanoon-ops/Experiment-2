@@ -96,18 +96,38 @@ class TimelapseRecorder
                     if (!isEnabled || !permitted() || !isRecording(projectId)) return@withLock
                     if (projectId == lastProjectId && hash == lastHash) return@withLock
                     val bytes = BitmapPixelBridge.toJpegBytes(frame, JPEG_QUALITY, 0xFFFFFFFF.toInt())
-                    withContext(Dispatchers.IO) {
-                        var existing = frames(projectId)
-                        if (existing.size >= MAX_FRAMES) existing = decimate(existing)
-                        val next = (existing.lastOrNull()?.nameWithoutExtension?.toIntOrNull() ?: -1) + 1
-                        val file = File(dir(projectId), "%06d%s".format(next, EXTENSION))
-                        storage.writeAtomically(file) { it.write(bytes) }
-                    }
+                    val captured =
+                        withContext(Dispatchers.IO) {
+                            val coroutine = currentCoroutineContext()
+                            val checkCapture = {
+                                coroutine.ensureActive()
+                                val permittedNow = isEnabled && permitted() && !pausedMarker(projectId).exists()
+                                coroutine.ensureActive()
+                                if (!permittedNow) throw RecordingStoppedException()
+                            }
+                            try {
+                                // Encoding and syncing can outlast a recording toggle or an editor
+                                // close. Check before thinning existing frames and at publication.
+                                checkCapture()
+                                var existing = frames(projectId)
+                                if (existing.size >= MAX_FRAMES) existing = decimate(existing)
+                                val next = (existing.lastOrNull()?.nameWithoutExtension?.toIntOrNull() ?: -1) + 1
+                                val file = File(dir(projectId), "%06d%s".format(next, EXTENSION))
+                                storage.writeAtomically(file, modifiedAfter = null, beforeCommit = checkCapture) { it.write(bytes) }
+                                true
+                            } catch (_: RecordingStoppedException) {
+                                false
+                            }
+                        }
+                    if (!captured) return@withLock
                     lastProjectId = projectId
                     lastHash = hash
                 }
             }
         }
+
+        /** A recording toggle discards only this frame; coroutine cancellation still propagates. */
+        private class RecordingStoppedException : RuntimeException()
 
         suspend fun clear(projectId: Long) {
             mutex.withLock {

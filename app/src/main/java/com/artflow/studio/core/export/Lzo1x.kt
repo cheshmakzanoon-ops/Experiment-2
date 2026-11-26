@@ -6,7 +6,7 @@ package com.artflow.studio.core.export
  * [IllegalArgumentException] instead of reading or writing out of range.
  */
 object Lzo1x {
-    /** Decodes [source] into at most [size] bytes; the result is shorter if the stream ends sooner. */
+    /** Decodes a complete [source] stream into at most [size] bytes; the result can be shorter. */
     fun decompress(
         source: ByteArray,
         size: Int,
@@ -73,7 +73,10 @@ object Lzo1x {
             val length = (t and 7).let { if (it == 0) zeroRun(7) else it }
             val word = le16()
             val distance = ((t and 8) shl 11) + (word shr 2)
-            if (distance == 0) return -1
+            if (distance == 0) {
+                require(length == 1 && ip == src.size) { DAMAGED }
+                return -1
+            }
             match(distance + M4_BASE, length + 2)
             return word and 3
         }

@@ -46,7 +46,7 @@ object BinaryPlist {
                 require(offset in MAGIC.size.toLong() until table) { DAMAGED }
                 offset.toInt()
             }
-        return Reader(bytes, offsets, refSize, budget).read(top.toInt(), 0)
+        return Reader(bytes, offsets, refSize, table.toInt(), budget).read(top.toInt(), 0)
     }
 
     private fun decodedByteLimit(): Long = minOf(MAX_DECODED_BYTES, Runtime.getRuntime().maxMemory() / 8)
@@ -225,6 +225,7 @@ object BinaryPlist {
         val bytes: ByteArray,
         val offsets: IntArray,
         val refSize: Int,
+        val objectEnd: Int,
         val budget: DecodedBudget,
     ) {
         private var reads = 0
@@ -254,7 +255,7 @@ object BinaryPlist {
                     }
                 0x1 -> {
                     require(info <= 4) { DAMAGED }
-                    number(bytes, at, 1 shl info)
+                    number(bytes, at, 1 shl info, objectEnd)
                 }
                 0x2 -> {
                     require(info in 2..3) { DAMAGED }
@@ -262,7 +263,7 @@ object BinaryPlist {
                 }
                 0x3 -> real(at, 8)
                 0x8 -> {
-                    val value = number(bytes, at, info + 1)
+                    val value = unsignedNumber(at, info + 1)
                     require(value in 0..Int.MAX_VALUE.toLong()) { DAMAGED }
                     Uid(value.toInt())
                 }
@@ -279,14 +280,16 @@ object BinaryPlist {
             var at = start
             var length = info.toLong()
             if (info == 0xF) {
-                require(at < bytes.size) { DAMAGED }
-                val sizeShift = bytes[at].toInt() and 0xF
+                require(at < objectEnd) { DAMAGED }
+                val lengthMarker = bytes[at].toInt() and 0xFF
+                require(lengthMarker ushr 4 == 0x1) { DAMAGED }
+                val sizeShift = lengthMarker and 0xF
                 require(sizeShift <= 4) { DAMAGED }
                 val size = 1 shl sizeShift
-                length = number(bytes, at + 1, size)
+                length = unsignedNumber(at + 1, size)
                 at += 1 + size
             }
-            val remaining = (bytes.size - at).coerceAtLeast(0).toLong()
+            val remaining = (objectEnd - at).coerceAtLeast(0).toLong()
             require(length in 0L..remaining) { DAMAGED }
             val n = length.toInt()
             return when (kind) {
@@ -333,16 +336,26 @@ object BinaryPlist {
             }
 
         private fun ref(at: Int): Int {
-            val value = number(bytes, at, refSize)
+            val value = number(bytes, at, refSize, objectEnd)
             require(value in 0L until offsets.size.toLong()) { DAMAGED }
             return value.toInt()
+        }
+
+        /** Sizes and UIDs must fit without discarding any high bytes of a wide encoding. */
+        private fun unsignedNumber(
+            at: Int,
+            size: Int,
+        ): Long {
+            val value = number(bytes, at, size, objectEnd)
+            require(value >= 0L && (0 until (size - Long.SIZE_BYTES)).all { bytes[at + it] == 0.toByte() }) { DAMAGED }
+            return value
         }
 
         private fun slice(
             at: Int,
             length: Int,
         ): ByteArray {
-            require(at >= 0 && length <= bytes.size - at) { DAMAGED }
+            require(at >= 0 && length <= objectEnd - at) { DAMAGED }
             return bytes.copyOfRange(at, at + length)
         }
 
@@ -350,7 +363,7 @@ object BinaryPlist {
             at: Int,
             size: Int,
         ): Double {
-            val bits = number(bytes, at, size)
+            val bits = number(bytes, at, size, objectEnd)
             return if (size == 4) {
                 java.lang.Float
                     .intBitsToFloat(bits.toInt())
@@ -366,8 +379,9 @@ object BinaryPlist {
         bytes: ByteArray,
         at: Int,
         size: Int,
+        end: Int = bytes.size,
     ): Long {
-        require(at >= 0 && size in 1..MAX_NUMBER && size <= bytes.size - at) { DAMAGED }
+        require(at >= 0 && size in 1..MAX_NUMBER && size <= end - at) { DAMAGED }
         var value = 0L
         for (k in maxOf(0, size - 8) until size) value = (value shl 8) or (bytes[at + k].toLong() and 0xFF)
         return value

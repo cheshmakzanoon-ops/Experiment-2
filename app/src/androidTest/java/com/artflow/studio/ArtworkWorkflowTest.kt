@@ -86,6 +86,7 @@ class ArtworkWorkflowTest {
         }
         val name = "Workflow-${System.nanoTime()}"
         val scenario = ActivityScenario.launch(MainActivity::class.java)
+        val failures = mutableListOf<Throwable>()
         try {
             createArtwork(name)
             awaitCanvas(scenario)
@@ -138,22 +139,30 @@ class ArtworkWorkflowTest {
             assertArrayEquals("Discarding must not replace the last saved artwork", painted, pixels())
             assertFalse(runBlocking { storage.hasUnsavedRecovery(projectId) })
         } catch (failure: Throwable) {
+            failures.add(failure)
             // Preserve the actual editor before closing the Activity or deleting this test's artwork.
             runCatching { TestEvidence.screenshot("artwork-workflow-first-failure.png") }
-                .exceptionOrNull()
-                ?.let(failure::addSuppressed)
-            throw failure
-        } finally {
-            scenario.close()
+                .onFailure(failures::add)
+        }
+        runCatching { scenario.close() }.onFailure(failures::add)
+        runCatching {
             runBlocking {
                 val owned = projects.getAllProjects().first().filter { it.name == name }
                 owned.forEach {
                     projects.deleteProjectById(it.id)
                     storage.deleteProjectFiles(it.id)
                 }
-                settings.update { originalSettings }
             }
-        }
+        }.onFailure(failures::add)
+        runCatching { runBlocking { settings.update { originalSettings } } }.onFailure(failures::add)
+        throwFailures(failures)
+    }
+
+    /** Keep the first failure and its stack trace; cleanup and diagnostic errors remain visible. */
+    private fun throwFailures(failures: List<Throwable>) {
+        val original = failures.firstOrNull() ?: return
+        failures.drop(1).filter { it !== original }.forEach(original::addSuppressed)
+        throw original
     }
 
     private fun inspectBrushStudio(expectedPixels: IntArray) {
@@ -246,7 +255,7 @@ class ArtworkWorkflowTest {
                 .put("events", events)
         var window: Window? = null
         var originalCallback: Window.Callback? = null
-        var failure: Throwable? = null
+        val failures = mutableListOf<Throwable>()
         try {
             val tab = compose.onNode(hasText("Drawing pad") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
             tab.assertIsDisplayed().assertIsEnabled().assertIsNotSelected()
@@ -312,26 +321,17 @@ class ArtworkWorkflowTest {
             )
             tab.assertIsSelected()
         } catch (error: Throwable) {
-            failure = error
-            receipt.put("failure", error.toString())
-            throw error
-        } finally {
-            val restoreFailure =
-                runCatching { instrumentation.runOnMainSync { originalCallback?.let { requireNotNull(window).callback = it } } }
-                    .exceptionOrNull()
-            restoreFailure?.let { receipt.put("callbackRestoreFailure", it.toString()) }
-            val receiptFailure =
-                runCatching { File(TestEvidence.directory(), "artwork-workflow-drawing-pad-touch.json").writeText(receipt.toString(2)) }
-                    .exceptionOrNull()
-            val originalFailure = failure
-            val additional = listOfNotNull(restoreFailure, receiptFailure)
-            if (originalFailure != null) {
-                additional.forEach(originalFailure::addSuppressed)
-            } else if (additional.isNotEmpty()) {
-                additional.drop(1).forEach(additional.first()::addSuppressed)
-                throw additional.first()
-            }
+            failures.add(error)
+            runCatching { receipt.put("failure", error.toString()) }.onFailure(failures::add)
         }
+        val restoreFailure =
+            runCatching { instrumentation.runOnMainSync { originalCallback?.let { requireNotNull(window).callback = it } } }
+                .onFailure(failures::add)
+                .exceptionOrNull()
+        runCatching { restoreFailure?.let { receipt.put("callbackRestoreFailure", it.toString()) } }.onFailure(failures::add)
+        runCatching { File(TestEvidence.directory(), "artwork-workflow-drawing-pad-touch.json").writeText(receipt.toString(2)) }
+            .onFailure(failures::add)
+        throwFailures(failures)
     }
 
     private fun drawingPadScreenBounds(
@@ -395,18 +395,7 @@ class ArtworkWorkflowTest {
             // Walk its actual child nodes once; retain the full observed tree, including rejected labels.
             while (pending.isNotEmpty()) {
                 val (node, path) = pending.removeFirst()
-                try {
-                    refreshAccessibilityNode(node, path, refreshes)
-                    val missingChildren = JSONArray()
-                    observations.put(accessibilityObservation(node).put("path", path).put("missingChildIndices", missingChildren))
-                    if (node.text?.toString() == "Drawing pad") labels.add(AccessibilityNodeInfo.obtain(node))
-                    repeat(node.childCount) { index ->
-                        val child = node.getChild(index)
-                        if (child == null) missingChildren.put(index) else pending.addLast(child to "$path/$index")
-                    }
-                } finally {
-                    node.recycle()
-                }
+                inspectDrawingPadNode(node, path, observations, refreshes, labels, pending)
             }
             return labels
         } catch (failure: Throwable) {
@@ -414,6 +403,29 @@ class ArtworkWorkflowTest {
             throw failure
         } finally {
             pending.forEach { (node, _) -> node.recycle() }
+        }
+    }
+
+    /** Recycle this dequeued node after retaining any matching label copy and queued children. */
+    private fun inspectDrawingPadNode(
+        node: AccessibilityNodeInfo,
+        path: String,
+        observations: JSONArray,
+        refreshes: JSONArray,
+        labels: MutableList<AccessibilityNodeInfo>,
+        pending: ArrayDeque<Pair<AccessibilityNodeInfo, String>>,
+    ) {
+        try {
+            refreshAccessibilityNode(node, path, refreshes)
+            val missingChildren = JSONArray()
+            observations.put(accessibilityObservation(node).put("path", path).put("missingChildIndices", missingChildren))
+            if (node.text?.toString() == "Drawing pad") labels.add(AccessibilityNodeInfo.obtain(node))
+            repeat(node.childCount) { index ->
+                val child = node.getChild(index)
+                if (child == null) missingChildren.put(index) else pending.addLast(child to "$path/$index")
+            }
+        } finally {
+            node.recycle()
         }
     }
 

@@ -33,6 +33,14 @@ object ApngEncoder {
         out.write(SIGNATURE)
         val data = DataOutputStream(out)
         write(data, "IHDR", header.data)
+        // PngCodec's profile and density describe every frame, so retain them once before image
+        // data. Animation chunks are rebuilt below; no frame-local control chunks are copied.
+        parsed
+            .first()
+            .takeWhile { it.type != "IDAT" }
+            .filter { it.type == "iCCP" || it.type == "pHYs" }
+            .distinctBy { it.type }
+            .forEach { write(data, it.type, it.data) }
         write(data, "acTL", ints(frames.size, loops))
         var sequence = 0
         parsed.forEachIndexed { index, frame ->

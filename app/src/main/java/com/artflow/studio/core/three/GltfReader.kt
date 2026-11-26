@@ -396,6 +396,7 @@ object GltfReader {
     ) {
         private val text = StringBuilder()
         private var vertices = 0
+        private var normalsWritten = 0
         private var plannedTriangles = 0L
         var triangles = 0
             private set
@@ -462,11 +463,13 @@ object GltfReader {
                         .append(id)
                         .append('/')
                         .append(id)
-                    if (normals != null) text.append('/').append(id)
+                    // OBJ normal records have their own indices; earlier primitives may omit them.
+                    if (normals != null) text.append('/').append(normalsWritten + index + 1)
                 }
                 text.append('\n')
             }
             vertices += count
+            if (normals != null) normalsWritten += count
             triangles += indices.size / 3
             require(triangles <= ObjParser.MAX_TRIANGLES) { "This model has too many triangles" }
         }

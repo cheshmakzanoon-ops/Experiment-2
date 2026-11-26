@@ -949,8 +949,17 @@ class ProjectStorage
                 require(fileName.isNotBlank() && fileName.length <= 180 && fileName !in setOf(".", "..")) { "Invalid export filename" }
                 require(fileName.none { it == '/' || it == '\\' || it.code < 32 }) { "Export filename must not contain a path" }
                 require(bytes.isNotEmpty()) { "The export is empty" }
+                val coroutine = currentCoroutineContext()
                 val file = File(exportsDir(projectId), fileName)
-                writeAtomically(file) { out -> out.write(bytes) }
+                writeAtomically(file, null, beforeCommit = coroutine::ensureActive) { out ->
+                    var offset = 0
+                    while (offset < bytes.size) {
+                        coroutine.ensureActive()
+                        val count = minOf(DEFAULT_BUFFER_SIZE, bytes.size - offset)
+                        out.write(bytes, offset, count)
+                        offset += count
+                    }
+                }
                 file
             }
 
@@ -995,7 +1004,7 @@ class ProjectStorage
                 require(expectedBytes > 0L) { "The export is empty" }
                 val coroutine = currentCoroutineContext()
                 val target = File(exportsDir(projectId), fileName)
-                writeAtomically(target) { out ->
+                writeAtomically(target, null, beforeCommit = coroutine::ensureActive) { out ->
                     coroutine.ensureActive()
                     source.inputStream().use { input ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -1070,11 +1079,12 @@ class ProjectStorage
         internal fun writeAtomically(
             target: File,
             write: (FileOutputStream) -> Unit,
-        ) = writeAtomically(target, null, write)
+        ) = writeAtomically(target, null, write = write)
 
         internal fun writeAtomically(
             target: File,
             modifiedAfter: Long?,
+            beforeCommit: () -> Unit = {},
             write: (FileOutputStream) -> Unit,
         ) {
             StorageFileTree.requireUnlinked(target, context.filesDir)
@@ -1090,6 +1100,9 @@ class ProjectStorage
                     modifiedAfter?.let { StorageCommitTime.ensureAfter(temp, it) }
                     out.fd.sync()
                 }
+                // Export cancellation can arrive during sync/close. Document persistence keeps its
+                // existing commit semantics unless the caller explicitly supplies this check.
+                beforeCommit()
                 // Never fall back to an overwrite copy: a failed atomic replacement must leave the
                 // previous artwork intact. Both files are on the same app-private filesystem.
                 Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)

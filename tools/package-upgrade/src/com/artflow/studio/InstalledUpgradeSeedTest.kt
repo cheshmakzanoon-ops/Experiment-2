@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -179,12 +180,11 @@ class InstalledUpgradeSeedTest {
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("Light").performClick()
         val stylus = toggle("Stylus only").performScrollTo()
-        stylus
-            .assertIsOff()
-            .performClick()
-            .assertIsOn()
-            .performClick()
-            .assertIsOff()
+        stylus.assertIsOff().performClick()
+        awaitStylusOnly(true)
+        stylus.assertIsOn().performClick()
+        awaitStylusOnly(false)
+        stylus.assertIsOff()
         toggle("Autosave").performScrollTo().assertIsOn()
         // Both historical sliders share the autosave label's semantic siblings. The retained
         // UI exposes this exact range only on the autosave interval, not the interface scale.
@@ -203,8 +203,24 @@ class InstalledUpgradeSeedTest {
         awaitGallery()
     }
 
-    private fun toggle(label: String) =
-        compose.onNode(isToggleable() and hasClickAction() and hasAnyDescendant(hasText(label)), useUnmergedTree = true)
+    private fun toggleMatcher(label: String) = isToggleable() and hasClickAction() and hasAnyDescendant(hasText(label))
+
+    private fun toggle(label: String) = compose.onNode(toggleMatcher(label), useUnmergedTree = true)
+
+    private fun awaitStylusOnly(enabled: Boolean) {
+        val state = if (enabled) ToggleableState.On else ToggleableState.Off
+        // The historical preference transaction runs asynchronously. Observe its durable
+        // publication and the resulting UI before asserting or issuing the next single click.
+        compose.waitUntil(TIMEOUT) {
+            runBlocking { settings.settings.first().stylusOnly == enabled } &&
+                compose
+                    .onAllNodes(
+                        toggleMatcher("Stylus only") and SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, state),
+                        useUnmergedTree = true,
+                    ).fetchSemanticsNodes()
+                    .size == 1
+        }
+    }
 
     private fun createArtwork(name: String) {
         compose.onNodeWithText("New artwork", useUnmergedTree = true).performClick()

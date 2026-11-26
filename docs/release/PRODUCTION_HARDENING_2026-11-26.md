@@ -74,6 +74,24 @@ complete Procreate interchange, GPU painting, or physical pen-latency qualificat
 | 056 | Complete Procreate zlib tiles | Require stream completion, bounded decoded size and no trailing input; reject missing checksums and plausible truncated prefixes through the existing damaged-tile path. Add independent zlib/edge-placement regressions. Flattened import caller protection is tracked in 057. |
 | 057 | Atomic damaged-composite refusal | Check flattened Procreate damage before profile/layer/history publication for every fallback reason. Five real-repository tests and one staged-archive device regression preserve pixels, undo/redo, saved files and unrelated open imports. |
 | 058 | Complete ABR sample rows | Require every PackBits row to produce its declared width; preserve legal no-ops and reject a damaged later tip before batch installation. Nine independent valid/malformed regressions added. Optional metadata scan allocation is a separate follow-up. |
+| 059 | Compressed stream termination | Require exact Apple LZ4/LZO stream termination; accept the documented Apple `bv4-` stored-block header alongside existing `bvx-`. Preserve overlap/dictionary and raw-block behavior. Fourteen independent codec/caller regressions added. |
+| 060 | Device failure diagnostics | Preserve the primary throwable and attach diagnostic/cleanup failures without masking it; attempt settings restoration after other cleanup failures. Simplify traversal/contrast checks without changing observations, thresholds or the 12 declared test identities. Four broader static findings resolved. |
+| 061 | ABR metadata admission | Charge decoded names/keys before allocation, including discarded/duplicate candidates, within the shared decode allowance. Bound optional strings to their descriptor section and preserve complete valid names. Twelve caller and independent metadata regressions added. |
+| 062 | Binary plist structural boundaries | Bound object payloads before the offset table and reject extended lengths/UIDs that discard nonzero high bytes or use the wrong marker. Preserve supported scalar semantics and zero-padded values. Fourteen handcrafted parser/caller methods added. |
+
+| 063 | ZIP payload integrity | Verify actual entry CRC after the existing bounded read; reject exact-size, still-decodable metadata/tile corruption. Independent JRE proof and a staged-import device regression preserve destination history/files and unrelated imports. Directory preflight review found no additional defect. |
+| 064 | Native package publication | Check export cancellation during streaming and before atomic replacement; enforce existing member, aggregate and staged-archive import limits before publishing. Preserve prior exports and source snapshot ownership. Six pure and three real-exporter regressions added. |
+| 065 | Mixed-normal model imports | Track OBJ normal indices separately from positions across glTF/GLB primitives and USD meshes. Three preparation-path regressions cover alternating missing/present normals without changing model-format admission. |
+
+| 066 | GIF quantization fidelity and memory | Widen channel-weight products before multiplication to prevent large bright regions changing color. Replace an unbounded full-color map with an exact-match, fixed 256 KiB lookup; collisions preserve nearest-color output. Independent ImageIO regressions added. |
+| 067 | APNG frame metadata | Retain the first PNG frame's generated color profile and pixel density once before image data, preserving selected DPI and profile inheritance. Keep animation chunks regenerated. Three independent framing/metadata regressions added. |
+
+| 068 | Shared export commit cancellation | Check active ownership during chunked byte writes and after sync/close before atomic replacement for both byte and streamed exports. Keep ordinary document commit semantics unchanged. Four actual animation/storage regressions preserve previous outputs, sources and staging cleanup. |
+| 069 | MP4 background color profile | Matte prepared animation pixels and pad odd dimensions with the converted output-profile background. Add an actual exported-video decode test comparing transparent, partial-alpha, opaque and padded regions against Android's independent color connector. |
+
+| 070 | Timelapse capture permission | Recheck recording permission, master switch, artwork marker and coroutine ownership after encoding and before atomic publication. Avoid caching skipped frames. Three actual-recorder regressions preserve source/recording/save/recovery data at the tested boundaries; broader decimation/replay retention is separate. |
+
+| 072 | MP4 cleanup failure retention | Preserve original codec failure/cancellation while releasing output buffers, muxer and codec in order. Use the existing secondary-failure retention mechanism; successful work still fails if finalization fails. Eleven pure lifecycle regressions passed, including explicitly enabled coroutine recovery. |
 
 The integrator also binds export completion and cancellation to the initiating artwork/request,
 so an old operation cannot replace a newer result. Opening another artwork cancels pending
@@ -131,6 +149,29 @@ exports and clears the prior result without deleting completed export files.
   addresses stable grapheme boundaries. All eight workflow jobs have completed: the build passed
   and all seven device jobs failed. These corrections await a subsequent hosted run; failed
   attempts remain failed.
+- `3354025c50f8229d6b9000a0ce80f89aa2829a80` publishes tasks 036–058 together with
+  the PSD selection-test contract correction and export-preview ownership repair. Its
+  [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45781349947),
+  [optimized qualification](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45781349996),
+  [normal release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45781349986), and
+  [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45781350111)
+  have started. The build, optimized qualification and normal release UI passed. The seven-device
+  matrix is partially complete: API26, API35/4 KB, API36/4 KB and API36/16 KB each finished all
+  383 declared tests with the same single PSD fixture failure; API26 retained its two declared
+  API-limited skips. The new fixture searched for a layer named Ink, but its setup used Ink only
+  as an undo description. The follow-up explicitly names the fixture layer and preserves all
+  source/mask/visible/composite assertions. The earlier API26 segmentation and recycled-preview
+  failures no longer occur in this run. The other three lanes are pending.
+  Installed upgrade failed during the historical app's seed: the test asserted
+  the Stylus only switch immediately after an asynchronous Room-backed preference update, before
+  the UI changed. The candidate had not been installed. The retained first attempt remains failed;
+  the test-overlay correction observes both stored preference and rendered state under the existing
+  timeout before the next single action. It changes no historical production source or campaign gate.
+  Its frozen 71-file tree matches the locally calculated Git
+  tree `e06d511185bb875041681aef961c6f785f8efb95`. Changed-file ktlint (65 Kotlin files),
+  detekt across main/unit sources and resource checks passed locally without baseline changes.
+  A broader Android-test detekt scan also found four pre-existing diagnostic/style issues;
+  task 060 owns that follow-up rather than treating the broader scan as a pass.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android
@@ -182,6 +223,34 @@ exports and clears the prior result without deleting completed export files.
 - Task 058's prior ABR decoder failed all seven malformed-row/batch regressions. The corrected
   decoder passed **15 tests in four classes**, preserving literal, repeated, no-op and 16-bit
   decoding while rejecting incomplete rows before installation.
+- Task 059's isolated prior codec run failed nine of fourteen completion/compatibility cases;
+  the corrected run passed all fourteen. The integrated current LZ4/LZO/Procreate reader batch
+  then passed **85 tests across ten classes**, including native mask export, writer and USD paths.
+- Task 060's source-extracted error aggregation check passed **33 cases** and confirmed first-error
+  identity, ordered secondary errors, continued cleanup and self-suppression protection. Its
+  scoped ktlint and expanded detekt passed; this is not Android/Compose execution evidence.
+- Task 061's preserved reader/budget failed nine of twelve new metadata tests. The corrected
+  implementation passed **45 tests in seven classes**, including whole-batch brush archive
+  admission, valid Unicode names, pixel allowances and the earlier PackBits row constraints.
+- Task 062's preserved parser failed nine of fourteen new boundary methods. Its corrected parser
+  passed **49 tests in seven classes**, including writer, budget, brush, profile and node admission.
+- Task 065's prior readers failed all three mixed-normal preparation cases. The corrected readers
+  passed **43 tests in five classes**, including existing glTF, USD, geometry bounds and prepared
+  texture admission. An initial local compile omitted the shared TestPng helper; the corrected
+  invocation compiled all selected classes before executing them.
+- Task 064's package batch passed **32 tests in five classes**, including stream/final-close
+  cancellation, existing size ceilings, CRC/corruption, collection and ZIP admission. The actual
+  exporter tests use a valid deterministic 64×64 PNG and require the hosted Android unit build.
+- Task 066's prior GIF encoder failed the independent 9-megapixel dominant-color decode. The
+  corrected encoder passed **ten tests in four classes**, including independent black/green cache
+  collision decoding and existing palette, alpha, delay and edge cases. The fixed cache has 262,144
+  bytes of primitive payload; the full export's device peak memory remains a separate qualification.
+- Task 067's prior APNG encoder failed two of three metadata cases. The corrected encoder and
+  current PNG encoder passed **four tests in two classes**, retaining per-frame payloads, CRCs,
+  sequence order, disposal/blend, timing and loop assertions.
+- A full local detekt scan across main, unit and Android-test sources passed after task 060,
+  without changing the baseline. The historical-app overlay's changed source passed ktlint;
+  all **14 build-provenance tests** passed. Overlay compilation/runtime remain hosted gates.
 - Seven new accessibility-observation functional cases passed under the available JDK 21 compiler.
   Its Java 17 release symbols are absent, so the required `--release 17` helper harness remains a
   hosted check rather than a claimed local pass. No test or required compiler flags were relaxed.

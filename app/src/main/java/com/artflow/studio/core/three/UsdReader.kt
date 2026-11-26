@@ -94,6 +94,7 @@ object UsdReader {
         private val budget: ModelReadBudget,
     ) {
         private val zUp = layer.token(specs["/"]?.get("upAxis")) == "Z"
+        private var normalsWritten = 0
 
         init {
             budget.reserve(specs.size.toLong() * 128)
@@ -161,7 +162,9 @@ object UsdReader {
                         .append('\n')
                 }
             }
-            return indices.size to writeFaces(counts, indices.size, offset, normals != null, out)
+            val triangles = writeFaces(counts, indices.size, offset, if (normals != null) normalsWritten else null, out)
+            if (normals != null) normalsWritten += indices.size
+            return indices.size to triangles
         }
 
         private fun checkFaces(
@@ -183,14 +186,14 @@ object UsdReader {
         private fun appendCorner(
             out: StringBuilder,
             id: Int,
-            withNormals: Boolean,
+            normalId: Int?,
         ) {
             out
                 .append(' ')
                 .append(id)
                 .append('/')
                 .append(id)
-            if (withNormals) out.append('/').append(id)
+            if (normalId != null) out.append('/').append(normalId)
         }
 
         /** Fans each polygon of [counts] into triangles; returns how many were written. */
@@ -198,7 +201,7 @@ object UsdReader {
             counts: IntArray,
             corners: Int,
             offset: Int,
-            withNormals: Boolean,
+            normalOffset: Int?,
             out: StringBuilder,
         ): Int {
             var start = 0
@@ -207,7 +210,10 @@ object UsdReader {
                 require(count >= 0 && count.toLong() <= (corners - start).toLong()) { "The mesh faces do not match its vertices" }
                 for (k in 1 until count - 1) {
                     out.append('f')
-                    intArrayOf(start, start + k, start + k + 1).forEach { corner -> appendCorner(out, offset + corner + 1, withNormals) }
+                    intArrayOf(start, start + k, start + k + 1).forEach { corner ->
+                        // OBJ normal records have their own indices; earlier meshes may omit them.
+                        appendCorner(out, offset + corner + 1, normalOffset?.let { it + corner + 1 })
+                    }
                     out.append('\n')
                     triangles++
                 }

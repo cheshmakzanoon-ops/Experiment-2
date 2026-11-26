@@ -16,6 +16,8 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.zip.CRC32
+import java.util.zip.CheckedInputStream
 import java.util.zip.ZipFile
 import kotlin.coroutines.coroutineContext
 
@@ -73,9 +75,15 @@ class ProcreateImport private constructor(
             val entry = zip.getEntry(name) ?: return null
             val limit = minOf(maximumBytes, budget.entryLimit(name))
             require(entry.size in 0..limit) { "This Procreate document has an entry too large for the available memory" }
-            val bytes = zip.getInputStream(entry).use { input -> readEntry(input, entry.size.toInt(), budget::ensureActive) }
+            // ZipFile streams do not verify CRCs, including for otherwise valid stored payloads.
+            val checksum = CRC32()
+            val bytes =
+                zip.getInputStream(entry).use { input ->
+                    readEntry(CheckedInputStream(input, checksum), entry.size.toInt(), budget::ensureActive)
+                }
             budget.ensureActive()
             require(bytes.size.toLong() == entry.size) { "The Procreate entry's decoded size is damaged" }
+            require(checksum.value == entry.crc) { "The Procreate entry's checksum is damaged" }
             return bytes
         }
     }

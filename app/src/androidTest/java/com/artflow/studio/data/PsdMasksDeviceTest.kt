@@ -106,6 +106,7 @@ class PsdMasksDeviceTest {
             try {
                 source.loadOrCreate(3, 4, 3, 72)
                 val id = source.getActiveLayerId()
+                source.setLayerName(id, "Ink")
                 assertTrue(source.setLayerPixels(id, PixelBuffer.filled(4, 3, -1), "Ink"))
                 assertTrue(source.addLayerMask(id, SelectionMask(4, 3, ByteArray(12) { 128.toByte() })))
                 val selected = SelectionMask(4, 3)

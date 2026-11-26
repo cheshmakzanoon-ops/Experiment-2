@@ -155,8 +155,8 @@ object Lz4 {
 
     /**
      * Apple's LZ4 container (Compression framework, as Procreate's ".lz4" tiles use it): "bv41"
-     * blocks of LZ4 that may refer back into earlier blocks, "bvx-" stored blocks, and an end
-     * marker. Returns the decoded bytes, at most [size].
+     * blocks of LZ4 that may refer back into earlier blocks, "bv4-" stored blocks (also accepting
+     * historical "bvx-" blocks), and an end marker. Returns the decoded bytes, at most [size].
      */
     fun decompressApple(
         source: ByteArray,
@@ -166,22 +166,26 @@ object Lz4 {
         val out = ByteArray(size)
         var s = 0
         var d = 0
-        while (s + 4 <= source.size) {
+        while (true) {
+            require(source.size - s >= 4) { DAMAGED }
             val magic = String(source, s, 4, Charsets.ISO_8859_1)
-            if (magic == "bv4$" || magic == "bvx$") break
-            require(s + 8 <= source.size) { DAMAGED }
+            if (magic == "bv4$" || magic == "bvx$") {
+                require(source.size - s == 4) { DAMAGED }
+                return if (d == size) out else out.copyOf(d)
+            }
+            require(source.size - s >= 8) { DAMAGED }
             val raw = littleInt(source, s + 4)
             require(raw in 0..size - d) { DAMAGED }
             when (magic) {
                 "bv41" -> {
-                    require(s + 12 <= source.size) { DAMAGED }
+                    require(source.size - s >= 12) { DAMAGED }
                     val packed = littleInt(source, s + 8)
                     require(packed in 0..source.size - s - 12) { DAMAGED }
                     require(decompress(source, s + 12, packed, out, d, window = 0) == raw) { DAMAGED }
                     s += 12 + packed
                 }
 
-                "bvx-" -> {
+                "bv4-", "bvx-" -> {
                     require(raw <= source.size - s - 8) { DAMAGED }
                     System.arraycopy(source, s + 8, out, d, raw)
                     s += 8 + raw
@@ -191,7 +195,6 @@ object Lz4 {
             }
             d += raw
         }
-        return if (d == size) out else out.copyOf(d)
     }
 
     fun isApple(source: ByteArray): Boolean =

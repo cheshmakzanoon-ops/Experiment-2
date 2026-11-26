@@ -413,9 +413,10 @@ class ArtworkExporter
                 try {
                     storage.withPackageSnapshot(projectId) { snapshot ->
                         val fileName = ExportNaming.fileName(projectName, options)
+                        val owner = currentCoroutineContext()
                         val file =
                             storage.saveExportFromTempFile(projectId, fileName) { destination ->
-                                ArtflowPackage.writeToFile(projectName, destination, snapshot.sources)
+                                ArtflowPackage.writeToFile(projectName, destination, snapshot.sources) { owner.ensureActive() }
                             }
                         Result.success(
                             ExportResult(
