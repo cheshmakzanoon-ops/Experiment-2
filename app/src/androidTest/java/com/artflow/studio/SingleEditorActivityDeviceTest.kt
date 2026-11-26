@@ -12,7 +12,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.core.content.FileProvider
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleCallback
@@ -42,6 +41,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -79,7 +79,6 @@ class SingleEditorActivityDeviceTest {
     private val name = "Window-${System.nanoTime()}"
     private val ownedUris = mutableSetOf<Uri>()
     private var originalSettings: AppSettings? = null
-    private var scenario: ActivityScenario<MainActivity>? = null
 
     @Before
     fun setup() {
@@ -93,12 +92,18 @@ class SingleEditorActivityDeviceTest {
     fun cleanup() {
         val failures = mutableListOf<Throwable>()
         runCatching {
-            instrumentation.runOnMainSync {
-                activities.filterNot { it.isDestroyed }.forEach { it.finish() }
-                lifecycle.removeLifecycleCallback(observer)
+            compose.waitUntil(TIMEOUT_MS) {
+                var destroyed = false
+                instrumentation.runOnMainSync {
+                    activities.filterNot { it.isFinishing || it.isDestroyed }.forEach { it.finish() }
+                    destroyed = activities.all { it.isDestroyed && lifecycle.getLifecycleStageOf(it) == Stage.DESTROYED }
+                }
+                destroyed
             }
         }.onFailure(failures::add)
-        runCatching { scenario?.close() }.onFailure(failures::add)
+        runCatching {
+            instrumentation.runOnMainSync { lifecycle.removeLifecycleCallback(observer) }
+        }.onFailure(failures::add)
         runCatching { releasePendingTestUris() }.onFailure(failures::add)
         runCatching {
             runBlocking {
@@ -117,9 +122,20 @@ class SingleEditorActivityDeviceTest {
 
     @Test
     fun externalRelaunchesReuseTheEditorPreserveUnsavedWorkAndImportQueuedFilesOnceAfterRecreation() {
-        val launched = ActivityScenario.launch(MainActivity::class.java).also { scenario = it }
+        // ActivityScenario matches lifecycle events against its original launch intent. This
+        // test deliberately replaces that intent through real VIEW/SEND delivery, so observe
+        // the created activity identities instead while retaining the same fresh-task launch.
+        val originalActivity =
+            instrumentation.startActivitySync(
+                Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_LAUNCHER)
+                    .setClass(context, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            ) as MainActivity
+        assertSame(originalActivity, activities.single())
+        awaitStage(originalActivity, Stage.RESUMED)
         createArtwork()
-        awaitCanvas(launched)
+        awaitCanvas(originalActivity)
         val projectId =
             runBlocking {
                 projects
@@ -129,7 +145,6 @@ class SingleEditorActivityDeviceTest {
                     .id
             }
         compose.waitUntil(TIMEOUT_MS) { runBlocking(Dispatchers.Main) { canvas.projectId() == projectId } }
-        val originalActivity = activities.single()
         val pixels = PixelBuffer.filled(64, 64, 0xFF375FA2.toInt())
         runBlocking(Dispatchers.Main) {
             assertTrue(canvas.setLayerPixels(canvas.getActiveLayerId(), pixels, "Unsaved window test"))
@@ -171,10 +186,16 @@ class SingleEditorActivityDeviceTest {
             )
         }
 
-        launched.recreate()
-        launched.onActivity { assertNotSame(originalActivity, it) }
+        awaitStage(originalActivity, Stage.RESUMED)
+        assertSendIntent(originalActivity, uris.last(), "$name-${requests.lastIndex}")
+        instrumentation.runOnMainSync { originalActivity.recreate() }
+        awaitStage(originalActivity, Stage.DESTROYED)
         compose.waitUntil(TIMEOUT_MS) { activities.size == 2 }
-        awaitCanvas(launched)
+        val recreatedActivity = activities.last()
+        assertNotSame(originalActivity, recreatedActivity)
+        awaitStage(recreatedActivity, Stage.RESUMED)
+        assertSendIntent(recreatedActivity, uris.last(), "$name-${requests.lastIndex}")
+        awaitCanvas(recreatedActivity)
         assertPreserved(projectId, history, expected)
         assertTrue(
             runBlocking {
@@ -196,7 +217,7 @@ class SingleEditorActivityDeviceTest {
         compose.waitUntil(TIMEOUT_MS) { compose.onAllNodesWithText(secondFeedback).fetchSemanticsNodes().isNotEmpty() }
         assertNull("Recreation requeued an already accepted file", runBlocking { withTimeoutOrNull(200) { IncomingFiles.files.first() } })
         compose.onNodeWithText(name).performClick()
-        awaitCanvas(launched)
+        awaitCanvas(recreatedActivity)
         assertEquals(projectId, runBlocking(Dispatchers.Main) { canvas.projectId() })
         assertArrayEquals(expected, currentPixels())
         assertFalse(runBlocking(Dispatchers.Main) { canvas.hasUnsavedChanges() })
@@ -226,10 +247,36 @@ class SingleEditorActivityDeviceTest {
         return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file).also { ownedUris.add(it) }
     }
 
-    private fun awaitCanvas(launched: ActivityScenario<MainActivity>) {
+    private fun awaitStage(
+        activity: MainActivity,
+        stage: Stage,
+    ) {
+        compose.waitUntil(TIMEOUT_MS) {
+            var reached = false
+            instrumentation.runOnMainSync {
+                reached = lifecycle.getLifecycleStageOf(activity) == stage && (stage != Stage.DESTROYED || activity.isDestroyed)
+            }
+            reached
+        }
+    }
+
+    private fun assertSendIntent(
+        activity: MainActivity,
+        uri: Uri,
+        token: String,
+    ) {
+        instrumentation.runOnMainSync {
+            assertEquals(Intent.ACTION_SEND, activity.intent.action)
+            assertEquals(token, activity.intent.getStringExtra(REQUEST_TOKEN))
+            assertEquals(uri, requireNotNull(activity.intent.clipData).getItemAt(0).uri)
+            assertTrue(activity.intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        }
+    }
+
+    private fun awaitCanvas(activity: MainActivity) {
         compose.waitUntil(TIMEOUT_MS) {
             var ready = false
-            launched.onActivity { activity -> ready = findCanvas(activity.window.decorView)?.isPreviewAvailable == true }
+            instrumentation.runOnMainSync { ready = findCanvas(activity.window.decorView)?.isPreviewAvailable == true }
             ready
         }
         compose.waitForIdle()

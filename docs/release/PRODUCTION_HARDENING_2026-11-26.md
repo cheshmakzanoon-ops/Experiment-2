@@ -324,6 +324,55 @@ exports and clears the prior result without deleting completed export files.
   local detekt process was killed by the environment; it supplies no full-scan pass. A subsequent
   complete main/unit/device scan using a 512 MiB tool heap passed with the same configuration and
   baseline. This changes no application or test-worker heap setting.
+- `4c5fd2c9e2c2d570af99539ead4a80efd70fb998` publishes the bounded legacy-admission fixtures,
+  with tree `ea059f7cac62812995208aa18876d26ab5f5c130`. Its
+  [Android CI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45815998103)
+  passed the full build: **2,860 JVM tests in 443 classes**, zero failures, errors or skips,
+  followed by static analysis, APK/AAB assembly and artifact checks. All seven device lanes
+  completed the original **416 identities in 100 classes**, with no missing or duplicate methods.
+  API 26 recorded 413 passes, one failure and its two declared platform skips; the main API 35 /
+  16 KB lane recorded 414 passes and two failures; the other five lanes each recorded 415 passes
+  and one failure. Across the seven executions: 2,902 passes, eight failures, two skips and zero
+  errors. Each lane had one distinct original invocation; there were **zero framework recoveries**.
+  All eleven uploaded archives matched their provider SHA-256 digests, and all eight complete job
+  logs were retained. Failed instrumentation prevented the lanes' later installed-APK provenance
+  and minified-launch gates from qualifying. This is a failed candidate, with no qualifying repeats.
+  Its original [optimized](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45815998070),
+  [ordinary release UI](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45815998169), and
+  [installed upgrade](https://github.com/cheshmakzanoon-ops/Experiment-2/actions/runs/45815998075)
+  workflows passed independently verified archive review: 71 selected optimized methods in 15
+  classes, 157 unchanged ordinary-release payload entries and 4,096 matching decoded pixels,
+  and the historical-source version 3 to 4 / Room 1 to 2 upgrade with 11 preserved data-file records.
+- All seven lanes failed the same `SingleEditorActivityDeviceTest` identity. Original logcat
+  records real RESUMED events after VIEW/SEND delivery and a real DESTROYED event, while pinned
+  AndroidX Test Core 1.7.0 `ActivityScenario` rejects them because the current intent differs from
+  its original MAIN intent. The body first times out waiting for RESUMED inside `recreate`; cleanup
+  then times out waiting for DESTROYED. XML retains only the latter diagnostic, so the old body's
+  post-recreation assertions did not execute. The corrected fixture uses the same fresh-task
+  MAIN/LAUNCHER launch, observes actual activity identities, calls real recreation, and verifies
+  old-instance destruction and replacement resumption. It explicitly retains the last SEND action,
+  URI, token and grant through recreation; every original artwork, queue and reopen assertion and
+  the 20-second explicit timeout remain. Cleanup observes actual destruction of all owned instances
+  and preserves failures. Production activity/intent behavior is unchanged.
+- The main API 35 / 16 KB lane also failed the original soft-selection Reset test at
+  `CanvasInputDeviceTest.kt:460`, before save/reopen: pixel (12, 12) was `0x7FFF0000` instead of
+  `0xFFFF0000`. The same identity passed on the other six executions. Source review found that
+  `ensureTransformSession` checked ownership before asynchronous bounds calculation, then published
+  the old snapshot afterward without revalidation. A late result can replace a committed source
+  session and make Reset rebuild from moved pixels. This is a source-level mechanism consistent
+  with the observation; the original runtime did not log the exact snapshot interleaving.
+  The repair binds pending work to generation, artwork, both active-layer identities, content,
+  history and selection revisions. It rechecks ownership after suspended work and before stale
+  failure callbacks or publication, and reuses a valid current session. Clearing or retargeting
+  invalidates pending work. One new real-View regression controls duplicate, retargeted-empty and
+  cleared-tool completion order through a per-view bounds dispatcher; production still uses
+  `Dispatchers.Default`. It retains exact placement, Reset/save/reopen pixels and failure-preserving
+  cleanup of queued and held continuations. The entire original `CanvasInputDeviceTest` file remains
+  byte-for-byte unchanged. Independent review cleared both corrections. The new case resides in a
+  separate Hilt test class after the integrated scan caught class-size and finally-throw violations;
+  no suppression or baseline expansion was added. Focused formatting/static checks and the final
+  full main/unit/device detekt scan passed. The revised source declares **417 device identities in
+  101 classes**; fresh hosted compilation and execution remain required for this repaired revision.
 - Local combined kernel checks executed all eight selected brush/transform classes: **53 tests
   passed**. The next combined retouch/text run executed all five selected classes: **25 passed**.
   The SDK-free harness excludes Android-dependent code; these results do not establish an Android

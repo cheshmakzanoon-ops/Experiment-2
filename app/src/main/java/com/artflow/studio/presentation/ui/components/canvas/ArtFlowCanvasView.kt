@@ -79,6 +79,7 @@ import com.artflow.studio.domain.repository.canvas.CanvasInvalidationEvent
 import com.artflow.studio.domain.repository.canvas.CanvasRepository
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -1255,6 +1256,10 @@ class ArtFlowCanvasView
         }
 
         private var transformSession: TransformSession? = null
+        private var transformSessionGeneration = 0L
+
+        /** Per-view scheduling keeps snapshot completion order controllable in device regressions. */
+        internal var transformBoundsDispatcher: CoroutineDispatcher = Dispatchers.Default
 
         private val companions = TransformCompanions()
 
@@ -1296,6 +1301,7 @@ class ArtFlowCanvasView
         }
 
         private fun clearTransformSession() {
+            transformSessionGeneration++
             transformSession = null
             transformPreviewQuad = null
             transformPreviewMesh = null
@@ -1321,21 +1327,48 @@ class ArtFlowCanvasView
                 onReady?.invoke(current)
                 return
             }
+            val generation = transformSessionGeneration
+            val projectId = canvasRepository.projectId()
+            val revision = canvasRepository.contentRevision
+            val history = canvasRepository.historyMark
+            val selectionRevision = canvasRepository.selectionRevision
+
+            fun ownsRequest(): Boolean =
+                generation == transformSessionGeneration &&
+                    input.tool == ToolType.TRANSFORM &&
+                    projectId == canvasRepository.projectId() &&
+                    activeLayerId == layerId &&
+                    canvasRepository.getActiveLayerId() == layerId &&
+                    revision == canvasRepository.contentRevision &&
+                    history == canvasRepository.historyMark &&
+                    selectionRevision == canvasRepository.selectionRevision
+
             coroutineScope.launch {
-                val revision = canvasRepository.contentRevision
+                if (!ownsRequest()) return@launch
                 val pixels = canvasRepository.layerPixels(layerId)
                 val physical = canvasRepository.physicalPaintSource(layerId)
                 val extra = companions.load(canvasRepository, layerId, selection)
+                if (!ownsRequest()) return@launch
+                transformSession?.takeIf { it.isCurrent(layerId, selection) }?.let {
+                    onReady?.invoke(it)
+                    return@launch
+                }
                 if (extra == null) {
                     clearTransformSession()
                     onStatusMessage?.invoke("Unlock and show all linked layers. For masks, use Whole-layer transform in Tool options.")
                     return@launch
                 }
-                if (revision != canvasRepository.contentRevision || activeLayerId != layerId) return@launch
                 val bounds =
-                    withContext(Dispatchers.Default) {
+                    withContext(transformBoundsDispatcher) {
                         TransformCompanions.bounds(pixels?.let { LayerTransform.floatingBounds(it, selection) }, extra)
                     }
+                // A drag, undo, retarget or tool change may finish while bounds are calculated.
+                // Never replace its current source with an older snapshot (Reset needs that source).
+                if (!ownsRequest()) return@launch
+                transformSession?.takeIf { it.isCurrent(layerId, selection) }?.let {
+                    onReady?.invoke(it)
+                    return@launch
+                }
                 if (bounds == null) {
                     clearTransformSession()
                     onStatusMessage?.invoke("Nothing to transform on this layer")
